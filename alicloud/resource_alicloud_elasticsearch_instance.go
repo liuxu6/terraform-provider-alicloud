@@ -2,13 +2,16 @@ package alicloud
 
 import (
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/denverdino/aliyungo/common"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/elasticsearch"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -29,17 +32,9 @@ func resourceAlicloudElasticsearch() *schema.Resource {
 		Schema: map[string]*schema.Schema{
 			// Basic instance information
 			"description": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-
-					if reg := regexp.MustCompile(`^[\w\-.]{0,30}$`); !reg.MatchString(value) {
-						errors = append(errors, fmt.Errorf("%q be 0 to 30 characters in length and can contain numbers, letters, underscores, (_) and hyphens (-). It must start with a letter, a number or Chinese character.", k))
-					}
-
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringMatch(regexp.MustCompile(`^[\w\-.]{0,30}$`), "be 0 to 30 characters in length and can contain numbers, letters, underscores, (_) and hyphens (-). It must start with a letter, a number or Chinese character."),
 			},
 
 			"vswitch_id": {
@@ -51,9 +46,21 @@ func resourceAlicloudElasticsearch() *schema.Resource {
 			"password": {
 				Type:      schema.TypeString,
 				Sensitive: true,
-				Required:  true,
+				Optional:  true,
 			},
-
+			"kms_encrypted_password": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				DiffSuppressFunc: kmsDiffSuppressFunc,
+			},
+			"kms_encryption_context": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("kms_encrypted_password").(string) == ""
+				},
+				Elem: schema.TypeString,
+			},
 			"version": {
 				Type:             schema.TypeString,
 				Required:         true,
@@ -64,25 +71,24 @@ func resourceAlicloudElasticsearch() *schema.Resource {
 			// Life cycle
 			"instance_charge_type": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateInstanceChargeType,
-				ForceNew:     true,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 				Default:      PostPaid,
 				Optional:     true,
 			},
 
 			"period": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateAllowedIntValue([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 24, 36}),
+				ValidateFunc:     validation.IntInSlice([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 24, 36}),
 				Optional:         true,
 				Default:          1,
-				DiffSuppressFunc: rkvPostPaidDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 
 			// Data node configuration
 			"data_node_amount": {
 				Type:         schema.TypeInt,
 				Required:     true,
-				ValidateFunc: validateIntegerInRange(2, 50),
+				ValidateFunc: validation.IntBetween(2, 50),
 			},
 
 			"data_node_spec": {
@@ -155,7 +161,7 @@ func resourceAlicloudElasticsearch() *schema.Resource {
 			"zone_count": {
 				Type:         schema.TypeInt,
 				Optional:     true,
-				ValidateFunc: validateIntegerInRange(1, 3),
+				ValidateFunc: validation.IntBetween(1, 3),
 				Default:      1,
 			},
 		},
@@ -171,7 +177,10 @@ func resourceAlicloudElasticsearchCreate(d *schema.ResourceData, meta interface{
 		return WrapError(err)
 	}
 
-	raw, err := client.WithElasticsearchClient(func(elasticsearchClient *elasticsearch.Client) (interface{}, error) {
+	// retry
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	errorCodeList := []string{"TokenPreviousRequestProcessError"}
+	raw, err := elasticsearchService.ElasticsearchRetryFunc(wait, errorCodeList, func(elasticsearchClient *elasticsearch.Client) (interface{}, error) {
 		return elasticsearchClient.CreateInstance(request)
 	})
 
@@ -179,6 +188,7 @@ func resourceAlicloudElasticsearchCreate(d *schema.ResourceData, meta interface{
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_elasticsearch_instance", request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RoaRequest, request)
+
 	response, _ := raw.(*elasticsearch.CreateInstanceResponse)
 	d.SetId(response.Result.InstanceId)
 
@@ -278,13 +288,29 @@ func resourceAlicloudElasticsearchUpdate(d *schema.ResourceData, meta interface{
 		return resourceAlicloudElasticsearchRead(d, meta)
 	}
 
+	if d.HasChange("instance_charge_type") {
+		if err := updateInstanceChargeType(d, meta); err != nil {
+			return WrapError(err)
+		}
+
+		d.SetPartial("instance_charge_type")
+	}
+
+	if d.Get("instance_charge_type").(string) == string(PrePaid) && d.HasChange("period") {
+		if err := renewInstance(d, meta); err != nil {
+			return WrapError(err)
+		}
+
+		d.SetPartial("period")
+	}
+
 	if d.HasChange("data_node_amount") {
 
 		if _, err := stateConf.WaitForState(); err != nil {
 			return WrapErrorf(err, IdMsg, d.Id())
 		}
 
-		if err := updateDateNodeAmount(d, meta); err != nil {
+		if err := updateDataNodeAmount(d, meta); err != nil {
 			return WrapError(err)
 		}
 
@@ -319,7 +345,7 @@ func resourceAlicloudElasticsearchUpdate(d *schema.ResourceData, meta interface{
 		d.SetPartial("master_node_spec")
 	}
 
-	if d.HasChange("password") {
+	if d.HasChange("password") || d.HasChange("kms_encrypted_password") {
 
 		if _, err := stateConf.WaitForState(); err != nil {
 			return WrapErrorf(err, IdMsg, d.Id())
@@ -345,18 +371,22 @@ func resourceAlicloudElasticsearchDelete(d *schema.ResourceData, meta interface{
 	}
 
 	request := elasticsearch.CreateDeleteInstanceRequest()
+	request.ClientToken = buildClientToken(request.GetActionName())
 	request.RegionId = client.RegionId
 	request.InstanceId = d.Id()
 	request.SetContentType("application/json")
 
-	raw, err := client.WithElasticsearchClient(func(elasticsearchClient *elasticsearch.Client) (interface{}, error) {
+	// retry
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	errorCodeList := []string{"InstanceActivating", "TokenPreviousRequestProcessError"}
+	raw, err := elasticsearchService.ElasticsearchRetryFunc(wait, errorCodeList, func(elasticsearchClient *elasticsearch.Client) (interface{}, error) {
 		return elasticsearchClient.DeleteInstance(request)
 	})
+
 	if err != nil {
-		if IsExceptedError(err, ESInstanceNotFound) {
+		if IsExpectedErrors(err, []string{"InstanceNotFound"}) {
 			return nil
 		}
-
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RoaRequest, request)
@@ -376,6 +406,7 @@ func resourceAlicloudElasticsearchDelete(d *schema.ResourceData, meta interface{
 func buildElasticsearchCreateRequest(d *schema.ResourceData, meta interface{}) (*elasticsearch.CreateInstanceRequest, error) {
 	client := meta.(*connectivity.AliyunClient)
 	request := elasticsearch.CreateCreateInstanceRequest()
+	request.ClientToken = buildClientToken(request.GetActionName())
 	request.RegionId = client.RegionId
 	vpcService := VpcService{client}
 
@@ -386,10 +417,10 @@ func buildElasticsearchCreateRequest(d *schema.ResourceData, meta interface{}) (
 		paymentInfo := make(map[string]interface{})
 		if d.Get("period").(int) >= 12 {
 			paymentInfo["duration"] = d.Get("period").(int) / 12
-			paymentInfo["pricingCycle"] = strings.ToLower(string(Year))
+			paymentInfo["pricingCycle"] = string(Year)
 		} else {
 			paymentInfo["duration"] = d.Get("period").(int)
-			paymentInfo["pricingCycle"] = strings.ToLower(string(Month))
+			paymentInfo["pricingCycle"] = string(Month)
 		}
 
 		content["paymentInfo"] = paymentInfo
@@ -397,7 +428,24 @@ func buildElasticsearchCreateRequest(d *schema.ResourceData, meta interface{}) (
 
 	content["nodeAmount"] = d.Get("data_node_amount")
 	content["esVersion"] = d.Get("version")
-	content["esAdminPassword"] = d.Get("password")
+
+	password := d.Get("password").(string)
+	kmsPassword := d.Get("kms_encrypted_password").(string)
+
+	if password == "" && kmsPassword == "" {
+		return nil, WrapError(Error("One of the 'password' and 'kms_encrypted_password' should be set."))
+	}
+
+	if password != "" {
+		content["esAdminPassword"] = password
+	} else {
+		kmsService := KmsService{client}
+		decryptResp, err := kmsService.Decrypt(kmsPassword, d.Get("kms_encryption_context").(map[string]interface{}))
+		if err != nil {
+			return request, WrapError(err)
+		}
+		content["esAdminPassword"] = decryptResp.Plaintext
+	}
 
 	// Data node configuration
 	dataNodeSpec := make(map[string]interface{})
@@ -410,9 +458,9 @@ func buildElasticsearchCreateRequest(d *schema.ResourceData, meta interface{}) (
 	if d.Get("master_node_spec") != nil && d.Get("master_node_spec") != "" {
 		masterNode := make(map[string]interface{})
 		masterNode["spec"] = d.Get("master_node_spec")
-		masterNode["amount"] = MasterNodeAmount
-		masterNode["disk"] = MasterNodeDisk
-		masterNode["diskType"] = MasterNodeDiskType
+		masterNode["amount"] = "3"
+		masterNode["disk"] = "20"
+		masterNode["diskType"] = "cloud_ssd"
 		content["advancedDedicateMaster"] = true
 		content["masterConfiguration"] = masterNode
 	}

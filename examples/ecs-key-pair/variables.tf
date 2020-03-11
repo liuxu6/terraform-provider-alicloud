@@ -7,7 +7,7 @@ variable "count_format" {
 }
 
 variable "image_id" {
-  default = "ubuntu_140405_64_40G_cloudinit_20161115.vhd"
+  default = "ubuntu_18_04_64_20G_alibase_20190624.vhd"
 }
 
 variable "role" {
@@ -57,3 +57,4 @@ variable "private_key_file" {
 variable "key_name" {
   default = "key-pair-from-terraform"
 }
+

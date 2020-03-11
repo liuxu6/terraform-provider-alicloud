@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ram"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -350,7 +350,7 @@ func testAccCheckRamPolicyDestroy(s *terraform.State) error {
 			return ramClient.GetPolicy(request)
 		})
 
-		if err != nil && !RamEntityNotExist(err) {
+		if err != nil && !IsExpectedErrors(err, []string{"EntityNotExist.Policy"}) {
 			return WrapError(err)
 		}
 	}

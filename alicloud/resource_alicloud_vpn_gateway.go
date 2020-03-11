@@ -6,10 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/denverdino/aliyungo/common"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -27,8 +31,8 @@ func resourceAliyunVpnGateway() *schema.Resource {
 			"name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateVpnName,
-				Default:      resource.PrefixedUniqueId("tf-vpn-"),
+				ValidateFunc: validation.StringLenBetween(1, 128),
+				Computed:     true,
 			},
 			"vpc_id": {
 				Type:     schema.TypeString,
@@ -41,19 +45,21 @@ func resourceAliyunVpnGateway() *schema.Resource {
 				Optional:     true,
 				ForceNew:     true,
 				Default:      PostPaid,
-				ValidateFunc: validateInstanceChargeType,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 			},
 
 			"period": {
-				Type:         schema.TypeInt,
-				Optional:     true,
-				ValidateFunc: validateVpnPeriod,
+				Type:             schema.TypeInt,
+				Optional:         true,
+				Default:          1,
+				ValidateFunc:     validation.Any(validation.IntBetween(1, 9), validation.IntInSlice([]int{12, 24, 36})),
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 
 			"bandwidth": {
 				Type:         schema.TypeInt,
 				Required:     true,
-				ValidateFunc: validateVpnBandwidth([]int{5, 10, 20, 50, 100, 200, 500, 1000}),
+				ValidateFunc: validation.IntInSlice([]int{5, 10, 20, 50, 100, 200, 500, 1000}),
 			},
 
 			"enable_ipsec": {
@@ -78,7 +84,14 @@ func resourceAliyunVpnGateway() *schema.Resource {
 			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateVpnDescription,
+				ValidateFunc: validation.StringLenBetween(2, 256),
+			},
+
+			"vswitch_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				Computed: true,
 			},
 
 			"internet_ip": {
@@ -109,6 +122,10 @@ func resourceAliyunVpnGatewayCreate(d *schema.ResourceData, meta interface{}) er
 		request.Name = d.Get("name").(string)
 	}
 
+	if v, ok := d.GetOk("vswitch_id"); ok && v.(string) != "" {
+		request.VSwitchId = d.Get("vswitch_id").(string)
+	}
+
 	request.VpcId = d.Get("vpc_id").(string)
 
 	if v, ok := d.GetOk("instance_charge_type"); ok && v.(string) != "" {
@@ -125,7 +142,7 @@ func resourceAliyunVpnGatewayCreate(d *schema.ResourceData, meta interface{}) er
 
 	request.Bandwidth = requests.NewInteger(d.Get("bandwidth").(int))
 
-	if v, ok := d.GetOk("enable_ipsec"); ok {
+	if v, ok := d.GetOkExists("enable_ipsec"); ok {
 		request.EnableIpsec = requests.NewBoolean(v.(bool))
 	}
 
@@ -177,18 +194,9 @@ func resourceAliyunVpnGatewayRead(d *schema.ResourceData, meta interface{}) erro
 	d.Set("vpc_id", object.VpcId)
 	d.Set("internet_ip", object.InternetIp)
 	d.Set("status", object.Status)
-	if strings.ToLower(VpnEnable) == strings.ToLower(object.IpsecVpn) {
-		d.Set("enable_ipsec", true)
-	} else {
-		d.Set("enable_ipsec", false)
-	}
-
-	if strings.ToLower(VpnEnable) == strings.ToLower(object.SslVpn) {
-		d.Set("enable_ssl", true)
-	} else {
-		d.Set("enable_ssl", false)
-	}
-
+	d.Set("vswitch_id", object.VSwitchId)
+	d.Set("enable_ipsec", "enable" == strings.ToLower(object.IpsecVpn))
+	d.Set("enable_ssl", "enable" == strings.ToLower(object.SslVpn))
 	d.Set("ssl_connections", object.SslMaxConnections)
 	d.Set("business_status", object.BusinessStatus)
 
@@ -270,12 +278,12 @@ func resourceAliyunVpnGatewayDelete(d *schema.ResourceData, meta interface{}) er
 			return vpcClient.DeleteVpnGateway(&args)
 		})
 		if err != nil {
-			if IsExceptedError(err, VpnConfiguring) {
+			if IsExpectedErrors(err, []string{"VpnGateway.Configuring"}) {
 				time.Sleep(10 * time.Second)
 				return resource.RetryableError(err)
 			}
 			/*Vpn known issue: while the vpn is configuring, it will return unknown error*/
-			if IsExceptedError(err, UnknownError) {
+			if IsExpectedErrors(err, []string{"UnknownError"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -285,7 +293,7 @@ func resourceAliyunVpnGatewayDelete(d *schema.ResourceData, meta interface{}) er
 	})
 
 	if err != nil {
-		if IsExceptedError(err, VpnNotFound) {
+		if IsExpectedErrors(err, []string{"InvalidVpnGatewayInstanceId.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

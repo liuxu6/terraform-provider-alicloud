@@ -78,10 +78,10 @@ type QueryResourcePackageInstancesRequest struct {
 	*requests.RpcRequest
 	ExpiryTimeEnd   string           `position:"Query" name:"ExpiryTimeEnd"`
 	ProductCode     string           `position:"Query" name:"ProductCode"`
-	PageSize        requests.Integer `position:"Query" name:"PageSize"`
 	OwnerId         requests.Integer `position:"Query" name:"OwnerId"`
 	ExpiryTimeStart string           `position:"Query" name:"ExpiryTimeStart"`
 	PageNum         requests.Integer `position:"Query" name:"PageNum"`
+	PageSize        requests.Integer `position:"Query" name:"PageSize"`
 }
 
 // QueryResourcePackageInstancesResponse is the response struct for api QueryResourcePackageInstances

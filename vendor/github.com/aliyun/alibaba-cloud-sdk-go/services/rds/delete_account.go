@@ -77,11 +77,11 @@ func (client *Client) DeleteAccountWithCallback(request *DeleteAccountRequest, c
 type DeleteAccountRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	AccountName          string           `position:"Query" name:"AccountName"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	AccountName          string           `position:"Query" name:"AccountName"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 }
 
 // DeleteAccountResponse is the response struct for api DeleteAccount

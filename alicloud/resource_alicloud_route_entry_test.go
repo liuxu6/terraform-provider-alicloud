@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
 func TestAccAlicloudRouteEntryInstance(t *testing.T) {
@@ -194,7 +194,7 @@ data "alicloud_instance_types" "default" {
  	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
 }
 data "alicloud_images" "default" {
-	name_regex = "^ubuntu_14\\w{1,5}[64]{1}.*"
+	name_regex = "^ubuntu_18\\w{1,5}[64]{1}.*"
 	most_recent = true
 	owners = "system"
 }

@@ -1,4 +1,5 @@
 ---
+subcategory: "Container Service (CS)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_cs_managed_kubernetes"
 sidebar_current: "docs-alicloud-resource-cs-managed-kubernetes"
@@ -36,32 +37,68 @@ Basic Usage
 
 ```
 variable "name" {
-  default = "my-first-k8s"
+  default = "my-first-kubernetes-demo"
 }
-data "alicloud_zones" main {
+
+variable "log_project_name" {
+  default = "my-first-kubernetes-sls-demo"
+}
+
+data "alicloud_zones" default {
   available_resource_creation = "VSwitch"
 }
 
 data "alicloud_instance_types" "default" {
-  availability_zone = "${data.alicloud_zones.main.zones.0.id}"
-  cpu_core_count    = 1
-  memory_size       = 2
+  availability_zone = data.alicloud_zones.default.zones[0].id
+  cpu_core_count = 2
+  memory_size = 4
+  kubernetes_node_role = "Worker"
 }
 
-resource "alicloud_cs_managed_kubernetes" "k8s" {
-  name                  = "${var.name}"
-  availability_zone     = "${data.alicloud_zones.main.zones.0.id}"
-  new_nat_gateway       = true
-  worker_instance_types = ["${data.alicloud_instance_types.default.instance_types.0.id}"]
-  worker_numbers        = [2]
-  password              = "Yourpassword1234"
-  pod_cidr              = "172.20.0.0/16"
-  service_cidr          = "172.21.0.0/20"
-  install_cloud_monitor = true
-  slb_internet_enabled  = true
-  worker_disk_category  = "cloud_efficiency"
+resource "alicloud_vpc" "default" {
+  name = var.name
+  cidr_block = "10.1.0.0/21"
 }
+
+resource "alicloud_vswitch" "default" {
+  name = var.name
+  vpc_id = alicloud_vpc.default.id
+  cidr_block = "10.1.1.0/24"
+  availability_zone = data.alicloud_zones.default.zones[0].id
+}
+
+resource "alicloud_log_project" "log" {
+  name        = var.log_project_name
+  description = "created by terraform for managedkubernetes cluster"
+}
+
+resource "alicloud_cs_managed_kubernetes" "default" {
+  name_prefix = var.name
+  availability_zone = data.alicloud_zones.default.zones[0].id
+  vswitch_ids = [alicloud_vswitch.default.id]
+  new_nat_gateway = true
+  worker_instance_types = [data.alicloud_instance_types.default.instance_types[0].id]
+  worker_number = 2
+  password = "Yourpassword1234"
+  pod_cidr = "172.20.0.0/16"
+  service_cidr = "172.21.0.0/20"
+  install_cloud_monitor = true
+  slb_internet_enabled = true
+  worker_disk_category  = "cloud_efficiency"
+  worker_data_disk_category = "cloud_ssd"
+  worker_data_disk_size =  200
+  log_config {
+    type = "SLS"
+    project = alicloud_log_project.log.name
+  }
+}
+
 ```
+
+## Module Support
+
+You can use the existing [managed-kubernetes module](https://registry.terraform.io/modules/terraform-alicloud-modules/managed-kubernetes/alicloud) 
+to create a managed kubernetes cluster one-click.
 
 ## Argument Reference
 
@@ -70,14 +107,16 @@ The following arguments are supported:
 * `name` - (Optional) The kubernetes cluster's name. It is the only in one Alicloud account.
 * `name_prefix` - (Optional) The kubernetes cluster name's prefix. It is conflict with `name`. If it is specified, terraform will using it to build the only cluster name. Default to "Terraform-Creation".
 * `availability_zone` - (Optional, ForceNew) The Zone where new kubernetes cluster will be located. If it is not be specified, the `vswitch_ids` should be set, the value will be vswitch's zone.
-* `vswitch_ids` - (Optional, ForceNew) The vswitch where new kubernetes cluster will be located. Specify one vswitch's id, if it is not specified, a new VPC and VSwicth will be built. It must be in the zone which `availability_zone` specified.
-* `new_nat_gateway` - (Optional) Whether to create a new nat gateway while creating kubernetes cluster. Default to true.
-* `password` - (Required, ForceNew) The password of ssh login cluster node. You have to specify one of `password` and `key_name` fields.
-* `key_name` - (Required, ForceNew) The keypair of ssh login cluster node, you have to create it first.
-* `pod_cidr` - (Optional, ForceNew) The CIDR block for the pod network. It will be allocated automatically when `vswitch_ids` is not specified.
+* `vswitch_ids` - (Required, ForceNew) The vswitch where new kubernetes cluster will be located. Specify one or more vswitch's id. It must be in the zone which `availability_zone` specified.
+* `new_nat_gateway` - (Optional, ForceNew) Whether to create a new nat gateway while creating kubernetes cluster. Default to true.
+* `password` - (Optional, ForceNew, Sensitive) The password of ssh login cluster node. You have to specify one of `password` `key_name` `kms_encrypted_password` fields.
+* `kms_encrypted_password` - (Optional, ForceNew, Available in 1.57.1+) An KMS encrypts password used to a cs managed kubernetes. It is conflicted with `password` and `key_name`.
+* `kms_encryption_context` - (Optional, ForceNew, MapString, Available in 1.57.1+) An KMS encryption context used to decrypt `kms_encrypted_password` before creating or updating a cs managed kubernetes with `kms_encrypted_password`. See [Encryption Context](https://www.alibabacloud.com/help/doc-detail/42975.htm). It is valid when `kms_encrypted_password` is set.
+* `key_name` - (Optional, ForceNew) The keypair of ssh login cluster node, you have to create it first.
+* `pod_cidr` - (Optional, ForceNew) The CIDR block for the pod network. When `cluster_network_type` is  set to `flanne`, you must set value to this filed .
 It cannot be duplicated with the VPC CIDR and CIDR used by Kubernetes cluster in VPC, cannot be modified after creation.
 Maximum number of hosts allowed in the cluster: 256. Refer to [Plan Kubernetes CIDR blocks under VPC](https://www.alibabacloud.com/help/doc-detail/64530.htm).
-* `service_cidr` - (Optional, ForceNew) The CIDR block for the service network.  It will be allocated automatically when `vswitch_id` is not specified.
+* `service_cidr` - (Required, ForceNew) The CIDR block for the service network.  
 It cannot be duplicated with the VPC CIDR and CIDR used by Kubernetes cluster in VPC, cannot be modified after creation.
 * `slb_internet_enabled` - (Optional, ForceNew) Whether to create internet load balancer for API Server. Default to false.
 * `install_cloud_monitor` - (Optional, ForceNew) Whether to install cloud monitor for the kubernetes' node.
@@ -89,7 +128,7 @@ It cannot be duplicated with the VPC CIDR and CIDR used by Kubernetes cluster in
 * `force_update` - (Optional) Default false, when you want to change `worker_instance_types` and `vswitch_ids`, you have to set this field to true, then the cluster will be recreated.
 * `worker_numbers` - (Deprecated from version 1.53.0) The worker node number of the kubernetes cluster. Default to [3]. It is limited up to 50 and if you want to enlarge it, please apply white list or contact with us.
 * `worker_instance_types` - (Required, ForceNew) The instance type of worker node. Specify one type for single AZ Cluster, three types for MultiAZ Cluster.
-You can get the available kubetnetes master node instance types by [datasource instance_types](https://www.terraform.io/docs/providers/alicloud/d/instance_types.html#kubernetes_node_role)
+You can get the available kubernetes master node instance types by [datasource instance_types](https://www.terraform.io/docs/providers/alicloud/d/instance_types.html#kubernetes_node_role)
 * `worker_instance_charge_type` - (Optional, ForceNew) Worker payment type. `PrePaid` or `PostPaid`, defaults to `PostPaid`.
 * `worker_period_unit` - (Optional) Worker payment period unit. `Month` or `Week`, defaults to `Month`.
 * `worker_period` - (Optional) Worker payment period. When period unit is `Month`, it can be one of { “1”, “2”, “3”, “4”, “5”, “6”, “7”, “8”, “9”, “12”, “24”, “36”,”48”,”60”}.  When period unit is `Week`, it can be one of {“1”, “2”, “3”, “4”}.
@@ -100,6 +139,21 @@ You can get the available kubetnetes master node instance types by [datasource i
 * `client_cert` - (Optional) The path of client certificate, like `~/.kube/client-cert.pem`.
 * `client_key` - (Optional) The path of client key, like `~/.kube/client-key.pem`.
 * `cluster_ca_cert` - (Optional) The path of cluster ca certificate, like `~/.kube/cluster-ca-cert.pem`
+* `log_config` - (Optional, ForceNew, Available in 1.57.1+) A list of one element containing information about the associated log store. It contains the following attributes:
+  * `type` - Type of collecting logs, only `SLS` are supported currently.
+  * `project` - Log Service project name, cluster logs will output to this project.
+* `version` - (Optional, Available in 1.70.1) Desired Kubernetes version. If you do not specify a value, the latest available version at resource creation is used and no upgrades will occur except you set a higher version number. The value must be configured and increased to upgrade the version when desired. Downgrades are not supported by ACK.
+
+### Timeouts
+
+-> **NOTE:** Available in 1.58.0+.
+
+The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
+
+* `create` - (Defaults to 90 mins) Used when creating the kubernetes cluster (until it reaches the initial `running` status). 
+* `update` - (Defaults to 60 mins) Used when activating the kubernetes cluster when necessary during update.
+* `delete` - (Defaults to 60 mins) Used when terminating the kubernetes cluster. 
+
 
 ## Attributes Reference
 
@@ -118,6 +172,7 @@ The following attributes are exported:
 * `worker_data_disk_size` - The data disk category of worker node.
 * `worker_data_disk_category` - The data disk size of worker node.
 * `worker_nodes` - List of cluster worker nodes. It contains several attributes to `Block Nodes`.
+* `version` - The Kubernetes server version for the cluster.
 
 ### Block Nodes
 

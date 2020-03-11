@@ -2,14 +2,17 @@ package alicloud
 
 import (
 	"fmt"
+	"regexp"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 
 	newsdk "github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/denverdino/aliyungo/common"
 	"github.com/denverdino/aliyungo/cs"
 	"github.com/denverdino/aliyungo/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -28,14 +31,14 @@ func resourceAlicloudCSSwarm() *schema.Resource {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validateContainerName,
+				ValidateFunc:  validation.StringLenBetween(1, 63),
 				ConflictsWith: []string{"name_prefix"},
 			},
 			"name_prefix": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Default:       "Terraform-Creation",
-				ValidateFunc:  validateContainerNamePrefix,
+				ValidateFunc:  validation.StringLenBetween(0, 37),
 				ConflictsWith: []string{"name"},
 			},
 			"size": {
@@ -47,7 +50,7 @@ func resourceAlicloudCSSwarm() *schema.Resource {
 				Type:         schema.TypeInt,
 				Optional:     true,
 				Default:      1,
-				ValidateFunc: validateIntegerInRange(0, 50),
+				ValidateFunc: validation.IntBetween(0, 50),
 			},
 			"cidr_block": {
 				Type:     schema.TypeString,
@@ -58,7 +61,7 @@ func resourceAlicloudCSSwarm() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateInstanceType,
+				ValidateFunc: validation.StringMatch(regexp.MustCompile(`^ecs\..*`), "prefix must be 'ecs.'"),
 			},
 			"vswitch_id": {
 				Type:     schema.TypeString,
@@ -76,7 +79,7 @@ func resourceAlicloudCSSwarm() *schema.Resource {
 				Optional:     true,
 				ForceNew:     true,
 				Default:      20,
-				ValidateFunc: validateIntegerInRange(20, 32768),
+				ValidateFunc: validation.IntBetween(20, 32768),
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					return d.Get("node_number").(int) == 0
 				},
@@ -86,7 +89,7 @@ func resourceAlicloudCSSwarm() *schema.Resource {
 				Optional:     true,
 				Default:      ecs.DiskCategoryCloudEfficiency,
 				ForceNew:     true,
-				ValidateFunc: validateDiskCategory,
+				ValidateFunc: validation.StringInSlice([]string{"all", "cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd", "local_disk"}, false),
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					return d.Get("node_number").(int) == 0
 				},
@@ -224,7 +227,7 @@ func resourceAlicloudCSSwarmCreate(d *schema.ResourceData, meta interface{}) err
 	if err != nil {
 		return fmt.Errorf("Creating container Cluster got an error: %#v", err)
 	}
-	cluster, _ := raw.(cs.ClusterCreationResponse)
+	cluster, _ := raw.(cs.ClusterCommonResponse)
 	d.SetId(cluster.ClusterID)
 
 	_, err = client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
@@ -291,7 +294,7 @@ func resourceAlicloudCSSwarmUpdate(d *schema.ResourceData, meta interface{}) err
 		_, err := client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
 			return nil, csClient.ModifyClusterName(d.Id(), clusterName)
 		})
-		if err != nil && !IsExceptedError(err, ErrorClusterNameAlreadyExist) {
+		if err != nil && !IsExpectedErrors(err, []string{"ErrorClusterNameAlreadyExist"}) {
 			return fmt.Errorf("Modify Cluster Name got an error: %#v", err)
 		}
 		d.SetPartial("name")
@@ -313,7 +316,7 @@ func resourceAlicloudCSSwarmRead(d *schema.ResourceData, meta interface{}) error
 	})
 
 	if err != nil {
-		if NotFoundError(err) && IsExceptedErrors(err, []string{ErrorClusterNotFound}) {
+		if IsExpectedErrors(err, []string{"ErrorClusterNotFound"}) {
 			d.SetId("")
 			return nil
 		}
@@ -350,26 +353,25 @@ func resourceAlicloudCSSwarmRead(d *schema.ResourceData, meta interface{}) error
 				"private_ip": node.IP,
 				"status":     node.Status,
 			}
-			if inst, err := ecsService.DescribeInstance(node.InstanceId); err != nil {
+			inst, err := ecsService.DescribeInstance(node.InstanceId)
+			if err != nil {
 				return fmt.Errorf("[ERROR] QueryInstancesById %s: %#v.", node.InstanceId, err)
-			} else {
-				mapping["eip"] = inst.EipAddress.IpAddress
-				oneNode = inst
 			}
-
+			mapping["eip"] = inst.EipAddress.IpAddress
+			oneNode = inst
 			nodes = append(nodes, mapping)
 		}
 
 		d.Set("nodes", nodes)
 
 		d.Set("instance_type", oneNode.InstanceType)
-		if disks, err := ecsService.DescribeDisksByType(oneNode.InstanceId, DiskTypeData); err != nil {
+		disks, err := ecsService.DescribeDisksByType(oneNode.InstanceId, DiskTypeData)
+		if err != nil {
 			return fmt.Errorf("[ERROR] DescribeDisks By Id %s: %#v.", resp[0].InstanceId, err)
-		} else {
-			for _, disk := range disks {
-				d.Set("disk_size", disk.Size)
-				d.Set("disk_category", disk.Category)
-			}
+		}
+		for _, disk := range disks {
+			d.Set("disk_size", disk.Size)
+			d.Set("disk_category", disk.Category)
 		}
 	} else {
 		d.Set("nodes", []map[string]interface{}{})
@@ -388,7 +390,7 @@ func resourceAlicloudCSSwarmDelete(d *schema.ResourceData, meta interface{}) err
 			return nil, csClient.DeleteCluster(d.Id())
 		})
 		if err != nil {
-			if NotFoundError(err) || IsExceptedError(err, ErrorClusterNotFound) {
+			if IsExpectedErrors(err, []string{"ErrorClusterNotFound"}) {
 				return nil
 			}
 			return resource.RetryableError(fmt.Errorf("Deleting container cluster got an error: %#v", err))
@@ -398,7 +400,7 @@ func resourceAlicloudCSSwarmDelete(d *schema.ResourceData, meta interface{}) err
 			return csClient.DescribeCluster(d.Id())
 		})
 		if err != nil {
-			if NotFoundError(err) || IsExceptedError(err, ErrorClusterNotFound) {
+			if IsExpectedErrors(err, []string{"ErrorClusterNotFound"}) {
 				return nil
 			}
 			return resource.NonRetryableError(fmt.Errorf("Describe container cluster got an error: %#v", err))

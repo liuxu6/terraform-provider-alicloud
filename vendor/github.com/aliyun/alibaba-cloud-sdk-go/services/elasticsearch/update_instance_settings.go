@@ -76,7 +76,8 @@ func (client *Client) UpdateInstanceSettingsWithCallback(request *UpdateInstance
 // UpdateInstanceSettingsRequest is the request struct for api UpdateInstanceSettings
 type UpdateInstanceSettingsRequest struct {
 	*requests.RoaRequest
-	InstanceId string `position:"Path" name:"InstanceId"`
+	InstanceId  string `position:"Path" name:"InstanceId"`
+	ClientToken string `position:"Query" name:"clientToken"`
 }
 
 // UpdateInstanceSettingsResponse is the response struct for api UpdateInstanceSettings
@@ -91,7 +92,7 @@ func CreateUpdateInstanceSettingsRequest() (request *UpdateInstanceSettingsReque
 		RoaRequest: &requests.RoaRequest{},
 	}
 	request.InitWithApiInfo("elasticsearch", "2017-06-13", "UpdateInstanceSettings", "/openapi/instances/[InstanceId]/instance-settings", "elasticsearch", "openAPI")
-	request.Method = requests.POST
+	request.Method = requests.PATCH
 	return
 }
 

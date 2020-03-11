@@ -6,9 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	sls "github.com/aliyun/aliyun-log-go-sdk"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -30,12 +32,9 @@ func resourceAlicloudLogtailConfig() *schema.Resource {
 			},
 
 			"input_type": {
-				Type:     schema.TypeString,
-				Required: true,
-				ValidateFunc: validateAllowedStringValue([]string{
-					"file",
-					"plugin",
-				}),
+				Type:         schema.TypeString,
+				Required:     true,
+				ValidateFunc: validation.StringInSlice([]string{"file", "plugin"}, false),
 			},
 			"log_sample": {
 				Type:     schema.TypeString,
@@ -63,7 +62,7 @@ func resourceAlicloudLogtailConfig() *schema.Resource {
 					yaml, _ := normalizeJsonString(v)
 					return yaml
 				},
-				ValidateFunc: validateJsonString,
+				ValidateFunc: validation.ValidateJsonString,
 			},
 		},
 	}
@@ -73,8 +72,8 @@ func resourceAlicloudLogtailConfigCreate(d *schema.ResourceData, meta interface{
 	client := meta.(*connectivity.AliyunClient)
 	var inputConfigInputDetail = make(map[string]interface{})
 	data := d.Get("input_detail").(string)
-	if json_err := json.Unmarshal([]byte(data), &inputConfigInputDetail); json_err != nil {
-		return WrapError(json_err)
+	if jsonErr := json.Unmarshal([]byte(data), &inputConfigInputDetail); jsonErr != nil {
+		return WrapError(jsonErr)
 	}
 	var requestInfo *sls.Client
 	logconfig := &sls.LogConfig{
@@ -90,11 +89,11 @@ func resourceAlicloudLogtailConfigCreate(d *schema.ResourceData, meta interface{
 	raw, err := client.WithLogClient(func(slsClient *sls.Client) (interface{}, error) {
 		requestInfo = slsClient
 		sls.AddNecessaryInputConfigField(inputConfigInputDetail)
-		if covert_input, covert_err := assertInputDetailType(inputConfigInputDetail, logconfig); covert_err != nil {
-			return nil, WrapError(covert_err)
-		} else {
-			logconfig.InputDetail = covert_input
+		covertInput, covertErr := assertInputDetailType(inputConfigInputDetail, logconfig)
+		if covertErr != nil {
+			return nil, WrapError(covertErr)
 		}
+		logconfig.InputDetail = covertInput
 		return nil, slsClient.CreateConfig(d.Get("project").(string), logconfig)
 	})
 	if err != nil {
@@ -174,11 +173,11 @@ func resourceAlicloudLogtailConfiglUpdate(d *schema.ResourceData, meta interface
 			return WrapError(conver_err)
 		}
 		sls.AddNecessaryInputConfigField(inputConfigInputDetail)
-		if covert_input, covert_err := assertInputDetailType(inputConfigInputDetail, logconfig); covert_err != nil {
-			return WrapError(covert_err)
-		} else {
-			logconfig.InputDetail = covert_input
+		covertInput, covertErr := assertInputDetailType(inputConfigInputDetail, logconfig)
+		if covertErr != nil {
+			return WrapError(covertErr)
 		}
+		logconfig.InputDetail = covertInput
 
 		client := meta.(*connectivity.AliyunClient)
 		var requestInfo *sls.Client
@@ -224,7 +223,7 @@ func resourceAlicloudLogtailConfigDelete(d *schema.ResourceData, meta interface{
 			return nil, slsClient.DeleteConfig(parts[0], parts[2])
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{LogClientTimeout}) {
+			if IsExpectedErrors(err, []string{LogClientTimeout}) {
 				time.Sleep(5 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -239,7 +238,7 @@ func resourceAlicloudLogtailConfigDelete(d *schema.ResourceData, meta interface{
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{ProjectNotExist, LogStoreNotExist, LogConfigNotExist}) {
+		if IsExpectedErrors(err, []string{"ProjectNotExist", "LogStoreNotExist", "ConfigNotExist"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "DeleteConfig", AliyunLogGoSdkERROR)

@@ -1,4 +1,5 @@
 ---
+subcategory: "Log Service (SLS)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_logtail_attachment"
 sidebar_current: "docs-alicloud-resource-logtail-attachment"
@@ -66,6 +67,7 @@ resource "alicloud_logtail_attachment" "test" {
   machine_group_name = "${alicloud_log_machine_group.test.name}"
 }
 ```
+
 ## Argument Reference
 
 The following arguments are supported:

@@ -5,8 +5,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -36,8 +40,8 @@ func resourceAlicloudDBAccountPrivilege() *schema.Resource {
 			"privilege": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateAllowedStringValue([]string{string(ReadOnly), string(ReadWrite)}),
-				Default:      ReadOnly,
+				ValidateFunc: validation.StringInSlice([]string{"ReadOnly", "ReadWrite", "DDLOnly", "DMLOnly", "DBOwner"}, false),
+				Default:      "ReadOnly",
 				ForceNew:     true,
 			},
 
@@ -53,13 +57,13 @@ func resourceAlicloudDBAccountPrivilege() *schema.Resource {
 
 func resourceAlicloudDBAccountPrivilegeCreate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	rsdService := RdsService{client}
+	rdsService := RdsService{client}
 	instanceId := d.Get("instance_id").(string)
 	account := d.Get("account_name").(string)
 	privilege := d.Get("privilege").(string)
 	dbList := d.Get("db_names").(*schema.Set).List()
 	// wait instance running before granting
-	if err := rsdService.WaitForDBInstance(instanceId, Running, DefaultLongTimeout); err != nil {
+	if err := rdsService.WaitForDBInstance(instanceId, Running, DefaultLongTimeout); err != nil {
 		return WrapError(err)
 	}
 	d.SetId(fmt.Sprintf("%s%s%s%s%s", instanceId, COLON_SEPARATED, account, COLON_SEPARATED, privilege))
@@ -67,8 +71,8 @@ func resourceAlicloudDBAccountPrivilegeCreate(d *schema.ResourceData, meta inter
 	if len(dbList) > 0 {
 		for _, db := range dbList {
 			if err := resource.Retry(10*time.Minute, func() *resource.RetryError {
-				if err := rsdService.GrantAccountPrivilege(d.Id(), db.(string)); err != nil {
-					if IsExceptedErrors(err, OperationDeniedDBStatus) {
+				if err := rdsService.GrantAccountPrivilege(d.Id(), db.(string)); err != nil {
+					if IsExpectedErrors(err, OperationDeniedDBStatus) {
 						return resource.RetryableError(err)
 					}
 					return resource.NonRetryableError(err)
@@ -92,7 +96,7 @@ func resourceAlicloudDBAccountPrivilegeRead(d *schema.ResourceData, meta interfa
 	}
 	object, err := rsdService.DescribeDBAccountPrivilege(d.Id())
 	if err != nil {
-		if rsdService.NotFoundDBInstance(err) {
+		if NotFoundError(err) {
 			d.SetId("")
 			return nil
 		}
@@ -108,6 +112,41 @@ func resourceAlicloudDBAccountPrivilegeRead(d *schema.ResourceData, meta interfa
 			names = append(names, pri.DBName)
 		}
 	}
+
+	if len(names) < 1 && strings.HasPrefix(object.DBInstanceId, "pgm-") {
+
+		request := rds.CreateDescribeDatabasesRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = object.DBInstanceId
+
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+				return rdsClient.DescribeDatabases(request)
+			})
+			if err != nil {
+				if IsExpectedErrors(err, []string{"InternalError", "OperationDenied.DBInstanceStatus"}) {
+					return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, object.DBInstanceId, request.GetActionName(), AlibabaCloudSdkGoERROR))
+				}
+				return resource.NonRetryableError(WrapErrorf(err, DefaultErrorMsg, object.DBInstanceId, request.GetActionName(), AlibabaCloudSdkGoERROR))
+			}
+
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
+			response, _ := raw.(*rds.DescribeDatabasesResponse)
+			for _, db := range response.Databases.Database {
+				for _, account := range db.Accounts.AccountPrivilegeInfo {
+					if account.Account == object.AccountName && (account.AccountPrivilege == parts[2] || account.AccountPrivilege == "ALL") {
+						names = append(names, db.DBName)
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return WrapError(err)
+		}
+	}
+
 	d.Set("db_names", names)
 
 	return nil
@@ -128,6 +167,9 @@ func resourceAlicloudDBAccountPrivilegeUpdate(d *schema.ResourceData, meta inter
 		add := ns.Difference(os).List()
 
 		if len(remove) > 0 {
+			if strings.HasPrefix(d.Id(), "pgm-") {
+				return WrapError(fmt.Errorf("At present, the PostgreSql database does not support revoking the current privilege."))
+			}
 			// wait instance running before revoking
 			if err := rdsService.WaitForDBInstance(parts[0], Running, DefaultTimeoutMedium); err != nil {
 				return WrapError(err)
@@ -166,10 +208,13 @@ func resourceAlicloudDBAccountPrivilegeDelete(d *schema.ResourceData, meta inter
 	}
 	object, err := rdsService.DescribeDBAccountPrivilege(d.Id())
 	if err != nil {
-		if rdsService.NotFoundDBInstance(err) {
+		if NotFoundError(err) {
 			return nil
 		}
 		return WrapError(err)
+	}
+	if strings.HasPrefix(d.Id(), "pgm-") {
+		return nil
 	}
 	var dbName string
 

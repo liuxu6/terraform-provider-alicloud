@@ -5,9 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	sls "github.com/aliyun/aliyun-log-go-sdk"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -67,11 +69,10 @@ func resourceAlicloudLogStoreIndex() *schema.Resource {
 							Required: true,
 						},
 						"type": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Default:  LongType,
-							ValidateFunc: validateAllowedStringValue([]string{string(TextType), string(LongType),
-								string(DoubleType), string(JsonType)}),
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      "long",
+							ValidateFunc: validation.StringInSlice([]string{"text", "long", "double", "json"}, false),
 						},
 						"alias": {
 							Type:     schema.TypeString,
@@ -95,6 +96,32 @@ func resourceAlicloudLogStoreIndex() *schema.Resource {
 							Type:     schema.TypeBool,
 							Optional: true,
 							Default:  true,
+						},
+						"json_keys": {
+							Type:     schema.TypeSet,
+							Optional: true,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"name": {
+										Type:     schema.TypeString,
+										Required: true,
+									},
+									"type": {
+										Type:     schema.TypeString,
+										Optional: true,
+										Default:  "long",
+									},
+									"alias": {
+										Type:     schema.TypeString,
+										Optional: true,
+									},
+									"doc_value": {
+										Type:     schema.TypeBool,
+										Optional: true,
+										Default:  true,
+									},
+								},
+							},
 						},
 					},
 				},
@@ -123,11 +150,11 @@ func resourceAlicloudLogStoreIndexCreate(d *schema.ResourceData, meta interface{
 	if err := resource.Retry(2*time.Minute, func() *resource.RetryError {
 		raw, err := store.GetIndex()
 		if err != nil {
-			if IsExceptedError(err, LogClientTimeout) {
+			if IsExpectedErrors(err, []string{LogClientTimeout}) {
 				time.Sleep(5 * time.Second)
 				return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, "alicloud_log_store", "GetIndex", AliyunLogGoSdkERROR))
 			}
-			if !IsExceptedErrors(err, []string{IndexConfigNotExist}) {
+			if !IsExpectedErrors(err, []string{"IndexConfigNotExist"}) {
 				return resource.NonRetryableError(WrapErrorf(err, DefaultErrorMsg, "alicloud_log_store", "GetIndex", AliyunLogGoSdkERROR))
 			}
 		}
@@ -152,7 +179,7 @@ func resourceAlicloudLogStoreIndexCreate(d *schema.ResourceData, meta interface{
 	if err := resource.Retry(2*time.Minute, func() *resource.RetryError {
 
 		if e := store.CreateIndex(index); e != nil {
-			if IsExceptedErrors(e, []string{InternalServerError, LogClientTimeout}) {
+			if IsExpectedErrors(e, []string{"InternalServerError", LogClientTimeout}) {
 				return resource.RetryableError(e)
 			}
 			return resource.NonRetryableError(e)
@@ -185,7 +212,6 @@ func resourceAlicloudLogStoreIndexRead(d *schema.ResourceData, meta interface{})
 		}
 		return WrapError(err)
 	}
-
 	if line := index.Line; line != nil {
 		mapping := map[string]interface{}{
 			"case_sensitive":  line.CaseSensitive,
@@ -208,16 +234,27 @@ func resourceAlicloudLogStoreIndexRead(d *schema.ResourceData, meta interface{})
 				"token":            strings.Join(v.Token, ""),
 				"enable_analytics": v.DocValue,
 			}
+			if len(v.JsonKeys) > 0 {
+
+				var result = []map[string]interface{}{}
+				for k1, v1 := range v.JsonKeys {
+					var value = map[string]interface{}{}
+					value["doc_value"] = v1.DocValue
+					value["alias"] = v1.Alias
+					value["type"] = v1.Type
+					value["name"] = k1
+					result = append(result, value)
+				}
+				mapping["json_keys"] = result
+			}
 			keySet = append(keySet, mapping)
 		}
 		if err := d.Set("field_search", keySet); err != nil {
 			return WrapError(err)
 		}
 	}
-
 	d.Set("project", parts[0])
 	d.Set("logstore", parts[1])
-
 	return nil
 }
 
@@ -252,7 +289,7 @@ func resourceAlicloudLogStoreIndexUpdate(d *schema.ResourceData, meta interface{
 				return nil, slsClient.UpdateIndex(parts[0], parts[1], *index)
 			})
 			if err != nil {
-				if IsExceptedError(err, LogClientTimeout) {
+				if IsExpectedErrors(err, []string{LogClientTimeout}) {
 					time.Sleep(5 * time.Second)
 					return resource.RetryableError(err)
 				}
@@ -296,7 +333,7 @@ func resourceAlicloudLogStoreIndexDelete(d *schema.ResourceData, meta interface{
 			return nil, slsClient.DeleteIndex(parts[0], parts[1])
 		})
 		if err != nil {
-			if IsExceptedError(err, LogClientTimeout) {
+			if IsExpectedErrors(err, []string{LogClientTimeout}) {
 				time.Sleep(5 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -332,14 +369,30 @@ func buildIndexKeys(d *schema.ResourceData) map[string]sls.IndexKey {
 	if field, ok := d.GetOk("field_search"); ok {
 		for _, f := range field.(*schema.Set).List() {
 			v := f.(map[string]interface{})
-			keys[v["name"].(string)] = sls.IndexKey{
+			indexKey := sls.IndexKey{
 				Type:          v["type"].(string),
 				Alias:         v["alias"].(string),
 				DocValue:      v["enable_analytics"].(bool),
 				Token:         strings.Split(v["token"].(string), ""),
 				CaseSensitive: v["case_sensitive"].(bool),
 				Chn:           v["include_chinese"].(bool),
+				JsonKeys:      map[string]*sls.JsonKey{},
 			}
+			jsonKeys := v["json_keys"].(*schema.Set).List()
+			for _, e := range jsonKeys {
+				value := e.(map[string]interface{})
+				name := value["name"].(string)
+				alias := value["alias"].(string)
+				keyType := value["type"].(string)
+				docValue := value["doc_value"].(bool)
+				indexKey.JsonKeys[name] = &sls.JsonKey{
+					Type:     keyType,
+					Alias:    alias,
+					DocValue: docValue,
+				}
+
+			}
+			keys[v["name"].(string)] = indexKey
 		}
 	}
 	return keys

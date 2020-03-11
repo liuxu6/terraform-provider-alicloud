@@ -78,17 +78,18 @@ type ModifyInstanceCrossBackupPolicyRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	RetentType           requests.Integer `position:"Query" name:"RetentType"`
+	BackupEnabled        string           `position:"Query" name:"BackupEnabled"`
+	RelService           string           `position:"Query" name:"RelService"`
+	StorageType          string           `position:"Query" name:"StorageType"`
+	Endpoint             string           `position:"Query" name:"Endpoint"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
+	Retention            requests.Integer `position:"Query" name:"Retention"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	CrossBackupType      string           `position:"Query" name:"CrossBackupType"`
 	LogBackupEnabled     string           `position:"Query" name:"LogBackupEnabled"`
-	BackupEnabled        string           `position:"Query" name:"BackupEnabled"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	CrossBackupRegion    string           `position:"Query" name:"CrossBackupRegion"`
-	StorageType          string           `position:"Query" name:"StorageType"`
-	Endpoint             string           `position:"Query" name:"Endpoint"`
 	StorageOwner         string           `position:"Query" name:"StorageOwner"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
-	Retention            requests.Integer `position:"Query" name:"Retention"`
 }
 
 // ModifyInstanceCrossBackupPolicyResponse is the response struct for api ModifyInstanceCrossBackupPolicy

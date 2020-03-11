@@ -13,9 +13,11 @@ variable "topic" {
 
 variable "message_type" {
   description = "The type of the message. Valid values: 0: normal message; 1: partitionally ordered message; 2: globally ordered message; 4: transactional message; 5: scheduled/delayed message."
+  default     = "0"
 }
 
 variable "topic_remark" {
   description = "This attribute is a concise description of topic. The length cannot exceed 128."
   default     = "tf-example-ons-topic-remark"
 }
+

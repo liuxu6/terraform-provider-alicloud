@@ -11,8 +11,8 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -51,7 +51,6 @@ func testSweepNetworkAclAttachment(region string) error {
 		if err != nil {
 			log.Printf("[ERROR] %s get an error: %#v", request.GetActionName(), err)
 		}
-		addDebug(request.GetActionName(), raw)
 		response, _ := raw.(*vpc.DescribeNetworkAclsResponse)
 		if len(response.NetworkAcls.NetworkAcl) < 1 {
 			break
@@ -98,13 +97,12 @@ func testSweepNetworkAclAttachment(region string) error {
 		}
 		request.Resource = &unassociateNetworkAclResource
 
-		raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
+		_, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
 			return vpcClient.UnassociateNetworkAcl(request)
 		})
 		if err != nil {
 			log.Printf("[ERROR] Failed to unassociate Network Acl (%s (%s)): %s", name, id, err)
 		}
-		addDebug(request.GetActionName(), raw)
 	}
 	return nil
 }

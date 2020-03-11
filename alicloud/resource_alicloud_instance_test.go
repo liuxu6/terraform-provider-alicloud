@@ -3,6 +3,7 @@ package alicloud
 import (
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
 	"strings"
@@ -10,8 +11,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -61,14 +62,15 @@ func testSweepInstances(region string) error {
 			break
 		}
 
-		if page, err := getNextpageNumber(req.PageNumber); err != nil {
+		page, err := getNextpageNumber(req.PageNumber)
+		if err != nil {
 			return err
-		} else {
-			req.PageNumber = page
 		}
+		req.PageNumber = page
 	}
 
 	sweeped := false
+	vpcService := VpcService{client}
 	for _, v := range insts {
 		name := v.InstanceName
 		id := v.InstanceId
@@ -78,6 +80,13 @@ func testSweepInstances(region string) error {
 				skip = false
 				break
 			}
+		}
+		// If a slb name is set by other service, it should be fetched by vswitch name and deleted.
+		if skip {
+			if need, err := vpcService.needSweepVpc(v.VpcAttributes.VpcId, v.VpcAttributes.VSwitchId); err == nil {
+				skip = !need
+			}
+
 		}
 		if skip {
 			log.Printf("[INFO] Skipping Instance: %s (%s)", name, id)
@@ -92,7 +101,7 @@ func testSweepInstances(region string) error {
 				return ecsClient.ModifyInstanceAttribute(request)
 			})
 			if err != nil {
-				fmt.Printf("[ERROR] %#v", WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR))
+				log.Printf("[ERROR] %#v", WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR))
 				continue
 			}
 		}
@@ -105,7 +114,7 @@ func testSweepInstances(region string) error {
 				return ecsClient.ModifyInstanceChargeType(request)
 			})
 			if err != nil {
-				fmt.Printf("[ERROR] %#v", WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR))
+				log.Printf("[ERROR] %#v", WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR))
 				continue
 			}
 			time.Sleep(3 * time.Second)
@@ -168,16 +177,18 @@ func TestAccAlicloudInstanceBasic(t *testing.T) {
 					"spot_strategy":                 "NoSpot",
 					"spot_price_limit":              "0",
 					"security_enhancement_strategy": "Active",
+					"resource_group_id":             "${var.resource_group_id}",
 					// The specified parameter "UserData" only support the vpc and IoOptimized Instance.
 					//"user_data" :                    "I_am_user_data",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"instance_name": name,
-						"key_name":      name,
-						"role_name":     NOSET,
-						"vswitch_id":    REMOVEKEY,
-						"user_data":     REMOVEKEY,
+						"instance_name":     name,
+						"key_name":          name,
+						"role_name":         NOSET,
+						"vswitch_id":        REMOVEKEY,
+						"user_data":         REMOVEKEY,
+						"resource_group_id": CHECKSET,
 					}),
 				),
 			},
@@ -185,7 +196,27 @@ func TestAccAlicloudInstanceBasic(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"security_enhancement_strategy"},
+				ImportStateVerifyIgnore: []string{"security_enhancement_strategy", "dry_run"},
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"auto_release_time": time.Now().Add(10 * time.Hour).Format("2006-01-02T15:04:05Z"),
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"auto_release_time": CHECKSET,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"auto_release_time": "",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"auto_release_time": "",
+					}),
+				),
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
@@ -299,16 +330,29 @@ func TestAccAlicloudInstanceBasic(t *testing.T) {
 					}),
 				),
 			},*/
+			// only burstable instances support this attribute.
+			/*{
+				Config: testAccConfig(map[string]interface{}{
+					"credit_specification": "Unlimited",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"credit_specification": "Unlimited",
+					}),
+				),
+			},*/
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"volume_tags": map[string]string{
 						"tag1": "test",
+						"Tag2": "Test",
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"volume_tags.%":    "1",
+						"volume_tags.%":    "2",
 						"volume_tags.tag1": "test",
+						"volume_tags.Tag2": "Test",
 					}),
 				),
 			},
@@ -316,14 +360,14 @@ func TestAccAlicloudInstanceBasic(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"tags": map[string]string{
 						"foo": "foo",
-						"bar": "bar",
+						"Bar": "Bar",
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"tags.%":   "2",
 						"tags.foo": "foo",
-						"tags.bar": "bar",
+						"tags.Bar": "Bar",
 					}),
 				),
 			},
@@ -347,6 +391,7 @@ func TestAccAlicloudInstanceBasic(t *testing.T) {
 					"internet_max_bandwidth_in":  REMOVEKEY,
 					"host_name":                  REMOVEKEY,
 					"password":                   REMOVEKEY,
+					// "credit_specification":       "Standard",
 
 					"system_disk_size": "70",
 					"volume_tags":      REMOVEKEY,
@@ -358,13 +403,14 @@ func TestAccAlicloudInstanceBasic(t *testing.T) {
 					testAccCheck(map[string]string{
 
 						"tags.%":   "0",
-						"tags.bar": REMOVEKEY,
+						"tags.Bar": REMOVEKEY,
 						"tags.foo": REMOVEKEY,
 
 						"instance_name": fmt.Sprintf("tf-testAccEcsInstanceConfigBasic%d", rand),
 
 						"volume_tags.%":    "0",
 						"volume_tags.tag1": REMOVEKEY,
+						"volume_tags.Tag2": REMOVEKEY,
 
 						"image_id":          CHECKSET,
 						"instance_type":     CHECKSET,
@@ -381,6 +427,8 @@ func TestAccAlicloudInstanceBasic(t *testing.T) {
 						"password":         "",
 						"is_outdated":      NOSET,
 						"system_disk_size": "70",
+
+						// "credit_specification": "Standard",
 
 						"private_ip": CHECKSET,
 						"public_ip":  CHECKSET,
@@ -452,7 +500,27 @@ func TestAccAlicloudInstanceVpc(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"security_enhancement_strategy"},
+				ImportStateVerifyIgnore: []string{"security_enhancement_strategy", "dry_run"},
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"auto_release_time": time.Now().Add(10 * time.Hour).Format("2006-01-02T15:04:05Z"),
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"auto_release_time": CHECKSET,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"auto_release_time": "",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"auto_release_time": "",
+					}),
+				),
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
@@ -461,6 +529,16 @@ func TestAccAlicloudInstanceVpc(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"image_id": CHECKSET,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"user_data": "I_am_user_data_update",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"user_data": "I_am_user_data_update",
 					}),
 				),
 			},
@@ -545,6 +623,17 @@ func TestAccAlicloudInstanceVpc(t *testing.T) {
 					}),
 				),
 			},
+			// only burstable instances support this attribute.
+			/*{
+				Config: testAccConfig(map[string]interface{}{
+					"credit_specification": "Unlimited",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"credit_specification": "Unlimited",
+					}),
+				),
+			},*/
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"system_disk_size": "50",
@@ -569,12 +658,14 @@ func TestAccAlicloudInstanceVpc(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"volume_tags": map[string]string{
 						"tag1": "test",
+						"Tag2": "Test",
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"volume_tags.%":    "1",
+						"volume_tags.%":    "2",
 						"volume_tags.tag1": "test",
+						"volume_tags.Tag2": "Test",
 					}),
 				),
 			},
@@ -582,14 +673,14 @@ func TestAccAlicloudInstanceVpc(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"tags": map[string]string{
 						"foo": "foo",
-						"bar": "bar",
+						"Bar": "Bar",
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"tags.%":   "2",
 						"tags.foo": "foo",
-						"tags.bar": "bar",
+						"tags.Bar": "Bar",
 					}),
 				),
 			},
@@ -613,6 +704,7 @@ func TestAccAlicloudInstanceVpc(t *testing.T) {
 					"internet_max_bandwidth_in":  REMOVEKEY,
 					"host_name":                  REMOVEKEY,
 					"password":                   REMOVEKEY,
+					// "credit_specification":       "Standard",
 
 					"system_disk_size": "70",
 					"private_ip":       REMOVEKEY,
@@ -625,13 +717,14 @@ func TestAccAlicloudInstanceVpc(t *testing.T) {
 					testAccCheck(map[string]string{
 
 						"tags.%":   "0",
-						"tags.bar": REMOVEKEY,
+						"tags.Bar": REMOVEKEY,
 						"tags.foo": REMOVEKEY,
 
 						"instance_name": name,
 
 						"volume_tags.%":    "0",
 						"volume_tags.tag1": REMOVEKEY,
+						"volume_tags.Tag2": REMOVEKEY,
 
 						"image_id":          CHECKSET,
 						"instance_type":     CHECKSET,
@@ -649,6 +742,8 @@ func TestAccAlicloudInstanceVpc(t *testing.T) {
 						"password":         "",
 						"is_outdated":      NOSET,
 						"system_disk_size": "70",
+
+						// "credit_specification": "Standard",
 
 						"private_ip": CHECKSET,
 						"public_ip":  "",
@@ -732,7 +827,7 @@ func TestAccAlicloudInstancePrepaid(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 				ImportStateVerifyIgnore: []string{"security_enhancement_strategy", "data_disks", "dry_run", "force_delete",
-					"include_data_disks", "period", "period_unit"},
+					"include_data_disks"},
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
@@ -1121,7 +1216,7 @@ func TestAccAlicloudInstanceDataDisks(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 				ImportStateVerifyIgnore: []string{"security_enhancement_strategy", "data_disks", "dry_run", "force_delete",
-					"include_data_disks", "period", "period_unit"},
+					"include_data_disks"},
 			},
 		},
 	})
@@ -1439,6 +1534,11 @@ data "alicloud_instance_types" "default" {
   cpu_core_count    = 1
   memory_size       = 2
 }
+
+variable "resource_group_id" {
+		default = "%s"
+	}
+
 data "alicloud_images" "default" {
   name_regex  = "^ubuntu*"
   owners      = "system"
@@ -1468,7 +1568,7 @@ resource "alicloud_key_pair" "default" {
 	key_name = "${var.name}"
 }
 
-`, name)
+`, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"), name)
 }
 
 func resourceInstanceTypeConfigDependence(name string) string {
@@ -1478,7 +1578,7 @@ func resourceInstanceTypeConfigDependence(name string) string {
 	  available_resource_creation = "VSwitch"
 	}
 	data "alicloud_images" "default" {
-	  name_regex  = "^ubuntu_14.*_64"
+	  name_regex  = "^ubuntu_18.*64"
 	  most_recent = true
 	  owners      = "system"
 	}
@@ -1564,8 +1664,9 @@ var testAccInstanceCheckMap = map[string]string{
 	"instance_type":     CHECKSET,
 	"security_groups.#": "1",
 
-	"availability_zone":             CHECKSET,
-	"system_disk_category":          "cloud_efficiency",
+	"availability_zone":    CHECKSET,
+	"system_disk_category": "cloud_efficiency",
+	//"credit_specification":          "",
 	"spot_strategy":                 "NoSpot",
 	"spot_price_limit":              "0",
 	"security_enhancement_strategy": "Active",
@@ -1598,5 +1699,5 @@ var testAccInstanceCheckMap = map[string]string{
 	"auto_renew_period":  NOSET,
 	"force_delete":       NOSET,
 	"include_data_disks": NOSET,
-	"dry_run":            NOSET,
+	"dry_run":            "false",
 }

@@ -9,8 +9,9 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
 	"github.com/denverdino/aliyungo/common"
 	"github.com/denverdino/aliyungo/cs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -25,11 +26,12 @@ func dataSourceAlicloudCSManagerKubernetesClusters() *schema.Resource {
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
+				Computed: true,
 			},
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"enable_details": {
 				Type:     schema.TypeBool,
@@ -433,6 +435,17 @@ func csManagedKubernetesClusterDescriptionAttributes(d *schema.ResourceData, clu
 			pageNumber += 1
 		}
 		mapping["worker_nodes"] = workerNodes
+
+		if ct.Parameters.LoggingType != "None" {
+			logConfig := map[string]interface{}{}
+			logConfig["type"] = ct.Parameters.LoggingType
+			if ct.Parameters.SLSProjectName == "None" {
+				logConfig["project"] = ""
+			} else {
+				logConfig["project"] = ct.Parameters.SLSProjectName
+			}
+			mapping["log_config"] = []map[string]interface{}{logConfig}
+		}
 
 		var response interface{}
 		if err := invoker.Run(func() error {

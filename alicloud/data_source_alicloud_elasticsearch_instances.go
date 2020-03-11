@@ -5,7 +5,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/elasticsearch"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,21 +18,22 @@ func dataSourceAlicloudElasticsearch() *schema.Resource {
 			"description_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"ids": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"version": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					"5.5.3_with_X-Pack",
 					"6.3.2_with_X-Pack",
 					"6.7.0_with_X-Pack",
-				}),
+				}, false),
 			},
 			"output_file": {
 				Type:     schema.TypeString,
@@ -135,11 +137,11 @@ func dataSourceAlicloudElasticsearchRead(d *schema.ResourceData, meta interface{
 			break
 		}
 
-		if page, err := getNextpageNumber(request.Page); err != nil {
+		page, err := getNextpageNumber(request.Page)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.Page = page
 		}
+		request.Page = page
 	}
 
 	var filteredInstances []elasticsearch.Instance

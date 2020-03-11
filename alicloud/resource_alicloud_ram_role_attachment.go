@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -52,7 +52,7 @@ func resourceAlicloudInstanceRoleAttachmentCreate(d *schema.ResourceData, meta i
 			return ecsClient.AttachInstanceRamRole(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, RoleAttachmentUnExpectedJson) {
+			if IsExpectedErrors(err, []string{"unexpected end of JSON input"}) {
 				return resource.RetryableError(WrapError(Error("Please trying again.")))
 			}
 			return resource.NonRetryableError(WrapErrorf(err, DefaultErrorMsg, "ram_role_attachment", request.GetActionName(), AlibabaCloudSdkGoERROR))
@@ -112,7 +112,7 @@ func resourceAlicloudInstanceRoleAttachmentDelete(d *schema.ResourceData, meta i
 			return ecsClient.DetachInstanceRamRole(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{RoleAttachmentUnExpectedJson}) {
+			if IsExpectedErrors(err, []string{"unexpected end of JSON input"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(WrapErrorf(err, DefaultTimeoutMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR))

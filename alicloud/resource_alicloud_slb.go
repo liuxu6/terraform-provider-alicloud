@@ -3,10 +3,14 @@ package alicloud
 import (
 	"strings"
 
+	"github.com/denverdino/aliyungo/common"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -24,15 +28,25 @@ func resourceAliyunSlb() *schema.Resource {
 			"name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateSlbName,
+				ValidateFunc: validation.StringLenBetween(1, 80),
 				Default:      resource.PrefixedUniqueId("tf-lb-"),
 			},
 
 			"internet": {
-				Type:     schema.TypeBool,
-				Optional: true,
-				ForceNew: true,
-				Default:  false,
+				Type:       schema.TypeBool,
+				Optional:   true,
+				ForceNew:   true,
+				Computed:   true,
+				Deprecated: "Field 'internet' has been deprecated from provider version 1.55.3. Use 'address_type' replaces it.",
+			},
+
+			"address_type": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				ForceNew:      true,
+				Computed:      true,
+				ConflictsWith: []string{"internet"},
+				ValidateFunc:  validation.StringInSlice([]string{"internet", "intranet"}, false),
 			},
 
 			"vswitch_id": {
@@ -46,166 +60,22 @@ func resourceAliyunSlb() *schema.Resource {
 				Type:             schema.TypeString,
 				Optional:         true,
 				Default:          PayByTraffic,
-				ValidateFunc:     validateSlbInternetChargeType,
+				ValidateFunc:     validation.StringInSlice([]string{"PayByBandwidth", "PayByTraffic"}, true),
 				DiffSuppressFunc: slbInternetChargeTypeDiffSuppressFunc,
 			},
 
 			"specification": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateSlbInstanceSpecType,
+				ValidateFunc: validation.StringInSlice([]string{S1Small, S2Small, S2Medium, S3Small, S3Medium, S3Large, S4Large}, false),
 			},
 
 			"bandwidth": {
 				Type:             schema.TypeInt,
 				Optional:         true,
-				ValidateFunc:     validateIntegerInRange(1, 1000),
+				ValidateFunc:     validation.IntBetween(1, 1000),
 				Default:          1,
 				DiffSuppressFunc: slbBandwidthDiffSuppressFunc,
-			},
-
-			"listener": {
-				Type:       schema.TypeSet,
-				Optional:   true,
-				Computed:   true,
-				Deprecated: "Field 'listener' has been deprecated, and using new resource 'alicloud_slb_listener' to replace.",
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"instance_port": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-
-						"lb_port": {
-							Type:     schema.TypeInt,
-							Optional: true, Computed: true,
-						},
-
-						"lb_protocol": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-
-						"bandwidth": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-						"scheduler": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						//http & https
-						"sticky_session": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						//http & https
-						"sticky_session_type": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						//http & https
-						"cookie_timeout": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-						//http & https
-						"cookie": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						//tcp & udp
-						"persistence_timeout": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-						//http & https
-						"health_check": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						//tcp
-						"health_check_type": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						//http & https & tcp
-						"health_check_domain": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						//http & https & tcp
-						"health_check_uri": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						"health_check_connect_port": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-						"healthy_threshold": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-						"unhealthy_threshold": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-
-						"health_check_timeout": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-						"health_check_interval": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Computed: true,
-						},
-						//http & https & tcp
-						"health_check_http_code": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-						//https
-						"ssl_certificate_id": {
-							Type:     schema.TypeString,
-							Optional: true,
-							Computed: true,
-						},
-					},
-				},
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return true
-				},
-			},
-
-			//deprecated
-			"instances": {
-				Type:     schema.TypeSet,
-				Elem:     &schema.Schema{Type: schema.TypeString},
-				Optional: true,
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return true
-				},
-				Deprecated: "Field 'instances' has been deprecated from provider version 1.6.0. New resource 'alicloud_slb_attachment' replaces it.",
 			},
 
 			"address": {
@@ -213,29 +83,30 @@ func resourceAliyunSlb() *schema.Resource {
 				Computed:         true,
 				ForceNew:         true,
 				Optional:         true,
-				ValidateFunc:     validateIpAddress,
+				ValidateFunc:     validation.SingleIP(),
 				DiffSuppressFunc: slbAddressDiffSuppressFunc,
 			},
 
 			"tags": {
-				Type:         schema.TypeMap,
-				Optional:     true,
-				ValidateFunc: validateSlbInstanceTagNum,
+				Type:     schema.TypeMap,
+				Optional: true,
 			},
 
 			"instance_charge_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      PostPaid,
-				ValidateFunc: validateInstanceChargeType,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 			},
 
 			"period": {
 				Type:             schema.TypeInt,
 				Optional:         true,
 				Default:          1,
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
-				ValidateFunc:     validateRouterInterfaceChargeTypePeriod,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
+				ValidateFunc: validation.Any(
+					validation.IntBetween(1, 9),
+					validation.IntInSlice([]int{12, 24, 36})),
 			},
 
 			"master_zone_id": {
@@ -252,10 +123,17 @@ func resourceAliyunSlb() *schema.Resource {
 				Computed: true,
 			},
 
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			},
+
 			"delete_protection": {
 				Type:             schema.TypeString,
 				Optional:         true,
-				ValidateFunc:     validateAllowedStringValue([]string{string(OnFlag), string(OffFlag)}),
+				ValidateFunc:     validation.StringInSlice([]string{"on", "off"}, false),
 				DiffSuppressFunc: slbDeleteProtectionSuppressFunc,
 				Default:          string(OffFlag),
 			},
@@ -263,7 +141,7 @@ func resourceAliyunSlb() *schema.Resource {
 			"address_ip_version": {
 				Type:             schema.TypeString,
 				Optional:         true,
-				ValidateFunc:     validateAllowedStringValue([]string{string(IPV4), string(IPV6)}),
+				ValidateFunc:     validation.StringInSlice([]string{"ipv4", "ipv6"}, false),
 				Default:          string(IPV4),
 				ForceNew:         true,
 				DiffSuppressFunc: slbAddressIpVersionSuppressFunc,
@@ -282,8 +160,13 @@ func resourceAliyunSlbCreate(d *schema.ResourceData, meta interface{}) error {
 	request.InternetChargeType = strings.ToLower(string(PayByTraffic))
 	request.ClientToken = buildClientToken(request.GetActionName())
 
-	if d.Get("internet").(bool) {
-		request.AddressType = strings.ToLower(string(Internet))
+	if v, ok := d.GetOk("address_type"); ok && v.(string) != "" {
+		request.AddressType = strings.ToLower(v.(string))
+	} else if v, ok := d.GetOkExists("internet"); ok {
+		request.AddressType = strings.ToLower(string(Intranet))
+		if v.(bool) {
+			request.AddressType = strings.ToLower(string(Internet))
+		}
 	}
 
 	if v, ok := d.GetOk("internet_charge_type"); ok && v.(string) != "" {
@@ -310,6 +193,9 @@ func resourceAliyunSlbCreate(d *schema.ResourceData, meta interface{}) error {
 		request.SlaveZoneId = v.(string)
 	}
 
+	if v, ok := d.GetOk("resource_group_id"); ok && v.(string) != "" {
+		request.ResourceGroupId = v.(string)
+	}
 	if v, ok := d.GetOk("instance_charge_type"); ok && v.(string) != "" {
 		request.PayType = v.(string)
 		if request.PayType == string(PrePaid) {
@@ -343,7 +229,7 @@ func resourceAliyunSlbCreate(d *schema.ResourceData, meta interface{}) error {
 	var raw interface{}
 
 	invoker := Invoker{}
-	invoker.AddCatcher(Catcher{SlbTokenIsProcessing, 10, 5})
+	invoker.AddCatcher(Catcher{"OperationFailed.TokenIsProcessing", 10, 5})
 
 	if err := invoker.Run(func() error {
 		resp, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
@@ -352,7 +238,7 @@ func resourceAliyunSlbCreate(d *schema.ResourceData, meta interface{}) error {
 		raw = resp
 		return err
 	}); err != nil {
-		if IsExceptedError(err, SlbOrderFailed) {
+		if IsExpectedErrors(err, []string{"OrderFailed"}) {
 			return WrapError(err)
 		}
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_slb", request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -382,11 +268,9 @@ func resourceAliyunSlbRead(d *schema.ResourceData, meta interface{}) error {
 
 	d.Set("name", object.LoadBalancerName)
 
-	if object.AddressType == strings.ToLower(string(Internet)) {
-		d.Set("internet", true)
-	} else {
-		d.Set("internet", false)
-	}
+	d.Set("internet", object.AddressType == strings.ToLower(string(Internet)))
+	d.Set("address_type", object.AddressType)
+
 	if object.InternetChargeType == strings.ToLower(string(PayByTraffic)) {
 		d.Set("internet_charge_type", PayByTraffic)
 	} else {
@@ -400,15 +284,21 @@ func resourceAliyunSlbRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("master_zone_id", object.MasterZoneId)
 	d.Set("slave_zone_id", object.SlaveZoneId)
 	d.Set("address_ip_version", object.AddressIPVersion)
+	d.Set("resource_group_id", object.ResourceGroupId)
 	if object.PayType == "PrePay" {
 		d.Set("instance_charge_type", PrePaid)
+		period, err := computePeriodByUnit(object.CreateTime, object.EndTime, d.Get("period").(int), "Month")
+		if err != nil {
+			return WrapError(err)
+		}
+		d.Set("period", period)
 	} else {
 		d.Set("instance_charge_type", PostPaid)
 	}
 	d.Set("delete_protection", object.DeleteProtection)
-	tags, _ := slbService.describeTags(d.Id())
+	tags, _ := slbService.DescribeTags(d.Id(), nil, TagResourceInstance)
 	if len(tags) > 0 {
-		if err := d.Set("tags", slbService.slbTagsToMap(tags)); err != nil {
+		if err := d.Set("tags", slbService.tagsToMap(tags)); err != nil {
 			return WrapError(err)
 		}
 	}
@@ -422,7 +312,7 @@ func resourceAliyunSlbUpdate(d *schema.ResourceData, meta interface{}) error {
 	d.Partial(true)
 
 	// set instance tags
-	if err := slbService.setSlbInstanceTags(d); err != nil {
+	if err := slbService.setInstanceTags(d, TagResourceInstance); err != nil {
 		return WrapError(err)
 	}
 
@@ -556,7 +446,7 @@ func resourceAliyunSlbDelete(d *schema.ResourceData, meta interface{}) error {
 		return slbClient.DeleteLoadBalancer(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{LoadBalancerNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidLoadBalancerId.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

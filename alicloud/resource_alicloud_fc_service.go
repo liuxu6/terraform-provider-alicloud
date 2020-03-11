@@ -1,15 +1,16 @@
 package alicloud
 
 import (
-	"fmt"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 
 	sls "github.com/aliyun/aliyun-log-go-sdk"
 	"github.com/aliyun/fc-go-sdk"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
 
 func resourceAlicloudFCService() *schema.Resource {
@@ -29,21 +30,13 @@ func resourceAlicloudFCService() *schema.Resource {
 				Computed:      true,
 				ForceNew:      true,
 				ConflictsWith: []string{"name_prefix"},
-				ValidateFunc:  validateStringLengthInRange(1, 128),
+				ValidateFunc:  validation.StringLenBetween(1, 128),
 			},
 			"name_prefix": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					// uuid is 26 characters, limit the prefix to 229.
-					value := v.(string)
-					if len(value) > 122 {
-						errors = append(errors, fmt.Errorf(
-							"%q cannot be longer than 102 characters, name is limited to 128", k))
-					}
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.StringLenBetween(0, 122),
 			},
 
 			"description": {
@@ -151,7 +144,7 @@ func resourceAlicloudFCServiceCreate(d *schema.ResourceData, meta interface{}) e
 			return fcClient.CreateService(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{AccessDenied, "does not exist"}) {
+			if IsExpectedErrors(err, []string{"AccessDenied", "does not exist"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -199,7 +192,7 @@ func resourceAlicloudFCServiceRead(d *schema.ResourceData, meta interface{}) err
 	var vpcConfigs []map[string]interface{}
 	if vpcConfig := object.VPCConfig; vpcConfig != nil && *vpcConfig.VPCID != "" {
 		vpcConfigs = append(vpcConfigs, map[string]interface{}{
-			"vswitch_ids":       schema.NewSet(schema.HashString, flattenStringList(vpcConfig.VSwitchIDs)),
+			"vswitch_ids":       schema.NewSet(schema.HashString, convertListStringToListInterface(vpcConfig.VSwitchIDs)),
 			"security_group_id": *vpcConfig.SecurityGroupID,
 			"vpc_id":            *vpcConfig.VPCID,
 		})
@@ -280,7 +273,7 @@ func resourceAlicloudFCServiceDelete(d *schema.ResourceData, meta interface{}) e
 		return fcClient.DeleteService(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{ServiceNotFound}) {
+		if IsExpectedErrors(err, []string{"ServiceNotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "DeleteService", FcGoSdk)
@@ -306,14 +299,14 @@ func parseVpcConfig(d *schema.ResourceData, meta interface{}) (config *fc.VPCCon
 			return
 		}
 		if conf != nil {
-			vswitch_ids := conf["vswitch_ids"].(*schema.Set).List()
-			vsw, e := vpcService.DescribeVSwitch(vswitch_ids[0].(string))
+			vswitchIds := conf["vswitch_ids"].(*schema.Set).List()
+			vsw, e := vpcService.DescribeVSwitch(vswitchIds[0].(string))
 			if e != nil {
 				err = WrapError(e)
 				return
 			}
 			config = &fc.VPCConfig{
-				VSwitchIDs:      expandStringList(vswitch_ids),
+				VSwitchIDs:      expandStringList(vswitchIds),
 				SecurityGroupID: StringPointer(conf["security_group_id"].(string)),
 				VPCID:           StringPointer(vsw.VpcId),
 			}

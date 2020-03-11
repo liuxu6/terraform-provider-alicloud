@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -29,14 +29,14 @@ func equalSubnet(astr string, bstr string) bool {
 	return true
 }
 
-func testAccCheckVpnConnectionAttr(vpnConn *vpc.DescribeVpnConnectionResponse, local_subnet, remote_subnet string) resource.TestCheckFunc {
+func testAccCheckVpnConnectionAttr(vpnConn *vpc.DescribeVpnConnectionResponse, localSubnet, remoteSubnet string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		if !equalSubnet(vpnConn.LocalSubnet, local_subnet) {
-			return WrapError(Error("wrong local subnet, expect %s, get %s", local_subnet, vpnConn.LocalSubnet))
+		if !equalSubnet(vpnConn.LocalSubnet, localSubnet) {
+			return WrapError(Error("wrong local subnet, expect %s, get %s", localSubnet, vpnConn.LocalSubnet))
 		}
 
-		if !equalSubnet(vpnConn.RemoteSubnet, remote_subnet) {
-			return WrapError(Error("wrong remote subnet, expect %s, get %s", remote_subnet, vpnConn.RemoteSubnet))
+		if !equalSubnet(vpnConn.RemoteSubnet, remoteSubnet) {
+			return WrapError(Error("wrong remote subnet, expect %s, get %s", remoteSubnet, vpnConn.RemoteSubnet))
 		}
 
 		return nil

@@ -78,10 +78,10 @@ type ConvertChargeTypeRequest struct {
 	*requests.RpcRequest
 	Period           requests.Integer `position:"Query" name:"Period"`
 	ProductCode      string           `position:"Query" name:"ProductCode"`
-	InstanceId       string           `position:"Query" name:"InstanceId"`
 	SubscriptionType string           `position:"Query" name:"SubscriptionType"`
 	OwnerId          requests.Integer `position:"Query" name:"OwnerId"`
 	ProductType      string           `position:"Query" name:"ProductType"`
+	InstanceId       string           `position:"Query" name:"InstanceId"`
 }
 
 // ConvertChargeTypeResponse is the response struct for api ConvertChargeType

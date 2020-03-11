@@ -76,12 +76,12 @@ func (client *Client) CreateResourcePackageWithCallback(request *CreateResourceP
 // CreateResourcePackageRequest is the request struct for api CreateResourcePackage
 type CreateResourcePackageRequest struct {
 	*requests.RpcRequest
-	Duration      requests.Integer `position:"Query" name:"Duration"`
 	ProductCode   string           `position:"Query" name:"ProductCode"`
 	Specification string           `position:"Query" name:"Specification"`
 	OwnerId       requests.Integer `position:"Query" name:"OwnerId"`
-	PackageType   string           `position:"Query" name:"PackageType"`
 	EffectiveDate string           `position:"Query" name:"EffectiveDate"`
+	Duration      requests.Integer `position:"Query" name:"Duration"`
+	PackageType   string           `position:"Query" name:"PackageType"`
 	PricingCycle  string           `position:"Query" name:"PricingCycle"`
 }
 

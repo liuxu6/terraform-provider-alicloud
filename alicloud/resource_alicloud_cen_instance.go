@@ -1,14 +1,13 @@
 package alicloud
 
 import (
-	"fmt"
-	"strings"
-
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cbn"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -29,36 +28,14 @@ func resourceAlicloudCenInstance() *schema.Resource {
 
 		Schema: map[string]*schema.Schema{
 			"name": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-					if len(value) < 2 || len(value) > 128 {
-						errors = append(errors, WrapError(fmt.Errorf("%s cannot be shorter than 2 characters or longer than 128 characters", k)))
-					}
-
-					if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-						errors = append(errors, WrapError(Error("%s cannot starts with http:// or https://", k)))
-					}
-
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 			"description": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-					if len(value) < 2 || len(value) > 256 {
-						errors = append(errors, WrapError(fmt.Errorf("%s cannot be shorter than 2 characters or longer than 256 characters", k)))
-					}
-
-					if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-						errors = append(errors, WrapError(fmt.Errorf("%s cannot starts with http:// or https://", k)))
-					}
-
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 		},
 	}
@@ -73,13 +50,16 @@ func resourceAlicloudCenInstanceCreate(d *schema.ResourceData, meta interface{})
 	request.ClientToken = buildClientToken(request.GetActionName())
 
 	var response *cbn.CreateCenResponse
-	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+
+	err := resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
 		req := *request
 		raw, err := client.WithCenClient(func(cbnClient *cbn.Client) (interface{}, error) {
 			return cbnClient.CreateCen(&req)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{OperationBlocking, UnknownError}) {
+			if IsExpectedErrors(err, []string{"Operation.Blocking", "UnknownError"}) {
+				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -158,7 +138,7 @@ func resourceAlicloudCenInstanceDelete(d *schema.ResourceData, meta interface{})
 	})
 
 	if err != nil {
-		if IsExceptedError(err, ParameterCenInstanceIdNotExist) {
+		if IsExpectedErrors(err, []string{"ParameterCenInstanceId"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

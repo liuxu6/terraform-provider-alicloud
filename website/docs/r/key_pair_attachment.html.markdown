@@ -1,4 +1,5 @@
 ---
+subcategory: "ECS"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_key_pair_attachment"
 sidebar_current: "docs-alicloud-resource-key-pair-attachment"
@@ -27,7 +28,7 @@ data "alicloud_instance_types" "type" {
   memory_size       = 2
 }
 data "alicloud_images" "images" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }

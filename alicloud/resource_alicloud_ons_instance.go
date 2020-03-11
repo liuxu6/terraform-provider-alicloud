@@ -3,10 +3,12 @@ package alicloud
 import (
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ons"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -23,13 +25,13 @@ func resourceAlicloudOnsInstance() *schema.Resource {
 			"name": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ValidateFunc: validateOnsInstanceName,
+				ValidateFunc: validation.StringLenBetween(3, 64),
 			},
 
 			"remark": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateOnsInstanceRemark,
+				ValidateFunc: validation.StringLenBetween(0, 128),
 			},
 
 			// Computed Values
@@ -58,7 +60,6 @@ func resourceAlicloudOnsInstanceCreate(d *schema.ResourceData, meta interface{})
 	request := ons.CreateOnsInstanceCreateRequest()
 	request.RegionId = client.RegionId
 	request.InstanceName = d.Get("name").(string)
-	request.PreventCache = onsService.GetPreventCache()
 	if v, ok := d.GetOk("remark"); ok {
 		request.Remark = v.(string)
 	}
@@ -69,7 +70,7 @@ func resourceAlicloudOnsInstanceCreate(d *schema.ResourceData, meta interface{})
 			return onsClient.OnsInstanceCreate(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{OnsThrottlingUser}) {
+			if IsExpectedErrors(err, []string{ThrottlingUser}) {
 				time.Sleep(10 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -121,7 +122,6 @@ func resourceAlicloudOnsInstanceUpdate(d *schema.ResourceData, meta interface{})
 	request := ons.CreateOnsInstanceUpdateRequest()
 	request.RegionId = client.RegionId
 	request.InstanceId = d.Id()
-	request.PreventCache = onsService.GetPreventCache()
 
 	if d.HasChange("name") {
 		var name string
@@ -161,17 +161,16 @@ func resourceAlicloudOnsInstanceDelete(d *schema.ResourceData, meta interface{})
 	request := ons.CreateOnsInstanceDeleteRequest()
 	request.RegionId = client.RegionId
 	request.InstanceId = d.Id()
-	request.PreventCache = onsService.GetPreventCache()
 
 	err := resource.Retry(3*time.Minute, func() *resource.RetryError {
 		raw, err := onsService.client.WithOnsClient(func(onsClient *ons.Client) (interface{}, error) {
 			return onsClient.OnsInstanceDelete(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, OnsInstanceNotEmpty) {
+			if IsExpectedErrors(err, []string{"INSTANCE_NOT_EMPTY"}) {
 				return resource.RetryableError(err)
 			}
-			if IsExceptedErrors(err, []string{OnsThrottlingUser}) {
+			if IsExpectedErrors(err, []string{ThrottlingUser}) {
 				time.Sleep(10 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -181,7 +180,7 @@ func resourceAlicloudOnsInstanceDelete(d *schema.ResourceData, meta interface{})
 		return nil
 	})
 	if err != nil {
-		if IsExceptedError(err, OnsInstanceNotExist) {
+		if IsExpectedErrors(err, []string{"INSTANCE_NOT_FOUND"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

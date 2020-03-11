@@ -3,10 +3,12 @@ package alicloud
 import (
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ons"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -35,7 +37,7 @@ func resourceAlicloudOnsGroup() *schema.Resource {
 			"remark": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateOnsGroupRemark,
+				ValidateFunc: validation.StringLenBetween(1, 256),
 			},
 			"read_enable": {
 				Type:     schema.TypeBool,
@@ -56,7 +58,6 @@ func resourceAlicloudOnsGroupCreate(d *schema.ResourceData, meta interface{}) er
 	request.RegionId = client.RegionId
 	request.GroupId = groupId
 	request.InstanceId = instanceId
-	request.PreventCache = onsService.GetPreventCache()
 
 	if v, ok := d.GetOk("remark"); ok {
 		request.Remark = v.(string)
@@ -66,7 +67,7 @@ func resourceAlicloudOnsGroupCreate(d *schema.ResourceData, meta interface{}) er
 			return onsClient.OnsGroupCreate(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{OnsThrottlingUser}) {
+			if IsExpectedErrors(err, []string{ThrottlingUser}) {
 				time.Sleep(10 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -125,7 +126,6 @@ func resourceAlicloudOnsGroupUpdate(d *schema.ResourceData, meta interface{}) er
 	request.RegionId = client.RegionId
 	request.InstanceId = instanceId
 	request.GroupId = groupId
-	request.PreventCache = onsService.GetPreventCache()
 
 	if d.HasChange("read_enable") {
 		readEnable := d.Get("read_enable").(bool)
@@ -157,14 +157,13 @@ func resourceAlicloudOnsGroupDelete(d *schema.ResourceData, meta interface{}) er
 	request.RegionId = client.RegionId
 	request.InstanceId = instanceId
 	request.GroupId = groupId
-	request.PreventCache = onsService.GetPreventCache()
 
 	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 		raw, err := onsService.client.WithOnsClient(func(onsClient *ons.Client) (interface{}, error) {
 			return onsClient.OnsGroupDelete(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{OnsThrottlingUser}) {
+			if IsExpectedErrors(err, []string{ThrottlingUser}) {
 				time.Sleep(10 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -175,7 +174,7 @@ func resourceAlicloudOnsGroupDelete(d *schema.ResourceData, meta interface{}) er
 	})
 
 	if err != nil {
-		if IsExceptedErrors(err, []string{AuthResourceOwnerError}) {
+		if IsExpectedErrors(err, []string{"AUTH_RESOURCE_OWNER_ERROR"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

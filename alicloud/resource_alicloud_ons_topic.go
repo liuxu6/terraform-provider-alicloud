@@ -3,10 +3,12 @@ package alicloud
 import (
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ons"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -30,23 +32,23 @@ func resourceAlicloudOnsTopic() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateOnsTopic,
+				ValidateFunc: validation.StringLenBetween(1, 64),
 			},
 			"message_type": {
 				Type:         schema.TypeInt,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateOnsTopicMessageType,
+				ValidateFunc: validation.IntInSlice([]int{0, 1, 2, 4, 5}),
 			},
 			"remark": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateOnsTopicRemark,
+				ValidateFunc: validation.StringLenBetween(1, 128),
 			},
 			"perm": {
 				Type:         schema.TypeInt,
 				Optional:     true,
-				ValidateFunc: validateOnsTopicPerm,
+				ValidateFunc: validation.IntInSlice([]int{2, 4, 6}),
 			},
 		},
 	}
@@ -64,7 +66,6 @@ func resourceAlicloudOnsTopicCreate(d *schema.ResourceData, meta interface{}) er
 	request.Topic = topic
 	request.InstanceId = instanceId
 	request.MessageType = requests.NewInteger(d.Get("message_type").(int))
-	request.PreventCache = onsService.GetPreventCache()
 
 	if v, ok := d.GetOk("remark"); ok {
 		request.Remark = v.(string)
@@ -75,7 +76,7 @@ func resourceAlicloudOnsTopicCreate(d *schema.ResourceData, meta interface{}) er
 			return onsClient.OnsTopicCreate(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{OnsThrottlingUser}) {
+			if IsExpectedErrors(err, []string{ThrottlingUser}) {
 				time.Sleep(10 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -132,7 +133,6 @@ func resourceAlicloudOnsTopicUpdate(d *schema.ResourceData, meta interface{}) er
 	request.RegionId = client.RegionId
 	request.InstanceId = instanceId
 	request.Topic = topic
-	request.PreventCache = onsService.GetPreventCache()
 
 	var perm int
 	if d.HasChange("perm") {
@@ -165,14 +165,13 @@ func resourceAlicloudOnsTopicDelete(d *schema.ResourceData, meta interface{}) er
 	request.RegionId = client.RegionId
 	request.Topic = topic
 	request.InstanceId = instanceId
-	request.PreventCache = onsService.GetPreventCache()
 
 	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 		raw, err := onsService.client.WithOnsClient(func(onsClient *ons.Client) (interface{}, error) {
 			return onsClient.OnsTopicDelete(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{OnsThrottlingUser}) {
+			if IsExpectedErrors(err, []string{ThrottlingUser}) {
 				time.Sleep(10 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -182,7 +181,7 @@ func resourceAlicloudOnsTopicDelete(d *schema.ResourceData, meta interface{}) er
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{AuthResourceOwnerError}) {
+		if IsExpectedErrors(err, []string{"AUTH_RESOURCE_OWNER_ERROR"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -34,11 +34,10 @@ func resourceAlicloudDBDatabase() *schema.Resource {
 			},
 
 			"character_set": {
-				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue(CHARACTER_SET_NAME),
-				Optional:     true,
-				Default:      "utf8",
-				ForceNew:     true,
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "utf8",
+				ForceNew: true,
 			},
 
 			"description": {
@@ -52,7 +51,6 @@ func resourceAlicloudDBDatabase() *schema.Resource {
 func resourceAlicloudDBDatabaseCreate(d *schema.ResourceData, meta interface{}) error {
 
 	client := meta.(*connectivity.AliyunClient)
-	rdsService := RdsService{client}
 	request := rds.CreateCreateDatabaseRequest()
 	request.RegionId = client.RegionId
 	request.DBInstanceId = d.Get("instance_id").(string)
@@ -63,18 +61,12 @@ func resourceAlicloudDBDatabaseCreate(d *schema.ResourceData, meta interface{}) 
 		request.DBDescription = v.(string)
 	}
 
-	if inst, err := rdsService.DescribeDBInstance(request.DBInstanceId); err != nil {
-		return WrapError(err)
-	} else if inst.Engine == string(PostgreSQL) || inst.Engine == string(PPAS) {
-		return WrapError(Error("At present, it does not support creating 'PostgreSQL' and 'PPAS' database. Please login DB instance to create."))
-	}
-
 	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
 		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
 			return rdsClient.CreateDatabase(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, OperationDeniedDBStatus) {
+			if IsExpectedErrors(err, OperationDeniedDBStatus) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -155,7 +147,7 @@ func resourceAlicloudDBDatabaseDelete(d *schema.ResourceData, meta interface{}) 
 		return rdsClient.DeleteDatabase(request)
 	})
 	if err != nil {
-		if rdsService.NotFoundDBInstance(err) || IsExceptedError(err, InvalidDBNameNotFound) {
+		if NotFoundError(err) || IsExpectedErrors(err, []string{"InvalidDBName.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

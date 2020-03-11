@@ -77,11 +77,12 @@ func (client *Client) ModifyParameterWithCallback(request *ModifyParameterReques
 type ModifyParameterRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
+	ParameterGroupId     string           `position:"Query" name:"ParameterGroupId"`
 	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	Forcerestart         requests.Boolean `position:"Query" name:"Forcerestart"`
+	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	Parameters           string           `position:"Query" name:"Parameters"`
 }

@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/mitchellh/go-homedir"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
@@ -50,7 +52,7 @@ func resourceAlicloudOssBucketObject() *schema.Resource {
 				Type:         schema.TypeString,
 				Default:      oss.ACLPrivate,
 				Optional:     true,
-				ValidateFunc: validateOssBucketAcl,
+				ValidateFunc: validation.StringInSlice([]string{"private", "public-read", "public-read-write"}, false),
 			},
 
 			"content_type": {
@@ -90,10 +92,20 @@ func resourceAlicloudOssBucketObject() *schema.Resource {
 			},
 
 			"server_side_encryption": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ValidateFunc: validateOssBucketObjectServerSideEncryption,
-				Computed:     true,
+				Type:     schema.TypeString,
+				Optional: true,
+				ValidateFunc: validation.StringInSlice([]string{
+					string(ServerSideEncryptionKMS), string(ServerSideEncryptionAes256),
+				}, false),
+				Default: ServerSideEncryptionAes256,
+			},
+
+			"kms_key_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return ServerSideEncryptionKMS != d.Get("server_side_encryption").(string)
+				},
 			},
 
 			"etag": {
@@ -141,6 +153,15 @@ func resourceAlicloudOssBucketObjectPut(d *schema.ResourceData, meta interface{}
 
 	key := d.Get("key").(string)
 	options, err := buildObjectHeaderOptions(d)
+
+	if v, ok := d.GetOk("server_side_encryption"); ok {
+		options = append(options, oss.ServerSideEncryption(v.(string)))
+	}
+
+	if v, ok := d.GetOk("kms_key_id"); ok {
+		options = append(options, oss.ServerSideEncryptionKeyID(v.(string)))
+	}
+
 	if err != nil {
 		return WrapError(err)
 	}
@@ -179,7 +200,7 @@ func resourceAlicloudOssBucketObjectRead(d *schema.ResourceData, meta interface{
 
 	object, err := bucket.GetObjectDetailedMeta(d.Get("key").(string), options...)
 	if err != nil {
-		if IsExceptedError(err, OssBodyNotFound) {
+		if IsExpectedErrors(err, []string{"404 Not Found"}) {
 			d.SetId("")
 			return WrapError(Error("To get the Object: %#v but it is not exist in the specified bucket %s.", d.Get("key").(string), d.Get("bucket").(string)))
 		}
@@ -196,7 +217,6 @@ func resourceAlicloudOssBucketObjectRead(d *schema.ResourceData, meta interface{
 	d.Set("content_disposition", object.Get("Content-Disposition"))
 	d.Set("content_encoding", object.Get("Content-Encoding"))
 	d.Set("expires", object.Get("Expires"))
-	d.Set("server_side_encryption", object.Get("ServerSideEncryption"))
 	d.Set("etag", strings.Trim(object.Get("ETag"), `"`))
 	d.Set("version_id", object.Get("x-oss-version-id"))
 
@@ -219,7 +239,7 @@ func resourceAlicloudOssBucketObjectDelete(d *schema.ResourceData, meta interfac
 
 	err = bucket.DeleteObject(d.Id())
 	if err != nil {
-		if IsExceptedErrors(err, []string{"No Content", "Not Found"}) {
+		if IsExpectedErrors(err, []string{"No Content", "Not Found"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "DeleteObject", AliyunOssGoSdk)
@@ -264,9 +284,6 @@ func buildObjectHeaderOptions(d *schema.ResourceData) (options []oss.Option, err
 		options = append(options, oss.Expires(expiresTime))
 	}
 
-	if v, ok := d.GetOk("server_side_encryption"); ok {
-		options = append(options, oss.ServerSideEncryption(v.(string)))
-	}
 	if options == nil || len(options) == 0 {
 		log.Printf("[WARN] Object header options is nil.")
 	}

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/fc-go-sdk"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -38,26 +40,21 @@ func resourceAlicloudFCTrigger() *schema.Resource {
 				Computed:      true,
 				ForceNew:      true,
 				ConflictsWith: []string{"name_prefix"},
-				ValidateFunc:  validateStringLengthInRange(1, 128),
+				ValidateFunc:  validation.StringLenBetween(1, 128),
 			},
 			"name_prefix": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					// uuid is 26 characters, limit the prefix to 229.
-					value := v.(string)
-					if len(value) > 122 {
-						errors = append(errors, fmt.Errorf(
-							"%q cannot be longer than 102 characters, name is limited to 128", k))
-					}
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.StringLenBetween(0, 122),
 			},
 
 			"role": {
 				Type:     schema.TypeString,
 				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("type").(string) == "timer"
+				},
 			},
 
 			"source_arn": {
@@ -76,7 +73,7 @@ func resourceAlicloudFCTrigger() *schema.Resource {
 					}
 					return removeSpaceAndEnter(old) == removeSpaceAndEnter(new)
 				},
-				ValidateFunc: validateJsonString,
+				ValidateFunc: validation.ValidateJsonString,
 			},
 			//Modifying config is not supported when type is mns_topic
 			"config_mns": {
@@ -87,15 +84,14 @@ func resourceAlicloudFCTrigger() *schema.Resource {
 					// The read config is json rawMessage and it does not contains space and enter.
 					return old == removeSpaceAndEnter(new)
 				},
-				ValidateFunc:  validateJsonString,
+				ValidateFunc:  validation.ValidateJsonString,
 				ConflictsWith: []string{"config"},
 			},
 			"type": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{string(fc.TRIGGER_TYPE_HTTP), string(fc.TRIGGER_TYPE_LOG),
-					string(fc.TRIGGER_TYPE_OSS), string(fc.TRIGGER_TYPE_TIMER), string(fc.TRIGGER_TYPE_MNS_TOPIC), string(fc.TRIGGER_TYPE_CDN_EVENTS)}),
+				Type:         schema.TypeString,
+				Required:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.StringInSlice([]string{fc.TRIGGER_TYPE_HTTP, fc.TRIGGER_TYPE_LOG, fc.TRIGGER_TYPE_OSS, fc.TRIGGER_TYPE_TIMER, fc.TRIGGER_TYPE_MNS_TOPIC, fc.TRIGGER_TYPE_CDN_EVENTS}, false),
 			},
 
 			"last_modified": {
@@ -162,7 +158,7 @@ func resourceAlicloudFCTriggerCreate(d *schema.ResourceData, meta interface{}) e
 			return fcClient.CreateTrigger(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{AccessDenied}) {
+			if IsExpectedErrors(err, []string{"AccessDenied"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -282,7 +278,7 @@ func resourceAlicloudFCTriggerDelete(d *schema.ResourceData, meta interface{}) e
 		return fcClient.DeleteTrigger(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{ServiceNotFound, FunctionNotFound, TriggerNotFound}) {
+		if IsExpectedErrors(err, []string{"ServiceNotFound", "FunctionNotFound", "TriggerNotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "DeleteTrigger", FcGoSdk)

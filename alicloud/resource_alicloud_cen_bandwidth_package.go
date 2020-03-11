@@ -1,16 +1,15 @@
 package alicloud
 
 import (
-	"fmt"
 	"strconv"
-	"strings"
-
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cbn"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -26,16 +25,9 @@ func resourceAlicloudCenBandwidthPackage() *schema.Resource {
 
 		Schema: map[string]*schema.Schema{
 			"bandwidth": {
-				Type:     schema.TypeInt,
-				Required: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(int)
-					if value < 1 {
-						errors = append(errors, fmt.Errorf("%s cannot be smaller than 1Mbps", k))
-					}
-
-					return
-				},
+				Type:         schema.TypeInt,
+				Required:     true,
+				ValidateFunc: validation.IntAtLeast(1),
 			},
 
 			"geographic_region_ids": {
@@ -50,63 +42,29 @@ func resourceAlicloudCenBandwidthPackage() *schema.Resource {
 			},
 
 			"name": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-					if len(value) < 2 || len(value) > 128 {
-						errors = append(errors, fmt.Errorf("%s cannot be shorter than 2 characters or longer than 128 characters", k))
-					}
-
-					if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-						errors = append(errors, fmt.Errorf("%s cannot starts with http:// or https://", k))
-					}
-
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 
 			"description": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-					if len(value) < 2 || len(value) > 256 {
-						errors = append(errors, fmt.Errorf("%s cannot be shorter than 2 characters or longer than 256 characters", k))
-					}
-
-					if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-						errors = append(errors, fmt.Errorf("%s cannot starts with http:// or https://", k))
-					}
-
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 
 			"charge_type": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  PostPaid,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := PayType(v.(string))
-					if value != PrePaid && value != PostPaid {
-						errors = append(errors, fmt.Errorf("%s must be one of: %s or %s", k, string(PrePaid), string(PostPaid)))
-					}
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      PostPaid,
+				ValidateFunc: validation.StringInSlice([]string{string(PrePaid), string(PostPaid)}, false),
 			},
 
 			"period": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  1,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(int)
-					if value != 1 && value != 2 && value != 3 && value != 6 && value != 12 {
-						errors = append(errors, fmt.Errorf("%s must be one of: 1, 2, 3, 6, 12", k))
-					}
-					return
-				},
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Default:      1,
+				ValidateFunc: validation.IntInSlice([]int{1, 2, 3, 6, 12}),
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					return PayType(d.Get("charge_type").(string)) == PostPaid
 				},
@@ -139,7 +97,7 @@ func resourceAlicloudCenBandwidthPackageCreate(d *schema.ResourceData, meta inte
 			return cbnClient.CreateCenBandwidthPackage(&req)
 		})
 		if err != nil {
-			if IsExceptedError(err, OperationBlocking) {
+			if IsExpectedErrors(err, []string{"Operation.Blocking"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -188,6 +146,11 @@ func resourceAlicloudCenBandwidthPackageRead(d *schema.ResourceData, meta interf
 		d.Set("charge_type", PostPaid)
 	} else {
 		d.Set("charge_type", PrePaid)
+		period, err := computePeriodByUnit(object.CreationTime, object.ExpiredTime, d.Get("period").(int), "Month")
+		if err != nil {
+			return WrapError(err)
+		}
+		d.Set("period", period)
 	}
 
 	return nil
@@ -261,7 +224,7 @@ func resourceAlicloudCenBandwidthPackageDelete(d *schema.ResourceData, meta inte
 			return cbnClient.DeleteCenBandwidthPackage(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{ForbiddenRelease, InvalidCenBandwidthLimitsNotZero, ParameterBwpInstanceId}) {
+			if IsExpectedErrors(err, []string{"Forbidden.Release", "InvalidOperation.CenBandwidthLimitsNotZero", "ParameterBwpInstanceId"}) {
 				return resource.NonRetryableError(err)
 			}
 			return resource.RetryableError(err)
@@ -270,7 +233,7 @@ func resourceAlicloudCenBandwidthPackageDelete(d *schema.ResourceData, meta inte
 		return nil
 	})
 	if err != nil {
-		if IsExceptedError(err, ParameterBwpInstanceId) {
+		if IsExpectedErrors(err, []string{"ParameterBwpInstanceId"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

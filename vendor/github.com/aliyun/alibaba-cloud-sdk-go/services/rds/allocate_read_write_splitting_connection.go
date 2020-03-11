@@ -78,14 +78,14 @@ type AllocateReadWriteSplittingConnectionRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId        requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ConnectionStringPrefix string           `position:"Query" name:"ConnectionStringPrefix"`
+	DistributionType       string           `position:"Query" name:"DistributionType"`
+	DBInstanceId           string           `position:"Query" name:"DBInstanceId"`
 	ResourceOwnerAccount   string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount           string           `position:"Query" name:"OwnerAccount"`
 	Weight                 string           `position:"Query" name:"Weight"`
 	OwnerId                requests.Integer `position:"Query" name:"OwnerId"`
 	Port                   string           `position:"Query" name:"Port"`
-	DistributionType       string           `position:"Query" name:"DistributionType"`
 	NetType                string           `position:"Query" name:"NetType"`
-	DBInstanceId           string           `position:"Query" name:"DBInstanceId"`
 	MaxDelayTime           string           `position:"Query" name:"MaxDelayTime"`
 }
 

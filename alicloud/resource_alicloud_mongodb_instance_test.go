@@ -8,8 +8,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/dds"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -30,7 +30,7 @@ func testAccCheckMongoDBInstanceDestroy(s *terraform.State) error {
 		}
 		_, err := ddsService.DescribeMongoDBInstance(rs.Primary.ID)
 		if err != nil {
-			if ddsService.NotFoundMongoDBInstance(err) {
+			if NotFoundError(err) {
 				continue
 			}
 			return WrapError(err)
@@ -164,10 +164,23 @@ func TestAccAlicloudMongoDBInstance_classic(t *testing.T) {
 				ImportStateVerify: true,
 			},
 			{
+				Config: testMongoDBInstance_classic_tags,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "acceptance test",
+					}),
+				),
+			},
+			{
 				Config: testMongoDBInstance_classic_name,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"name": "tf-testAccMongoDBInstance_test",
+						"name":         "tf-testAccMongoDBInstance_test",
+						"tags.%":       REMOVEKEY,
+						"tags.Created": REMOVEKEY,
+						"tags.For":     REMOVEKEY,
 					}),
 				),
 			},
@@ -198,12 +211,29 @@ func TestAccAlicloudMongoDBInstance_classic(t *testing.T) {
 				),
 			},
 			{
+				Config: testMongoDBInstance_classic_security_group_id,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"security_group_id": CHECKSET,
+					}),
+				),
+			},
+			{
 				Config: testMongoDBInstance_classic_backup,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"backup_period.#":          "1",
 						"backup_period.1970423419": "Wednesday",
 						"backup_time":              "11:00Z-12:00Z",
+					}),
+				),
+			},
+			{
+				Config: testMongoDBInstance_classic_maintain_time,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"maintain_start_time": "02:00Z",
+						"maintain_end_time":   "03:00Z",
 					}),
 				),
 			},
@@ -222,9 +252,12 @@ func TestAccAlicloudMongoDBInstance_classic(t *testing.T) {
 						"backup_period.1592931319":    "Tuesday",
 						"backup_period.1970423419":    "Wednesday",
 						"backup_time":                 "10:00Z-11:00Z",
+						"maintain_start_time":         REMOVEKEY,
+						"maintain_end_time":           REMOVEKEY,
 					}),
 				),
-			}},
+			},
+		},
 	})
 }
 
@@ -540,6 +573,21 @@ resource "alicloud_mongodb_instance" "default" {
   db_instance_class   = "dds.mongo.mid"
 }`
 
+const testMongoDBInstance_classic_tags = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "MongoDB"
+}
+resource "alicloud_mongodb_instance" "default" {
+  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  engine_version      = "3.4"
+  db_instance_storage = 10
+  db_instance_class   = "dds.mongo.mid"
+  tags = {
+    Created = "TF"
+    For     = "acceptance test"
+  }
+}`
+
 const testMongoDBInstance_classic_name = `
 data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
@@ -591,6 +639,22 @@ resource "alicloud_mongodb_instance" "default" {
   security_ip_list    = ["10.168.1.12"]
 }`
 
+const testMongoDBInstance_classic_security_group_id = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "MongoDB"
+}
+data "alicloud_security_groups" "default" {
+}
+resource "alicloud_mongodb_instance" "default" {
+  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  engine_version      = "3.4"
+  db_instance_storage = 30
+  db_instance_class   = "dds.mongo.standard"
+  name                = "tf-testAccMongoDBInstance_test"
+  account_password    = "YourPassword_123"
+  security_group_id    = "${data.alicloud_security_groups.default.groups.0.id}"
+}`
+
 const testMongoDBInstance_classic_backup = `
 data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
@@ -605,6 +669,24 @@ resource "alicloud_mongodb_instance" "default" {
   security_ip_list    = ["10.168.1.12"]
   backup_period       = ["Wednesday"]
   backup_time         = "11:00Z-12:00Z"
+}`
+
+const testMongoDBInstance_classic_maintain_time = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "MongoDB"
+}
+resource "alicloud_mongodb_instance" "default" {
+  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  engine_version      = "3.4"
+  db_instance_storage = 30
+  db_instance_class   = "dds.mongo.standard"
+  name                = "tf-testAccMongoDBInstance_test"
+  account_password    = "YourPassword_123"
+  security_ip_list    = ["10.168.1.12"]
+  backup_period       = ["Wednesday"]
+  backup_time         = "11:00Z-12:00Z"
+  maintain_start_time = "02:00Z"
+  maintain_end_time   = "03:00Z"
 }`
 
 const testMongoDBInstance_classic_together = `

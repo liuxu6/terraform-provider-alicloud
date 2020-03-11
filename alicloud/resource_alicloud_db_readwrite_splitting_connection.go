@@ -6,9 +6,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -27,36 +29,36 @@ func resourceAlicloudDBReadWriteSplittingConnection() *schema.Resource {
 		},
 
 		Schema: map[string]*schema.Schema{
-			"instance_id": &schema.Schema{
+			"instance_id": {
 				Type:     schema.TypeString,
 				ForceNew: true,
 				Required: true,
 			},
-			"connection_prefix": &schema.Schema{
+			"connection_prefix": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateDBConnectionPrefix,
+				ValidateFunc: validation.StringLenBetween(1, 31),
 			},
-			"distribution_type": &schema.Schema{
+			"distribution_type": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"Standard", "Custom"}),
+				ValidateFunc: validation.StringInSlice([]string{"Standard", "Custom"}, false),
 			},
-			"weight": &schema.Schema{
+			"weight": {
 				Type:     schema.TypeMap,
 				Optional: true,
 			},
-			"max_delay_time": &schema.Schema{
+			"max_delay_time": {
 				Type:     schema.TypeInt,
 				Optional: true,
 				Computed: true,
 			},
-			"connection_string": &schema.Schema{
+			"connection_string": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"port": &schema.Schema{
+			"port": {
 				Type:     schema.TypeInt,
 				Optional: true,
 				Computed: true,
@@ -99,7 +101,7 @@ func resourceAlicloudDBReadWriteSplittingConnectionCreate(d *schema.ResourceData
 			return rdsClient.AllocateReadWriteSplittingConnection(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, DBReadInstanceNotReadyStatus) {
+			if IsExpectedErrors(err, DBReadInstanceNotReadyStatus) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -214,7 +216,7 @@ func resourceAlicloudDBReadWriteSplittingConnectionUpdate(d *schema.ResourceData
 				return rdsClient.ModifyReadWriteSplittingConnection(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, OperationDeniedDBStatus) || IsExceptedErrors(err, DBReadInstanceNotReadyStatus) {
+				if IsExpectedErrors(err, OperationDeniedDBStatus) || IsExpectedErrors(err, DBReadInstanceNotReadyStatus) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -247,10 +249,10 @@ func resourceAlicloudDBReadWriteSplittingConnectionDelete(d *schema.ResourceData
 			return rdsClient.ReleaseReadWriteSplittingConnection(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, OperationDeniedDBStatus) {
+			if IsExpectedErrors(err, OperationDeniedDBStatus) {
 				return resource.RetryableError(err)
 			}
-			if rdsService.NotFoundDBInstance(err) || IsExceptedError(err, InvalidRwSplitNetTypeNotFound) {
+			if NotFoundError(err) || IsExpectedErrors(err, []string{"InvalidRwSplitNetType.NotFound"}) {
 				return nil
 			}
 			return resource.NonRetryableError(err)

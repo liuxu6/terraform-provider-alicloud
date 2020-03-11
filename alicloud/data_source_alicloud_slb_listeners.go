@@ -3,9 +3,12 @@ package alicloud
 import (
 	"strconv"
 
+	"regexp"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -27,6 +30,12 @@ func dataSourceAlicloudSlbListeners() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
+			},
+			"description_regex": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.ValidateRegexp,
+				ForceNew:     true,
 			},
 			"output_file": {
 				Type:     schema.TypeString,
@@ -60,6 +69,10 @@ func dataSourceAlicloudSlbListeners() *schema.Resource {
 						},
 						"bandwidth": {
 							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"description": {
+							Type:     schema.TypeString,
 							Computed: true,
 						},
 						"scheduler": {
@@ -150,6 +163,10 @@ func dataSourceAlicloudSlbListeners() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"server_certificate_id": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
 						"ca_certificate_id": {
 							Type:     schema.TypeString,
 							Computed: true,
@@ -221,12 +238,19 @@ func dataSourceAlicloudSlbListenersRead(d *schema.ResourceData, meta interface{}
 	if v, ok := d.GetOk("protocol"); ok && v.(string) != "" {
 		protocol = v.(string)
 	}
-	if port != -1 && protocol != "" {
+	var r *regexp.Regexp
+	if despRegex, ok := d.GetOk("description_regex"); ok && despRegex.(string) != "" {
+		r = regexp.MustCompile(despRegex.(string))
+	}
+	if port != -1 || protocol != "" || r != nil {
 		for _, listener := range response.ListenerPortsAndProtocol.ListenerPortAndProtocol {
 			if port != -1 && listener.ListenerPort != port {
 				continue
 			}
 			if protocol != "" && listener.ListenerProtocol != protocol {
+				continue
+			}
+			if r != nil && !r.MatchString(listener.Description) {
 				continue
 			}
 
@@ -249,6 +273,7 @@ func slbListenersDescriptionAttributes(d *schema.ResourceData, listeners []slb.L
 		mapping := map[string]interface{}{
 			"frontend_port": listener.ListenerPort,
 			"protocol":      listener.ListenerProtocol,
+			"description":   listener.Description,
 		}
 
 		loadBalancerId := d.Get("load_balancer_id").(string)
@@ -323,6 +348,7 @@ func slbListenersDescriptionAttributes(d *schema.ResourceData, listeners []slb.L
 			mapping["health_check_http_code"] = response.HealthCheckHttpCode
 			mapping["gzip"] = response.Gzip
 			mapping["ssl_certificate_id"] = response.ServerCertificateId
+			mapping["server_certificate_id"] = response.ServerCertificateId
 			mapping["ca_certificate_id"] = response.CACertificateId
 			mapping["x_forwarded_for"] = response.XForwardedFor
 			mapping["x_forwarded_for_slb_ip"] = response.XForwardedForSLBIP

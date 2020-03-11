@@ -7,11 +7,11 @@ import (
 	"github.com/hashicorp/terraform/helper/acctest"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
-func TestAccAlicloudDBAccount_update(t *testing.T) {
+func TestAccAlicloudDBAccountUpdate(t *testing.T) {
 	var v *rds.DBInstanceAccount
 	rand := acctest.RandIntRange(10000, 999999)
 	name := fmt.Sprintf("tf-testAccdbaccount-%d", rand)
@@ -19,7 +19,7 @@ func TestAccAlicloudDBAccount_update(t *testing.T) {
 		"instance_id": CHECKSET,
 		"name":        "tftestnormal",
 		"password":    "YourPassword_123",
-		"type":        string(DBAccountNormal),
+		"type":        "Normal",
 	}
 	resourceId := "alicloud_db_account.default"
 	ra := resourceAttrInit(resourceId, basicMap)
@@ -91,7 +91,6 @@ func TestAccAlicloudDBAccount_update(t *testing.T) {
 			},
 		},
 	})
-
 }
 
 func resourceDBAccountConfigDependence(name string) string {

@@ -77,18 +77,18 @@ func (client *Client) ModifyDBInstancePayTypeWithCallback(request *ModifyDBInsta
 type ModifyDBInstancePayTypeRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	ClientToken          string           `position:"Query" name:"ClientToken"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
+	BusinessInfo         string           `position:"Query" name:"BusinessInfo"`
 	Period               string           `position:"Query" name:"Period"`
 	AgentId              string           `position:"Query" name:"AgentId"`
-	AutoPay              string           `position:"Query" name:"AutoPay"`
+	AutoPay              requests.Boolean `position:"Query" name:"AutoPay"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	ClientToken          string           `position:"Query" name:"ClientToken"`
 	Resource             string           `position:"Query" name:"Resource"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	UsedTime             requests.Integer `position:"Query" name:"UsedTime"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	PayType              string           `position:"Query" name:"PayType"`
-	BusinessInfo         string           `position:"Query" name:"BusinessInfo"`
 }
 
 // ModifyDBInstancePayTypeResponse is the response struct for api ModifyDBInstancePayType

@@ -4,10 +4,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/denverdino/aliyungo/common"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -25,12 +29,12 @@ func resourceAliyunEip() *schema.Resource {
 			"name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceName,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceDescription,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 			"bandwidth": {
 				Type:     schema.TypeInt,
@@ -42,23 +46,26 @@ func resourceAliyunEip() *schema.Resource {
 				Default:      "PayByTraffic",
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateInternetChargeType,
+				ValidateFunc: validation.StringInSlice([]string{"PayByBandwidth", "PayByTraffic"}, false),
 			},
 			"instance_charge_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceChargeType,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 				Default:      PostPaid,
 				ForceNew:     true,
 			},
 			"period": {
-				Type:             schema.TypeInt,
-				Optional:         true,
-				Default:          1,
-				ForceNew:         true,
-				ValidateFunc:     validateEipChargeTypePeriod,
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  1,
+				ForceNew: true,
+				ValidateFunc: validation.Any(
+					validation.IntBetween(1, 9),
+					validation.IntInSlice([]int{12, 24, 36})),
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
+			"tags": tagsSchema(),
 			"ip_address": {
 				Type:     schema.TypeString,
 				Computed: true,
@@ -73,6 +80,12 @@ func resourceAliyunEip() *schema.Resource {
 				ForceNew: true,
 				Computed: true,
 			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			},
 		},
 	}
 }
@@ -86,6 +99,7 @@ func resourceAliyunEipCreate(d *schema.ResourceData, meta interface{}) error {
 	request.Bandwidth = strconv.Itoa(d.Get("bandwidth").(int))
 	request.InternetChargeType = d.Get("internet_charge_type").(string)
 	request.InstanceChargeType = d.Get("instance_charge_type").(string)
+	request.ResourceGroupId = d.Get("resource_group_id").(string)
 	request.ISP = d.Get("isp").(string)
 	if request.InstanceChargeType == string(PrePaid) {
 		period := d.Get("period").(int)
@@ -103,7 +117,7 @@ func resourceAliyunEipCreate(d *schema.ResourceData, meta interface{}) error {
 		return vpcClient.AllocateEipAddress(request)
 	})
 	if err != nil {
-		if IsExceptedError(err, COMMODITYINVALID_COMPONENT) && request.InternetChargeType == string(PayByBandwidth) {
+		if IsExpectedErrors(err, []string{"COMMODITY.INVALID_COMPONENT"}) && request.InternetChargeType == string(PayByBandwidth) {
 			return WrapErrorf(err, "Your account is international and it can only create '%s' elastic IP. Please change it and try again. %s", PayByTraffic, AlibabaCloudSdkGoERROR)
 		}
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_eip", request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -137,15 +151,29 @@ func resourceAliyunEipRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("bandwidth", bandwidth)
 	d.Set("internet_charge_type", object.InternetChargeType)
 	d.Set("instance_charge_type", object.ChargeType)
+	if object.ChargeType == "PrePaid" {
+		period, err := computePeriodByUnit(object.AllocationTime, object.ExpiredTime, d.Get("period").(int), "Month")
+		if err != nil {
+			return WrapError(err)
+		}
+		d.Set("period", period)
+	}
 	d.Set("isp", object.ISP)
 	d.Set("ip_address", object.IpAddress)
 	d.Set("status", object.Status)
+	d.Set("resource_group_id", object.ResourceGroupId)
+	d.Set("tags", vpcTagsToMap(object.Tags.Tag))
 
 	return nil
 }
 
 func resourceAliyunEipUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	vpcService := VpcService{client}
+	if err := vpcService.setInstanceTags(d, TagResourceEip); err != nil {
+		return WrapError(err)
+	}
+
 	update := false
 	request := vpc.CreateModifyEipAddressAttributeRequest()
 	request.RegionId = client.RegionId
@@ -187,9 +215,9 @@ func resourceAliyunEipDelete(d *schema.ResourceData, meta interface{}) error {
 			return vpcClient.ReleaseEipAddress(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, EipIncorrectStatus) {
+			if IsExpectedErrors(err, []string{"IncorrectEipStatus"}) {
 				return resource.RetryableError(err)
-			} else if IsExceptedError(err, AllocationIdNotFound) {
+			} else if IsExpectedErrors(err, []string{"InvalidAllocationId.NotFound"}) {
 				return nil
 			}
 			return resource.NonRetryableError(err)

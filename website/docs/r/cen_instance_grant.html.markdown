@@ -1,4 +1,5 @@
 ---
+subcategory: "Cloud Enterprise Network (CEN)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_cen_instance_grant"
 sidebar_current: "docs-alicloud-resource-cen-instance-grant"
@@ -45,7 +46,7 @@ resource "alicloud_vpc" "vpc" {
   cidr_block = "192.168.0.0/16"
 }
 
-resource "alicloud_cen_instance_grant" "example" {
+resource "alicloud_cen_instance_grant" "foo" {
   provider          = "alicloud.account1"
   cen_id            = "${alicloud_cen_instance.cen.id}"
   child_instance_id = "${alicloud_vpc.vpc.id}"

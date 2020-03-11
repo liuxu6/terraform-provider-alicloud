@@ -76,16 +76,15 @@ func (client *Client) CancelTaskWithCallback(request *CancelTaskRequest, callbac
 // CancelTaskRequest is the request struct for api CancelTask
 type CancelTaskRequest struct {
 	*requests.RoaRequest
-	InstanceId string `position:"Path" name:"InstanceId"`
-	TaskType   string `position:"Query" name:"taskType"`
+	InstanceId  string `position:"Path" name:"InstanceId"`
+	TaskType    string `position:"Query" name:"taskType"`
+	ClientToken string `position:"Query" name:"clientToken"`
 }
 
 // CancelTaskResponse is the response struct for api CancelTask
 type CancelTaskResponse struct {
 	*responses.BaseResponse
 	RequestId string `json:"RequestId" xml:"RequestId"`
-	Code      string `json:"Code" xml:"Code"`
-	Message   string `json:"Message" xml:"Message"`
 	Result    bool   `json:"Result" xml:"Result"`
 }
 

@@ -78,11 +78,11 @@ type AllocateInstancePublicConnectionRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId        requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ConnectionStringPrefix string           `position:"Query" name:"ConnectionStringPrefix"`
-	ResourceOwnerAccount   string           `position:"Query" name:"ResourceOwnerAccount"`
-	Port                   string           `position:"Query" name:"Port"`
-	OwnerAccount           string           `position:"Query" name:"OwnerAccount"`
 	DBInstanceId           string           `position:"Query" name:"DBInstanceId"`
+	ResourceOwnerAccount   string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount           string           `position:"Query" name:"OwnerAccount"`
 	OwnerId                requests.Integer `position:"Query" name:"OwnerId"`
+	Port                   string           `position:"Query" name:"Port"`
 }
 
 // AllocateInstancePublicConnectionResponse is the response struct for api AllocateInstancePublicConnection

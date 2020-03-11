@@ -26,7 +26,7 @@ variable "data_node_disk_type" {
   default = "cloud_ssd"
 }
 
-variable "version" {
+variable "es_version" {
   default = "6.3_with_X-Pack"
 }
 
@@ -39,12 +39,12 @@ variable "password" {
 }
 
 variable "private_whitelist" {
-  type    = "list"
+  type    = list(string)
   default = ["10.1.0.0/16", "10.0.0.0/16"]
 }
 
 variable "kibana_whitelist" {
-  type    = "list"
+  type    = list(string)
   default = ["10.1.0.0/16", "10.0.0.0/16", "127.0.0.1"]
 }
 
@@ -55,3 +55,4 @@ variable "master_node_spec" {
 variable "zone_count" {
   default = "2"
 }
+

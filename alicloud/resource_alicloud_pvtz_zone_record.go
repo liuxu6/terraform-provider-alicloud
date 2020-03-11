@@ -6,10 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/pvtz"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -29,10 +31,9 @@ func resourceAlicloudPvtzZoneRecord() *schema.Resource {
 				ForceNew: true,
 			},
 			"type": {
-				Type:     schema.TypeString,
-				Required: true,
-				ValidateFunc: validateAllowedStringValue([]string{string(RecordA), string(RecordCNAME),
-					string(RecordMX), string(RecordTXT), string(RecordPTR)}),
+				Type:         schema.TypeString,
+				Required:     true,
+				ValidateFunc: validation.StringInSlice([]string{"A", "CNAME", "MX", "TXT", "PTR", "SRV"}, false),
 			},
 			"value": {
 				Type:     schema.TypeString,
@@ -47,9 +48,9 @@ func resourceAlicloudPvtzZoneRecord() *schema.Resource {
 				Type:         schema.TypeInt,
 				Optional:     true,
 				Default:      1,
-				ValidateFunc: validateIntegerInRange(1, 50),
+				ValidateFunc: validation.IntBetween(1, 50),
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return d.Get("type").(string) != string(RecordMX)
+					return d.Get("type").(string) != "MX"
 				},
 			},
 			"ttl": {
@@ -103,7 +104,7 @@ func resourceAlicloudPvtzZoneRecordCreate(d *schema.ResourceData, meta interface
 			return pvtzClient.AddZoneRecord(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{ServiceUnavailable, PvtzThrottlingUser, PvtzSystemBusy}) {
+			if IsExpectedErrors(err, []string{ServiceUnavailable, ThrottlingUser, "System.Busy"}) {
 				time.Sleep(5 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -117,7 +118,7 @@ func resourceAlicloudPvtzZoneRecordCreate(d *schema.ResourceData, meta interface
 
 	if err != nil {
 
-		if IsExceptedErrors(err, []string{RecordInvalidConflict}) {
+		if IsExpectedErrors(err, []string{"Record.Invalid.Conflict"}) {
 			req := pvtz.CreateDescribeZoneRecordsRequest()
 			req.RegionId = client.RegionId
 			req.ZoneId = request.ZoneId
@@ -125,14 +126,12 @@ func resourceAlicloudPvtzZoneRecordCreate(d *schema.ResourceData, meta interface
 			req.PageSize = requests.NewInteger(PageSizeXLarge)
 			req.PageNumber = requests.NewInteger(1)
 			for {
-				var raw interface{}
-				var err error
-				if err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+				err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 					raw, err = client.WithPvtzClient(func(pvtzClient *pvtz.Client) (interface{}, error) {
 						return pvtzClient.DescribeZoneRecords(req)
 					})
 					if err != nil {
-						if IsExceptedErrors(err, []string{ServiceUnavailable, PvtzThrottlingUser, PvtzSystemBusy}) {
+						if IsExpectedErrors(err, []string{ServiceUnavailable, ThrottlingUser, "System.Busy"}) {
 							time.Sleep(5 * time.Second)
 							return resource.RetryableError(err)
 						}
@@ -140,7 +139,8 @@ func resourceAlicloudPvtzZoneRecordCreate(d *schema.ResourceData, meta interface
 					}
 					addDebug(req.GetActionName(), raw, req.RpcRequest, req)
 					return nil
-				}); err != nil {
+				})
+				if err != nil {
 					return WrapErrorf(err, DefaultErrorMsg, "alicloud_pvtz_zone_record", request.GetActionName(), AlibabaCloudSdkGoERROR)
 				}
 				response, _ := raw.(*pvtz.DescribeZoneRecordsResponse)
@@ -211,7 +211,7 @@ func resourceAlicloudPvtzZoneRecordUpdate(d *schema.ResourceData, meta interface
 				return pvtzClient.UpdateZoneRecord(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{ServiceUnavailable, PvtzThrottlingUser, PvtzSystemBusy}) {
+				if IsExpectedErrors(err, []string{ServiceUnavailable, ThrottlingUser, "System.Busy"}) {
 					time.Sleep(5 * time.Second)
 					return resource.RetryableError(err)
 				}
@@ -278,7 +278,7 @@ func resourceAlicloudPvtzZoneRecordDelete(d *schema.ResourceData, meta interface
 		})
 
 		if err != nil {
-			if IsExceptedErrors(err, []string{PvtzThrottlingUser, PvtzSystemBusy}) {
+			if IsExpectedErrors(err, []string{ThrottlingUser, "System.Busy"}) {
 				time.Sleep(time.Duration(2) * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -290,7 +290,7 @@ func resourceAlicloudPvtzZoneRecordDelete(d *schema.ResourceData, meta interface
 	})
 
 	if err != nil {
-		if IsExceptedErrors(err, []string{ZoneNotExists, ZoneVpcNotExists}) {
+		if IsExpectedErrors(err, []string{"Zone.NotExists", "ZoneVpc.NotExists.VpcId"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

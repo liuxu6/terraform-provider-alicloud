@@ -5,7 +5,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -13,131 +14,132 @@ func dataSourceAlicloudSnapshots() *schema.Resource {
 	return &schema.Resource{
 		Read: dataSourceAlicloudSnapshotsRead,
 		Schema: map[string]*schema.Schema{
-			"instance_id": &schema.Schema{
+			"instance_id": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 			},
-			"disk_id": &schema.Schema{
+			"disk_id": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 			},
-			"encrypted": &schema.Schema{
+			"encrypted": {
 				Type:     schema.TypeBool,
 				Optional: true,
 				ForceNew: true,
 			},
-			"ids": &schema.Schema{
+			"ids": {
 				Type:     schema.TypeSet,
 				Optional: true,
 				ForceNew: true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
+				Computed: true,
 				MinItems: 1,
 				MaxItems: 100,
 			},
-			"name_regex": &schema.Schema{
+			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
-			"status": &schema.Schema{
+			"status": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"progressing", "accomplished", "failed", "all"}),
+				ValidateFunc: validation.StringInSlice([]string{"progressing", "accomplished", "failed", "all"}, false),
 				Default:      "all",
 			},
-			"type": &schema.Schema{
+			"type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"auto", "user", "all"}),
+				ValidateFunc: validation.StringInSlice([]string{"auto", "user", "all"}, false),
 				Default:      "all",
 			},
-			"source_disk_type": &schema.Schema{
+			"source_disk_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"System", "Data"}),
+				ValidateFunc: validation.StringInSlice([]string{"System", "Data"}, false),
 			},
-			"usage": &schema.Schema{
+			"usage": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"image", "disk", "image_disk", "none"}),
+				ValidateFunc: validation.StringInSlice([]string{"image", "disk", "image_disk", "none"}, false),
 			},
 			"names": {
 				Type:     schema.TypeList,
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
-			"output_file": &schema.Schema{
+			"output_file": {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
 			"tags": tagsSchema(),
-			"snapshots": &schema.Schema{
+			"snapshots": {
 				Type:     schema.TypeList,
 				Computed: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"id": &schema.Schema{
+						"id": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"name": &schema.Schema{
+						"name": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"description": &schema.Schema{
+						"description": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"encrypted": &schema.Schema{
+						"encrypted": {
 							Type:     schema.TypeBool,
 							Computed: true,
 						},
-						"progress": &schema.Schema{
+						"progress": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"source_disk_id": &schema.Schema{
+						"source_disk_id": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"source_disk_size": &schema.Schema{
+						"source_disk_size": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"source_disk_type": &schema.Schema{
+						"source_disk_type": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"product_code": &schema.Schema{
+						"product_code": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"retention_days": &schema.Schema{
+						"retention_days": {
 							Type:     schema.TypeInt,
 							Computed: true,
 						},
-						"remain_time": &schema.Schema{
+						"remain_time": {
 							Type:     schema.TypeInt,
 							Computed: true,
 						},
-						"creation_time": &schema.Schema{
+						"creation_time": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"status": &schema.Schema{
+						"status": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"usage": &schema.Schema{
+						"usage": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},

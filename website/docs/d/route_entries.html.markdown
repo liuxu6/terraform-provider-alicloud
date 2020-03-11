@@ -1,4 +1,5 @@
 ---
+subcategory: "VPC"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_route_entries"
 sidebar_current: "docs-alicloud-datasource-route-entries"
@@ -24,7 +25,7 @@ data "alicloud_instance_types" "default" {
   memory_size       = 2
 }
 data "alicloud_images" "default" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }

@@ -77,17 +77,17 @@ func (client *Client) CopyDatabaseBetweenInstancesWithCallback(request *CopyData
 type CopyDatabaseBetweenInstancesRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	ClientToken          string           `position:"Query" name:"ClientToken"`
+	ResourceGroupId      string           `position:"Query" name:"ResourceGroupId"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	RestoreTime          string           `position:"Query" name:"RestoreTime"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	ClientToken          string           `position:"Query" name:"ClientToken"`
 	BackupId             string           `position:"Query" name:"BackupId"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	SyncUserPrivilege    string           `position:"Query" name:"SyncUserPrivilege"`
 	DbNames              string           `position:"Query" name:"DbNames"`
-	ResourceGroupId      string           `position:"Query" name:"ResourceGroupId"`
 	TargetDBInstanceId   string           `position:"Query" name:"TargetDBInstanceId"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	PayType              string           `position:"Query" name:"PayType"`
 }
 

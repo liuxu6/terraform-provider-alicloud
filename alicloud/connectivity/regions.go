@@ -14,6 +14,7 @@ const (
 	Zhangjiakou = Region("cn-zhangjiakou")
 	Huhehaote   = Region("cn-huhehaote")
 	ChengDu     = Region("cn-chengdu")
+	HeYuan      = Region("cn-heyuan")
 
 	APSouthEast1 = Region("ap-southeast-1")
 	APNorthEast1 = Region("ap-northeast-1")
@@ -36,7 +37,7 @@ const (
 )
 
 var ValidRegions = []Region{
-	Hangzhou, Qingdao, Beijing, Shenzhen, Hongkong, Shanghai, Zhangjiakou, Huhehaote, ChengDu,
+	Hangzhou, Qingdao, Beijing, Shenzhen, Hongkong, Shanghai, Zhangjiakou, Huhehaote, ChengDu, HeYuan,
 	USWest1, USEast1,
 	APNorthEast1, APSouthEast1, APSouthEast2, APSouthEast3, APSouthEast5,
 	APSouth1,
@@ -54,6 +55,8 @@ var GpdbSupportedRegions = []Region{Beijing, Shenzhen, Hangzhou, Shanghai, Hongk
 // Some Ram resources only one can be owned by one account at the same time,
 // skipped here to avoid multi regions concurrency conflict.
 var RamNoSkipRegions = []Region{Hangzhou, EUCentral1, APSouth1}
+var CenNoSkipRegions = []Region{Shanghai, EUCentral1, APSouth1}
+var KmsSkippedRegions = []Region{Beijing, Shanghai}
 
 // Actiontrail only one can be owned by one account at the same time,
 // skipped here to avoid multi regions concurrency conflict.
@@ -70,7 +73,8 @@ var OtsCapacityNoSupportedRegions = []Region{APSouthEast1, USWest1, USEast1}
 var PrivateIpNoSupportedRegions = []Region{Beijing, Hangzhou, Shenzhen}
 var SwarmSupportedRegions = []Region{Qingdao, Beijing, Zhangjiakou, Huhehaote, Hangzhou, Shanghai, Shenzhen, Hongkong, APNorthEast1, APSouthEast1, APSouthEast2,
 	APSouthEast3, USWest1, USEast1, EUCentral1}
-var ManagedKubernetesSupportedRegions = []Region{Beijing, Hangzhou, Shanghai, APSouthEast1, APSouthEast3, APSouthEast5, APSouth1}
+var ManagedKubernetesSupportedRegions = []Region{Beijing, Hangzhou, Shanghai, Shenzhen, ChengDu, Hongkong, APSouthEast1, APSouthEast2, USWest1}
+var ServerlessKubernetesSupportedRegions = []Region{Beijing, Hangzhou, Shanghai, APSouthEast1, APSouthEast3, APSouthEast5, APSouth1}
 var KubernetesSupportedRegions = []Region{Beijing, Zhangjiakou, Huhehaote, Hangzhou, Shanghai, Shenzhen, Hongkong, APNorthEast1, APSouthEast1,
 	APSouthEast2, APSouthEast3, APSouthEast5, APSouth1, USEast1, USWest1, EUWest1, MEEast1, EUCentral1}
 var NasClassicSupportedRegions = []Region{Hangzhou, Qingdao, Beijing, Hongkong, Shenzhen, Shanghai, Zhangjiakou, Huhehaote, ShenZhenFinance, ShanghaiFinance}
@@ -79,6 +83,7 @@ var CRNoSupportedRegions = []Region{Beijing, Hangzhou, Qingdao, Huhehaote, Zhang
 var MongoDBClassicNoSupportedRegions = []Region{Huhehaote, Zhangjiakou, APSouthEast2, APSouthEast3, APSouthEast5, APSouth1, USEast1, USWest1, APNorthEast1}
 var MongoDBMultiAzSupportedRegions = []Region{Hangzhou, Beijing, Shenzhen, EUCentral1}
 var DdoscooSupportedRegions = []Region{Hangzhou}
+var DdosbgpSupportedRegions = []Region{Hangzhou, Beijing, Shenzhen, Qingdao, Shanghai, Zhangjiakou, Huhehaote}
 var NetworkAclSupportedRegions = []Region{Hongkong, APSouthEast5, APSouth1}
 var EssScalingConfigurationMultiSgSupportedRegions = []Region{APSouthEast1, APSouth1}
 var SlbClassicNoSupportedRegions = []Region{APNorthEast1, APSouthEast2, APSouthEast3, APSouthEast5, APSouth1, USEast1, MEEast1, EUCentral1, EUWest1, Huhehaote, Zhangjiakou}
@@ -87,3 +92,9 @@ var OssVersioningSupportedRegions = []Region{APSouth1}
 var OssSseSupportedRegions = []Region{Qingdao, Hangzhou, Beijing, Shanghai, Shenzhen, Hongkong, APNorthEast1, APSouth1, USEast1}
 var GpdbClassicNoSupportedRegions = []Region{APSouthEast2, APSouthEast3, APSouthEast5, APSouth1, USEast1, USWest1, APNorthEast1, EUCentral1}
 var OnsNoSupportRegions = []Region{APSouthEast5}
+var AlikafkaSupportedRegions = []Region{Hangzhou, Qingdao, Beijing, Hongkong, Shenzhen, Shanghai, Zhangjiakou, Huhehaote, APSouthEast1}
+var SmartagSupportedRegions = []Region{Shanghai, ShanghaiFinance, Hongkong, APSouthEast1, APSouthEast2, APSouthEast3, APSouthEast5, EUCentral1, APNorthEast1}
+var YundunDbauditSupportedRegions = []Region{Hangzhou, Beijing, Shanghai}
+var YundunBastionhostSupportedRegions = []Region{Hangzhou}
+var HttpHttpsHealthCheckMehtodSupportedRegions = []Region{Hangzhou, Beijing, Shanghai, EUWest1, ChengDu, Qingdao, Hongkong, Shenzhen, APSouthEast5, Zhangjiakou, Huhehaote, MEEast1, APSouth1, EUCentral1, USWest1, APSouthEast3, APSouthEast2, APSouthEast1, APNorthEast1}
+var HBaseClassicSupportedRegions = []Region{Hangzhou, Beijing, Shanghai, Shenzhen}

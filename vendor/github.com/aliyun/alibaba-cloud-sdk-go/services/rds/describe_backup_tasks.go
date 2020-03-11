@@ -79,13 +79,13 @@ type DescribeBackupTasksRequest struct {
 	BackupJobId          string           `position:"Query" name:"BackupJobId"`
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	Flag                 string           `position:"Query" name:"Flag"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
-	BackupMode           string           `position:"Query" name:"BackupMode"`
+	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	BackupJobStatus      string           `position:"Query" name:"BackupJobStatus"`
+	BackupMode           string           `position:"Query" name:"BackupMode"`
 }
 
 // DescribeBackupTasksResponse is the response struct for api DescribeBackupTasks

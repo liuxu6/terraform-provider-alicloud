@@ -77,8 +77,8 @@ func (client *Client) CreateDiagnosticReportWithCallback(request *CreateDiagnost
 type CreateDiagnosticReportRequest struct {
 	*requests.RpcRequest
 	EndTime      string `position:"Query" name:"EndTime"`
-	DBInstanceId string `position:"Query" name:"DBInstanceId"`
 	StartTime    string `position:"Query" name:"StartTime"`
+	DBInstanceId string `position:"Query" name:"DBInstanceId"`
 }
 
 // CreateDiagnosticReportResponse is the response struct for api CreateDiagnosticReport

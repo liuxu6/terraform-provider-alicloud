@@ -5,7 +5,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,15 +18,20 @@ func dataSourceAlicloudNetworkInterfaces() *schema.Resource {
 				Type:     schema.TypeSet,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 				Optional: true,
+				Computed: true,
 				MinItems: 1,
 				MaxItems: 100,
 			},
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"vpc_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"resource_group_id": {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
@@ -44,7 +50,7 @@ func dataSourceAlicloudNetworkInterfaces() *schema.Resource {
 			"type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"Primary", "Secondary"}),
+				ValidateFunc: validation.StringInSlice([]string{"Primary", "Secondary"}, false),
 			},
 			"instance_id": {
 				Type:     schema.TypeString,
@@ -115,6 +121,10 @@ func dataSourceAlicloudNetworkInterfaces() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"resource_group_id": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
 						"instance_id": {
 							Type:     schema.TypeString,
 							Computed: true,
@@ -156,6 +166,10 @@ func dataSourceAlicloudNetworkInterfacesRead(d *schema.ResourceData, meta interf
 		request.SecurityGroupId = securityGroupId.(string)
 	}
 
+	if resourceGroupId, ok := d.GetOk("resource_group_id"); ok {
+		request.ResourceGroupId = resourceGroupId.(string)
+	}
+
 	if typ, ok := d.GetOk("type"); ok {
 		request.Type = typ.(string)
 	}
@@ -192,11 +206,11 @@ func dataSourceAlicloudNetworkInterfacesRead(d *schema.ResourceData, meta interf
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	var filterEnis []ecs.NetworkInterfaceSet
@@ -229,21 +243,22 @@ func networkInterfaceDescriptionAttributes(d *schema.ResourceData, enis []ecs.Ne
 			ips = append(ips, ip.PrivateIpAddress)
 		}
 		mapping := map[string]interface{}{
-			"id":              eni.NetworkInterfaceId,
-			"name":            eni.NetworkInterfaceName,
-			"status":          eni.Status,
-			"vpc_id":          eni.VpcId,
-			"vswitch_id":      eni.VSwitchId,
-			"zone_id":         eni.ZoneId,
-			"public_ip":       eni.AssociatedPublicIp.PublicIpAddress,
-			"private_ip":      eni.PrivateIpAddress,
-			"private_ips":     ips,
-			"mac":             eni.MacAddress,
-			"security_groups": eni.SecurityGroupIds.SecurityGroupId,
-			"description":     eni.Description,
-			"instance_id":     eni.InstanceId,
-			"creation_time":   eni.CreationTime,
-			"tags":            tagsToMap(eni.Tags.Tag),
+			"id":                eni.NetworkInterfaceId,
+			"name":              eni.NetworkInterfaceName,
+			"status":            eni.Status,
+			"vpc_id":            eni.VpcId,
+			"vswitch_id":        eni.VSwitchId,
+			"zone_id":           eni.ZoneId,
+			"public_ip":         eni.AssociatedPublicIp.PublicIpAddress,
+			"private_ip":        eni.PrivateIpAddress,
+			"private_ips":       ips,
+			"mac":               eni.MacAddress,
+			"security_groups":   eni.SecurityGroupIds.SecurityGroupId,
+			"description":       eni.Description,
+			"instance_id":       eni.InstanceId,
+			"resource_group_id": eni.ResourceGroupId,
+			"creation_time":     eni.CreationTime,
+			"tags":              tagsToMap(eni.Tags.Tag),
 		}
 
 		ids = append(ids, eni.NetworkInterfaceId)

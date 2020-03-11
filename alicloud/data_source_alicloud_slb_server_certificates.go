@@ -4,7 +4,8 @@ import (
 	"regexp"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -21,19 +22,26 @@ func dataSourceAlicloudSlbServerCertificates() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				ForceNew: true,
 				MinItems: 1,
 			},
+			"tags": tagsSchema(),
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 			"names": {
 				Type:     schema.TypeList,
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
 			},
 			// Computed values
 			"certificates": {
@@ -92,6 +100,12 @@ func dataSourceAlicloudSlbServerCertificates() *schema.Resource {
 							Type:     schema.TypeBool,
 							Computed: true,
 						},
+						"resource_group_id": {
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+						},
+						"tags": tagsSchema(),
 					},
 				},
 			},
@@ -99,11 +113,35 @@ func dataSourceAlicloudSlbServerCertificates() *schema.Resource {
 	}
 }
 
+func severCertificateTagsMappings(d *schema.ResourceData, id string, meta interface{}) map[string]string {
+	client := meta.(*connectivity.AliyunClient)
+	slbService := SlbService{client}
+	tags, err := slbService.DescribeTags(id, nil, TagResourceCertificate)
+
+	if err != nil {
+		return nil
+	}
+
+	return slbTagsToMap(tags)
+}
+
 func dataSourceAlicloudSlbServerCertificatesRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 
 	request := slb.CreateDescribeServerCertificatesRequest()
 	request.RegionId = client.RegionId
+	tags := d.Get("tags").(map[string]interface{})
+	if tags != nil && len(tags) > 0 {
+		Tags := make([]slb.DescribeServerCertificatesTag, 0, len(tags))
+		for k, v := range tags {
+			certificatesTag := slb.DescribeServerCertificatesTag{
+				Key:   k,
+				Value: v.(string),
+			}
+			Tags = append(Tags, certificatesTag)
+		}
+		request.Tag = &Tags
+	}
 	idsMap := make(map[string]string)
 	if v, ok := d.GetOk("ids"); ok {
 		for _, vv := range v.([]interface{}) {
@@ -142,10 +180,10 @@ func dataSourceAlicloudSlbServerCertificatesRead(d *schema.ResourceData, meta in
 		filteredTemp = response.ServerCertificates.ServerCertificate
 	}
 
-	return slbServerCertificatesDescriptionAttributes(d, filteredTemp)
+	return slbServerCertificatesDescriptionAttributes(d, filteredTemp, meta)
 }
 
-func slbServerCertificatesDescriptionAttributes(d *schema.ResourceData, certificates []slb.ServerCertificate) error {
+func slbServerCertificatesDescriptionAttributes(d *schema.ResourceData, certificates []slb.ServerCertificate, meta interface{}) error {
 	var ids []string
 	var names []string
 	var s []map[string]interface{}
@@ -169,6 +207,8 @@ func slbServerCertificatesDescriptionAttributes(d *schema.ResourceData, certific
 			"alicloud_certificate_id":   certificate.AliCloudCertificateId,
 			"alicloud_certificate_name": certificate.AliCloudCertificateName,
 			"is_alicloud_certificate":   certificate.IsAliCloudCertificate == 1,
+			"resource_group_id":         certificate.ResourceGroupId,
+			"tags":                      severCertificateTagsMappings(d, certificate.ServerCertificateId, meta),
 		}
 		ids = append(ids, certificate.ServerCertificateId)
 		names = append(names, certificate.ServerCertificateName)

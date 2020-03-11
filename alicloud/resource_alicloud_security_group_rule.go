@@ -6,10 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,6 +19,7 @@ func resourceAliyunSecurityGroupRule() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceAliyunSecurityGroupRuleCreate,
 		Read:   resourceAliyunSecurityGroupRuleRead,
+		Update: resourceAliyunSecurityGroupRuleUpdate,
 		Delete: resourceAliyunSecurityGroupRuleDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -27,7 +30,7 @@ func resourceAliyunSecurityGroupRule() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateSecurityRuleType,
+				ValidateFunc: validation.StringInSlice([]string{"ingress", "egress"}, false),
 				Description:  "Type of rule, ingress (inbound) or egress (outbound).",
 			},
 
@@ -35,7 +38,7 @@ func resourceAliyunSecurityGroupRule() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateSecurityRuleIpProtocol,
+				ValidateFunc: validation.StringInSlice([]string{"tcp", "udp", "icmp", "gre", "all"}, false),
 			},
 
 			"nic_type": {
@@ -43,7 +46,7 @@ func resourceAliyunSecurityGroupRule() *schema.Resource {
 				Optional:     true,
 				ForceNew:     true,
 				Computed:     true,
-				ValidateFunc: validateSecurityRuleNicType,
+				ValidateFunc: validation.StringInSlice([]string{"internet", "intranet"}, false),
 			},
 
 			"policy": {
@@ -51,7 +54,7 @@ func resourceAliyunSecurityGroupRule() *schema.Resource {
 				Optional:     true,
 				ForceNew:     true,
 				Default:      GroupRulePolicyAccept,
-				ValidateFunc: validateSecurityRulePolicy,
+				ValidateFunc: validation.StringInSlice([]string{"accept", "drop"}, false),
 			},
 
 			"port_range": {
@@ -67,7 +70,7 @@ func resourceAliyunSecurityGroupRule() *schema.Resource {
 				Optional:     true,
 				ForceNew:     true,
 				Default:      1,
-				ValidateFunc: validateSecurityPriority,
+				ValidateFunc: validation.IntBetween(1, 100),
 			},
 
 			"security_group_id": {
@@ -98,7 +101,6 @@ func resourceAliyunSecurityGroupRule() *schema.Resource {
 			"description": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 			},
 		},
 	}
@@ -178,7 +180,7 @@ func resourceAliyunSecurityGroupRuleRead(d *schema.ResourceData, meta interface{
 
 	object, err := ecsService.DescribeSecurityGroupRule(d.Id())
 	if err != nil {
-		if NotFoundError(err) || IsExceptedError(err, InvalidSecurityGroupIdNotFound) {
+		if NotFoundError(err) {
 			d.SetId("")
 			return nil
 		}
@@ -208,6 +210,55 @@ func resourceAliyunSecurityGroupRuleRead(d *schema.ResourceData, meta interface{
 		d.Set("source_group_owner_account", object.DestGroupOwnerAccount)
 	}
 	return nil
+}
+
+func resourceAliyunSecurityGroupRuleUpdate(d *schema.ResourceData, meta interface{}) error {
+	client := meta.(*connectivity.AliyunClient)
+
+	policy := parseSecurityRuleId(d, meta, 6)
+	strPriority := parseSecurityRuleId(d, meta, 7)
+	var priority int
+	if policy == "" || strPriority == "" {
+		policy = d.Get("policy").(string)
+		priority = d.Get("priority").(int)
+		d.SetId(d.Id() + ":" + policy + ":" + strconv.Itoa(priority))
+	} else {
+		prior, err := strconv.Atoi(strPriority)
+		if err != nil {
+			return WrapError(err)
+		}
+		priority = prior
+	}
+
+	request, err := buildAliyunSGRuleRequest(d, meta)
+	if err != nil {
+		return WrapError(err)
+	}
+
+	direction := d.Get("type").(string)
+
+	if direction == string(DirectionIngress) {
+		request.ApiName = "ModifySecurityGroupRule"
+		_, err = client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+			return ecsClient.ProcessCommonRequest(request)
+		})
+	} else {
+		request.ApiName = "ModifySecurityGroupEgressRule"
+		_, err = client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+			return ecsClient.ProcessCommonRequest(request)
+		})
+	}
+
+	raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+		return ecsClient.ProcessCommonRequest(request)
+	})
+
+	if err != nil {
+		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+
+	addDebug(request.GetActionName(), raw, request.Headers, request)
+	return resourceAliyunSecurityGroupRuleRead(d, meta)
 }
 
 func deleteSecurityGroupRule(d *schema.ResourceData, meta interface{}) error {
@@ -255,7 +306,7 @@ func resourceAliyunSecurityGroupRuleDelete(d *schema.ResourceData, meta interfac
 	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
 		err := deleteSecurityGroupRule(d, meta)
 		if err != nil {
-			if NotFoundError(err) || IsExceptedError(err, InvalidSecurityGroupIdNotFound) {
+			if NotFoundError(err) || IsExpectedErrors(err, []string{"InvalidSecurityGroupId.NotFound"}) {
 				return nil
 			}
 			return resource.RetryableError(err)

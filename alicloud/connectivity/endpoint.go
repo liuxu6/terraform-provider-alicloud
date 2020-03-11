@@ -8,10 +8,11 @@ import (
 	"strings"
 )
 
-// Load endpoints from endpoints.xml or environment variables to meet specified application scenario, like private cloud.
+// ServiceCode Load endpoints from endpoints.xml or environment variables to meet specified application scenario, like private cloud.
 type ServiceCode string
 
 const (
+	CbnCode           = ServiceCode("CBN")
 	ECSCode           = ServiceCode("ECS")
 	ESSCode           = ServiceCode("ESS")
 	RAMCode           = ServiceCode("RAM")
@@ -20,9 +21,9 @@ const (
 	RDSCode           = ServiceCode("RDS")
 	OSSCode           = ServiceCode("OSS")
 	ONSCode           = ServiceCode("ONS")
+	ALIKAFKACode      = ServiceCode("ALIKAFKA")
 	CONTAINCode       = ServiceCode("CS")
 	CRCode            = ServiceCode("CR")
-	DOMAINCode        = ServiceCode("DOMAIN")
 	CDNCode           = ServiceCode("CDN")
 	CMSCode           = ServiceCode("CMS")
 	KMSCode           = ServiceCode("KMS")
@@ -36,6 +37,7 @@ const (
 	STSCode           = ServiceCode("STS")
 	CENCode           = ServiceCode("CEN")
 	KVSTORECode       = ServiceCode("KVSTORE")
+	POLARDBCode       = ServiceCode("POLARDB")
 	DATAHUBCode       = ServiceCode("DATAHUB")
 	MNSCode           = ServiceCode("MNS")
 	CLOUDAPICode      = ServiceCode("APIGATEWAY")
@@ -46,9 +48,16 @@ const (
 	ACTIONTRAILCode   = ServiceCode("ACTIONTRAIL")
 	BSSOPENAPICode    = ServiceCode("BSSOPENAPI")
 	DDOSCOOCode       = ServiceCode("DDOSCOO")
+	DDOSBGPCode       = ServiceCode("DDOSBGP")
+	SAGCode           = ServiceCode("SAG")
+	EMRCode           = ServiceCode("EMR")
+	CasCode           = ServiceCode("CAS")
+	YUNDUNDBAUDITCode = ServiceCode("YUNDUNDBAUDIT")
+	MARKETCode        = ServiceCode("MARKET")
+	HBASECode         = ServiceCode("HBASE")
+	ADBCode           = ServiceCode("ADB")
 )
 
-//xml
 type Endpoints struct {
 	Endpoint []Endpoint `xml:"Endpoint"`
 }
@@ -72,6 +81,22 @@ type Product struct {
 	DomainName  string `xml:"DomainName"`
 }
 
+var localEndpointPath = "./endpoints.xml"
+var localEndpointPathEnv = "TF_ENDPOINT_PATH"
+var loadLocalEndpoint = false
+
+func hasLocalEndpoint() bool {
+	data, err := ioutil.ReadFile(localEndpointPath)
+	if err != nil || len(data) <= 0 {
+		d, e := ioutil.ReadFile(os.Getenv(localEndpointPathEnv))
+		if e != nil {
+			return false
+		}
+		data = d
+	}
+	return len(data) > 0
+}
+
 func loadEndpoint(region string, serviceCode ServiceCode) string {
 	endpoint := strings.TrimSpace(os.Getenv(fmt.Sprintf("%s_ENDPOINT", string(serviceCode))))
 	if endpoint != "" {
@@ -79,9 +104,12 @@ func loadEndpoint(region string, serviceCode ServiceCode) string {
 	}
 
 	// Load current path endpoint file endpoints.xml, if failed, it will load from environment variables TF_ENDPOINT_PATH
-	data, err := ioutil.ReadFile("./endpoints.xml")
+	if !loadLocalEndpoint {
+		return ""
+	}
+	data, err := ioutil.ReadFile(localEndpointPath)
 	if err != nil || len(data) <= 0 {
-		d, e := ioutil.ReadFile(os.Getenv("TF_ENDPOINT_PATH"))
+		d, e := ioutil.ReadFile(os.Getenv(localEndpointPathEnv))
 		if e != nil {
 			return ""
 		}

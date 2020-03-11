@@ -4,9 +4,10 @@ import (
 	"strings"
 	"time"
 
-	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r-kvstore"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r_kvstore"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -23,6 +24,11 @@ func dataSourceAlicloudKVStoreInstanceEngines() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
+				ValidateFunc: validation.StringInSlice([]string{
+					string(KVStoreMemcache),
+					string(KVStoreRedis),
+				}, false),
+				Default: string(KVStoreRedis),
 			},
 			"engine_version": {
 				Type:     schema.TypeString,
@@ -34,7 +40,7 @@ func dataSourceAlicloudKVStoreInstanceEngines() *schema.Resource {
 				Optional:     true,
 				ForceNew:     true,
 				Default:      PrePaid,
-				ValidateFunc: validateAllowedStringValue([]string{string(PostPaid), string(PrePaid)}),
+				ValidateFunc: validation.StringInSlice([]string{string(PostPaid), string(PrePaid)}, false),
 			},
 			"output_file": {
 				Type:     schema.TypeString,
@@ -73,13 +79,14 @@ func dataSourceAlicloudKVStoreInstanceEnginesRead(d *schema.ResourceData, meta i
 	request.ZoneId = d.Get("zone_id").(string)
 	instanceChargeType := d.Get("instance_charge_type").(string)
 	request.InstanceChargeType = instanceChargeType
+	request.Engine = d.Get("engine").(string)
 	var response = &r_kvstore.DescribeAvailableResourceResponse{}
 	err := resource.Retry(time.Minute*5, func() *resource.RetryError {
 		raw, err := client.WithRkvClient(func(rkvClient *r_kvstore.Client) (interface{}, error) {
 			return rkvClient.DescribeAvailableResource(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, Throttling) {
+			if IsExpectedErrors(err, []string{Throttling}) {
 				time.Sleep(time.Duration(5) * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -101,27 +108,40 @@ func dataSourceAlicloudKVStoreInstanceEnginesRead(d *schema.ResourceData, meta i
 	engineVersion, engineVersionGot := d.GetOk("engine_version")
 
 	for _, AvailableZone := range response.AvailableZones.AvailableZone {
-		info := make(map[string]interface{})
 		zondId := AvailableZone.ZoneId
-		info["zone_id"] = AvailableZone.ZoneId
 		ids = append(ids, zondId)
+		versions := make(map[string]interface{})
 		for _, SupportedEngine := range AvailableZone.SupportedEngines.SupportedEngine {
 			if engineGot && engine != SupportedEngine.Engine {
 				continue
 			}
-			info["engine"] = SupportedEngine.Engine
 			ids = append(ids, SupportedEngine.Engine)
-			for _, SupportedEngineVersion := range SupportedEngine.SupportedEngineVersions.SupportedEngineVersion {
-				if engineVersionGot && engineVersion.(string) != SupportedEngineVersion.Version {
-					continue
+			if strings.ToLower(engine.(string)) == "memcache" {
+				info := make(map[string]interface{})
+				info["zone_id"] = AvailableZone.ZoneId
+				info["engine"] = SupportedEngine.Engine
+				info["engine_version"] = "2.8"
+				ids = append(ids, "2.8")
+				infos = append(infos, info)
+			} else {
+				for _, editionType := range SupportedEngine.SupportedEditionTypes.SupportedEditionType {
+					for _, seriesType := range editionType.SupportedSeriesTypes.SupportedSeriesType {
+						for _, SupportedEngineVersion := range seriesType.SupportedEngineVersions.SupportedEngineVersion {
+							if engineVersionGot && engineVersion.(string) != SupportedEngineVersion.Version {
+								continue
+							}
+							versions[SupportedEngineVersion.Version] = nil
+						}
+					}
 				}
-				info["engine_version"] = SupportedEngineVersion.Version
-				ids = append(ids, SupportedEngineVersion.Version)
-				temp := make(map[string]interface{}, len(info))
-				for key, value := range info {
-					temp[key] = value
+				for version := range versions {
+					info := make(map[string]interface{})
+					info["zone_id"] = AvailableZone.ZoneId
+					info["engine"] = SupportedEngine.Engine
+					info["engine_version"] = version
+					ids = append(ids, version)
+					infos = append(infos, info)
 				}
-				infos = append(infos, temp)
 			}
 		}
 	}

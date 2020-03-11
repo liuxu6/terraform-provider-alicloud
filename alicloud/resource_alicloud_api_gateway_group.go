@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cloudapi"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -29,6 +29,14 @@ func resourceAliyunApigatewayGroup() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
+			"sub_domain": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"vpc_domain": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -46,7 +54,7 @@ func resourceAliyunApigatewayGroupCreate(d *schema.ResourceData, meta interface{
 			return cloudApiClient.CreateApiGroup(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, RepeatedCommit) {
+			if IsExpectedErrors(err, []string{"RepeatedCommit"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -76,6 +84,8 @@ func resourceAliyunApigatewayGroupRead(d *schema.ResourceData, meta interface{})
 
 	d.Set("name", apiGroup.GroupName)
 	d.Set("description", apiGroup.Description)
+	d.Set("sub_domain", apiGroup.SubDomain)
+	d.Set("vpc_domain", apiGroup.VpcDomain)
 
 	return nil
 }

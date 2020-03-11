@@ -76,17 +76,18 @@ func (client *Client) ModifyMetricRuleTemplateWithCallback(request *ModifyMetric
 // ModifyMetricRuleTemplateRequest is the request struct for api ModifyMetricRuleTemplate
 type ModifyMetricRuleTemplateRequest struct {
 	*requests.RpcRequest
-	Name           string                                    `position:"Query" name:"Name"`
 	RestVersion    requests.Integer                          `position:"Query" name:"RestVersion"`
 	Description    string                                    `position:"Query" name:"Description"`
-	AlertTemplates *[]ModifyMetricRuleTemplateAlertTemplates `position:"Query" name:"AlertTemplates"  type:"Repeated"`
 	TemplateId     requests.Integer                          `position:"Query" name:"TemplateId"`
+	Name           string                                    `position:"Query" name:"Name"`
+	AlertTemplates *[]ModifyMetricRuleTemplateAlertTemplates `position:"Query" name:"AlertTemplates"  type:"Repeated"`
 }
 
 // ModifyMetricRuleTemplateAlertTemplates is a repeated param struct in ModifyMetricRuleTemplateRequest
 type ModifyMetricRuleTemplateAlertTemplates struct {
 	Period                                string `name:"Period"`
 	EscalationsWarnThreshold              string `name:"Escalations.Warn.Threshold"`
+	Webhook                               string `name:"Webhook"`
 	EscalationsWarnComparisonOperator     string `name:"Escalations.Warn.ComparisonOperator"`
 	EscalationsCriticalStatistics         string `name:"Escalations.Critical.Statistics"`
 	EscalationsInfoTimes                  string `name:"Escalations.Info.Times"`

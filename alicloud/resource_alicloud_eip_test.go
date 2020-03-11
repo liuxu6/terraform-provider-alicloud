@@ -3,6 +3,7 @@ package alicloud
 import (
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform/helper/acctest"
@@ -11,8 +12,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -63,11 +64,11 @@ func testSweepEips(region string) error {
 			break
 		}
 
-		if page, err := getNextpageNumber(req.PageNumber); err != nil {
+		page, err := getNextpageNumber(req.PageNumber)
+		if err != nil {
 			return err
-		} else {
-			req.PageNumber = page
 		}
+		req.PageNumber = page
 	}
 
 	for _, v := range eips {
@@ -95,32 +96,6 @@ func testSweepEips(region string) error {
 		}
 	}
 	return nil
-}
-
-func testAccCheckEIPExists(n string, eip *vpc.EipAddress) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[n]
-		if !ok {
-			return WrapError(fmt.Errorf("Not found: %s", n))
-		}
-
-		if rs.Primary.ID == "" {
-			return WrapError(fmt.Errorf("No EIP ID is set"))
-		}
-
-		client := testAccProvider.Meta().(*connectivity.AliyunClient)
-		vpcService := VpcService{client}
-		d, err := vpcService.DescribeEip(rs.Primary.ID)
-
-		log.Printf("[WARN] eip id %#v", rs.Primary.ID)
-
-		if err != nil {
-			return WrapError(err)
-		}
-
-		*eip = d
-		return nil
-	}
 }
 
 func testAccCheckEIPDestroy(s *terraform.State) error {
@@ -207,11 +182,24 @@ func TestAccAlicloudEipBasic_PayByBandwidth(t *testing.T) {
 				),
 			},
 			{
+				Config: testAccCheckEipConfig_tags(rand, "PayByBandwidth"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "acceptance test",
+					}),
+				),
+			},
+			{
 				Config: testAccCheckEipConfig_all(rand, "PayByBandwidth"),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"name":        fmt.Sprintf("tf-testAcceEipName%d_all", rand),
-						"description": fmt.Sprintf("tf-testAcceEipName%d_description_all", rand),
+						"name":         fmt.Sprintf("tf-testAcceEipName%d_all", rand),
+						"description":  fmt.Sprintf("tf-testAcceEipName%d_description_all", rand),
+						"tags.%":       REMOVEKEY,
+						"tags.Created": REMOVEKEY,
+						"tags.For":     REMOVEKEY,
 					}),
 				),
 			},
@@ -334,8 +322,9 @@ resource "alicloud_eip" "default" {
 	bandwidth = "5"
 	period = "1"
     isp = "BGP"
+	resource_group_id = "%s"
 }
-`, internet_charge_type)
+`, internet_charge_type, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"))
 }
 
 func testAccCheckEipConfig_bandwidth(rand int, internet_charge_type string) string {
@@ -345,8 +334,9 @@ resource "alicloud_eip" "default" {
 	internet_charge_type = "%s"
 	bandwidth = "10"
 	period = "1"
+	resource_group_id = "%s"
 }
-`, internet_charge_type)
+`, internet_charge_type, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"))
 }
 
 func testAccCheckEipConfig_name(rand int, internet_charge_type string) string {
@@ -361,8 +351,9 @@ resource "alicloud_eip" "default" {
 	bandwidth = "10"
 	period = "1"
 	name = "${var.name}"
+	resource_group_id = "%s"
 }
-`, rand, internet_charge_type)
+`, rand, internet_charge_type, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"))
 }
 
 func testAccCheckEipConfig_description(rand int, internet_charge_type string) string {
@@ -378,8 +369,31 @@ resource "alicloud_eip" "default" {
 	period = "1"
 	name = "${var.name}"
     description = "${var.name}_description"
+	resource_group_id = "%s"
 }
-`, rand, internet_charge_type)
+`, rand, internet_charge_type, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"))
+}
+
+func testAccCheckEipConfig_tags(rand int, internet_charge_type string) string {
+	return fmt.Sprintf(`
+variable "name"{
+	default = "tf-testAcceEipName%d"
+}
+
+resource "alicloud_eip" "default" {
+	instance_charge_type = "PostPaid"
+	internet_charge_type = "%s"
+	bandwidth = "10"
+	period = "1"
+	name = "${var.name}"
+    description = "${var.name}_description"
+	tags 		= {
+		Created = "TF"
+		For 	= "acceptance test"
+	}
+	resource_group_id = "%s"
+}
+`, rand, internet_charge_type, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"))
 }
 
 func testAccCheckEipConfig_all(rand int, internet_charge_type string) string {
@@ -395,8 +409,9 @@ resource "alicloud_eip" "default" {
 	period = "1"
 	name = "${var.name}_all"
     description = "${var.name}_description_all"
+	resource_group_id = "%s"
 }
-`, rand, internet_charge_type)
+`, rand, internet_charge_type, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"))
 }
 
 func testAccCheckEipConfig_multi(rand int) string {
@@ -407,8 +422,9 @@ resource "alicloud_eip" "default" {
 	internet_charge_type = "PayByBandwidth"
 	bandwidth = "5"
 	period = "1"
+	resource_group_id = "%s"
 }
-`)
+`, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"))
 }
 
 var testAccCheckEipCheckMap = map[string]string{

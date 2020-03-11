@@ -5,7 +5,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -18,6 +19,7 @@ func dataSourceAlicloudSslVpnServers() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				ForceNew: true,
 				MinItems: 1,
 			},
@@ -31,7 +33,7 @@ func dataSourceAlicloudSslVpnServers() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 
@@ -72,7 +74,7 @@ func dataSourceAlicloudSslVpnServers() *schema.Resource {
 							Computed: true,
 						},
 						"create_time": {
-							Type:     schema.TypeInt,
+							Type:     schema.TypeString,
 							Computed: true,
 						},
 						"cipher": {
@@ -192,7 +194,7 @@ func sslVpnServersDecriptionAttributes(d *schema.ResourceData, vpnSetTypes []vpc
 			"local_subnet":    vpn.LocalSubnet,
 			"name":            vpn.Name,
 			"client_ip_pool":  vpn.ClientIpPool,
-			"create_time":     vpn.CreateTime,
+			"create_time":     TimestampToStr(vpn.CreateTime),
 			"cipher":          vpn.Cipher,
 			"proto":           vpn.Proto,
 			"port":            vpn.Port,

@@ -77,12 +77,12 @@ func (client *Client) ResetAccountForPGWithCallback(request *ResetAccountForPGRe
 type ResetAccountForPGRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	AccountPassword      string           `position:"Query" name:"AccountPassword"`
 	AccountName          string           `position:"Query" name:"AccountName"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	AccountPassword      string           `position:"Query" name:"AccountPassword"`
 }
 
 // ResetAccountForPGResponse is the response struct for api ResetAccountForPG

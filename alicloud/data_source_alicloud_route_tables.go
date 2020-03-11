@@ -5,7 +5,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,7 +18,7 @@ func dataSourceAlicloudRouteTables() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 			"output_file": {
@@ -29,6 +30,7 @@ func dataSourceAlicloudRouteTables() *schema.Resource {
 				Optional: true,
 				ForceNew: true,
 			},
+			"tags": tagsSchema(),
 			"ids": {
 				Type:     schema.TypeList,
 				Optional: true,
@@ -40,6 +42,11 @@ func dataSourceAlicloudRouteTables() *schema.Resource {
 				Type:     schema.TypeList,
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
 			},
 
 			// Computed values
@@ -80,11 +87,13 @@ func dataSourceAlicloudRouteTables() *schema.Resource {
 }
 func dataSourceAlicloudRouteTablesRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	vpcService := VpcService{client}
 
 	request := vpc.CreateDescribeRouteTableListRequest()
 	request.RegionId = string(client.Region)
 	request.PageSize = requests.NewInteger(PageSizeLarge)
 	request.PageNumber = requests.NewInteger(1)
+	request.ResourceGroupId = d.Get("resource_group_id").(string)
 	idsMap := make(map[string]string)
 	if v, ok := d.GetOk("ids"); ok {
 		for _, vv := range v.([]interface{}) {
@@ -132,6 +141,16 @@ func dataSourceAlicloudRouteTablesRead(d *schema.ResourceData, meta interface{})
 				if _, ok := idsMap[tables.RouteTableId]; !ok {
 					continue
 				}
+			}
+			if value, ok := d.GetOk("tags"); ok && len(value.(map[string]interface{})) > 0 {
+				tags, err := vpcService.DescribeTags(tables.RouteTableId, value.(map[string]interface{}), TagResourceRouteTable)
+				if err != nil {
+					return WrapError(err)
+				}
+				if len(tags) < 1 {
+					continue
+				}
+
 			}
 			allRouteTables = append(allRouteTables, tables)
 		}

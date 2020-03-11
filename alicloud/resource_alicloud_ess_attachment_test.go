@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -123,7 +123,7 @@ func testAccCheckEssAttachmentDestroy(s *terraform.State) error {
 
 		instances, err := essService.DescribeEssAttachment(rs.Primary.ID, make([]string, 0))
 
-		if err != nil && !IsExceptedError(err, InvalidScalingGroupIdNotFound) {
+		if err != nil && !IsExpectedErrors(err, []string{"InvalidScalingGroupId.NotFound"}) {
 			return WrapError(err)
 		}
 

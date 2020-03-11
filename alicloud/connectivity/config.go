@@ -27,6 +27,7 @@ type Config struct {
 	SecurityToken   string
 	OtsInstanceName string
 	AccountId       string
+	Protocol        string
 
 	RamRoleArn               string
 	RamRoleSessionName       string
@@ -41,6 +42,7 @@ type Config struct {
 	EssEndpoint           string
 	OssEndpoint           string
 	OnsEndpoint           string
+	AlikafkaEndpoint      string
 	DnsEndpoint           string
 	RamEndpoint           string
 	CsEndpoint            string
@@ -56,6 +58,7 @@ type Config struct {
 	DdsEndpoint           string
 	GpdbEnpoint           string
 	KVStoreEndpoint       string
+	PolarDBEndpoint       string
 	FcEndpoint            string
 	ApigatewayEndpoint    string
 	DatahubEndpoint       string
@@ -66,8 +69,17 @@ type Config struct {
 	ActionTrailEndpoint   string
 	BssOpenApiEndpoint    string
 	DdoscooEndpoint       string
+	DdosbgpEndpoint       string
+	SagEndpoint           string
+	EmrEndpoint           string
+	CasEndpoint           string
+	MarketEndpoint        string
+	HBaseEndpoint         string
+	AdbEndpoint           string
 
 	SkipRegionValidation bool
+	ConfigurationSource  string
+	CbnEndpoint          string
 }
 
 func (c *Config) loadAndValidate() error {
@@ -92,14 +104,14 @@ func (c *Config) validateRegion() error {
 
 func (c *Config) getAuthCredential(stsSupported bool) auth.Credential {
 	if c.AccessKey != "" && c.SecretKey != "" {
+		if stsSupported && c.SecurityToken != "" {
+			return credentials.NewStsTokenCredential(c.AccessKey, c.SecretKey, c.SecurityToken)
+		}
 		if c.RamRoleArn != "" {
 			log.Printf("[INFO] Assume RAM Role specified in provider block assume_role { ... }")
 			return credentials.NewRamRoleArnWithPolicyCredential(
 				c.AccessKey, c.SecretKey, c.RamRoleArn,
 				c.RamRoleSessionName, c.RamRolePolicy, c.RamRoleSessionExpiration)
-		}
-		if stsSupported {
-			return credentials.NewStsTokenCredential(c.AccessKey, c.SecretKey, c.SecurityToken)
 		}
 		return credentials.NewAccessKeyCredential(c.AccessKey, c.SecretKey)
 	}
@@ -183,4 +195,13 @@ func (c *Config) getAuthCredentialByEcsRoleName() (accessKey, secretKey, token s
 	}
 
 	return accessKeyId.(string), accessKeySecret.(string), securityToken.(string), nil
+}
+
+func (c *Config) MakeConfigByEcsRoleName() error {
+	accessKey, secretKey, token, err := c.getAuthCredentialByEcsRoleName()
+	if err != nil {
+		return err
+	}
+	c.AccessKey, c.SecretKey, c.SecurityToken = accessKey, secretKey, token
+	return nil
 }

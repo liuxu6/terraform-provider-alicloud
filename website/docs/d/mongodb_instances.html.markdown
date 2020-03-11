@@ -1,4 +1,5 @@
 ---
+subcategory: "MongoDB"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_mongodb_instances"
 sidebar_current: "docs-alicloud-datasource-mongodb-instances"
@@ -31,6 +32,7 @@ The following arguments are supported:
 * `instance_type` - (Optional) Type of the instance to be queried. If it is set to `sharding`, the sharded cluster instances are listed. If it is set to `replicate`, replica set instances are listed. Default value `replicate`.
 * `instance_class` - (Optional) Sizing of the instance to be queried.
 * `availability_zone` - (Optional) Instance availability zone.
+* `tags` - (Optional, Available in v1.66.0+) A mapping of tags to assign to the resource.
 * `output_file` - (Optional) The name of file that can save the collection of instances after running `terraform plan`.
 
 ## Attributes Reference

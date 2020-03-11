@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ram"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -86,7 +86,7 @@ func testSweepRamRoles(region string) error {
 					request.PolicyType = v.PolicyType
 					return ramClient.DetachPolicyFromRole(request)
 				})
-				if err != nil && !RamEntityNotExist(err) {
+				if err != nil && !IsExpectedErrors(err, []string{"EntityNotExist"}) {
 					log.Printf("[ERROR] Failed detach Policy %s: %#v", v.PolicyName, err)
 				}
 			}
@@ -365,7 +365,7 @@ func testAccCheckRamRoleDestroy(s *terraform.State) error {
 			return ramClient.GetRole(request)
 		})
 
-		if err != nil && !RamEntityNotExist(err) {
+		if err != nil && !IsExpectedErrors(err, []string{"EntityNotExist.Role"}) {
 			return WrapError(err)
 		}
 	}

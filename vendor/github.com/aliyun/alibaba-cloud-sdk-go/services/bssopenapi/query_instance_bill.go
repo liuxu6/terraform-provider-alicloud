@@ -76,15 +76,17 @@ func (client *Client) QueryInstanceBillWithCallback(request *QueryInstanceBillRe
 // QueryInstanceBillRequest is the request struct for api QueryInstanceBill
 type QueryInstanceBillRequest struct {
 	*requests.RpcRequest
-	IsBillingItem    requests.Boolean `position:"Query" name:"IsBillingItem"`
 	ProductCode      string           `position:"Query" name:"ProductCode"`
 	IsHideZeroCharge requests.Boolean `position:"Query" name:"IsHideZeroCharge"`
 	SubscriptionType string           `position:"Query" name:"SubscriptionType"`
-	PageSize         requests.Integer `position:"Query" name:"PageSize"`
 	BillingCycle     string           `position:"Query" name:"BillingCycle"`
 	OwnerId          requests.Integer `position:"Query" name:"OwnerId"`
 	PageNum          requests.Integer `position:"Query" name:"PageNum"`
+	BillingDate      string           `position:"Query" name:"BillingDate"`
 	ProductType      string           `position:"Query" name:"ProductType"`
+	IsBillingItem    requests.Boolean `position:"Query" name:"IsBillingItem"`
+	Granularity      string           `position:"Query" name:"Granularity"`
+	PageSize         requests.Integer `position:"Query" name:"PageSize"`
 }
 
 // QueryInstanceBillResponse is the response struct for api QueryInstanceBill

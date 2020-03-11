@@ -77,11 +77,15 @@ func (client *Client) RecoveryDBInstanceWithCallback(request *RecoveryDBInstance
 type RecoveryDBInstanceRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId       requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	DBInstanceStorage     requests.Integer `position:"Query" name:"DBInstanceStorage"`
+	ClientToken           string           `position:"Query" name:"ClientToken"`
+	ResourceGroupId       string           `position:"Query" name:"ResourceGroupId"`
+	DBInstanceDescription string           `position:"Query" name:"DBInstanceDescription"`
+	DBInstanceId          string           `position:"Query" name:"DBInstanceId"`
+	DBInstanceStorageType string           `position:"Query" name:"DBInstanceStorageType"`
 	RestoreTime           string           `position:"Query" name:"RestoreTime"`
 	Period                string           `position:"Query" name:"Period"`
-	DBInstanceStorage     requests.Integer `position:"Query" name:"DBInstanceStorage"`
 	ResourceOwnerAccount  string           `position:"Query" name:"ResourceOwnerAccount"`
-	ClientToken           string           `position:"Query" name:"ClientToken"`
 	BackupId              string           `position:"Query" name:"BackupId"`
 	OwnerAccount          string           `position:"Query" name:"OwnerAccount"`
 	OwnerId               requests.Integer `position:"Query" name:"OwnerId"`
@@ -90,11 +94,8 @@ type RecoveryDBInstanceRequest struct {
 	DbNames               string           `position:"Query" name:"DbNames"`
 	VSwitchId             string           `position:"Query" name:"VSwitchId"`
 	PrivateIpAddress      string           `position:"Query" name:"PrivateIpAddress"`
-	ResourceGroupId       string           `position:"Query" name:"ResourceGroupId"`
 	TargetDBInstanceId    string           `position:"Query" name:"TargetDBInstanceId"`
 	VPCId                 string           `position:"Query" name:"VPCId"`
-	DBInstanceDescription string           `position:"Query" name:"DBInstanceDescription"`
-	DBInstanceId          string           `position:"Query" name:"DBInstanceId"`
 	PayType               string           `position:"Query" name:"PayType"`
 	InstanceNetworkType   string           `position:"Query" name:"InstanceNetworkType"`
 }

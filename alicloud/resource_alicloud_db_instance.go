@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform/helper/hashcode"
 
@@ -12,8 +14,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -35,10 +37,9 @@ func resourceAlicloudDBInstance() *schema.Resource {
 
 		Schema: map[string]*schema.Schema{
 			"engine": {
-				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue([]string{string(MySQL), string(SQLServer), string(PostgreSQL), string(PPAS)}),
-				ForceNew:     true,
-				Required:     true,
+				Type:     schema.TypeString,
+				ForceNew: true,
+				Required: true,
 			},
 			"engine_version": {
 				Type: schema.TypeString,
@@ -47,19 +48,9 @@ func resourceAlicloudDBInstance() *schema.Resource {
 				ForceNew: true,
 				Required: true,
 			},
-			"db_instance_class": {
-				Type:       schema.TypeString,
-				Optional:   true,
-				Deprecated: "Field 'db_instance_class' has been deprecated from provider version 1.5.0. New field 'instance_type' replaces it.",
-			},
 			"instance_type": {
 				Type:     schema.TypeString,
 				Required: true,
-			},
-			"db_instance_storage": {
-				Type:       schema.TypeInt,
-				Optional:   true,
-				Deprecated: "Field 'db_instance_storage' has been deprecated from provider version 1.5.0. New field 'instance_storage' replaces it.",
 			},
 
 			"instance_storage": {
@@ -69,20 +60,20 @@ func resourceAlicloudDBInstance() *schema.Resource {
 
 			"instance_charge_type": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue([]string{string(Postpaid), string(Prepaid)}),
+				ValidateFunc: validation.StringInSlice([]string{string(Postpaid), string(Prepaid)}, false),
 				Optional:     true,
 				Default:      Postpaid,
 			},
 			"period": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateAllowedIntValue([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 24, 36}),
+				ValidateFunc:     validation.IntInSlice([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 24, 36}),
 				Optional:         true,
 				Default:          1,
-				DiffSuppressFunc: rdsPostPaidDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"monitoring_period": {
 				Type:         schema.TypeInt,
-				ValidateFunc: validateAllowedIntValue([]int{5, 60, 300}),
+				ValidateFunc: validation.IntInSlice([]int{5, 60, 300}),
 				Optional:     true,
 				Computed:     true,
 			},
@@ -90,26 +81,20 @@ func resourceAlicloudDBInstance() *schema.Resource {
 				Type:             schema.TypeBool,
 				Optional:         true,
 				Default:          false,
-				DiffSuppressFunc: rdsPostPaidDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"auto_renew_period": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateIntegerInRange(1, 12),
+				ValidateFunc:     validation.IntBetween(1, 12),
 				Optional:         true,
 				Default:          1,
-				DiffSuppressFunc: rdsPostPaidAndRenewDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidAndRenewDiffSuppressFunc,
 			},
 			"zone_id": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 				Computed: true,
-			},
-
-			"multi_az": {
-				Type:       schema.TypeBool,
-				Optional:   true,
-				Deprecated: "Field 'multi_az' has been deprecated from provider version 1.8.1. Please use field 'zone_id' to specify multiple availability zone.",
 			},
 
 			"vswitch_id": {
@@ -120,7 +105,7 @@ func resourceAlicloudDBInstance() *schema.Resource {
 			"instance_name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateDBInstanceName,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 
 			"connection_string": {
@@ -133,60 +118,6 @@ func resourceAlicloudDBInstance() *schema.Resource {
 				Computed: true,
 			},
 
-			"db_instance_net_type": {
-				Type:     schema.TypeString,
-				Optional: true,
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return true
-				},
-				Deprecated: "Field 'db_instance_net_type' has been deprecated from provider version 1.5.0.",
-			},
-			"allocate_public_connection": {
-				Type:       schema.TypeBool,
-				Optional:   true,
-				Deprecated: "Field 'allocate_public_connection' has been deprecated from provider version 1.5.0. New resource 'alicloud_db_connection' replaces it.",
-			},
-
-			"instance_network_type": {
-				Type:     schema.TypeString,
-				Optional: true,
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return true
-				},
-				Deprecated: "Field 'instance_network_type' has been deprecated from provider version 1.5.0.",
-			},
-
-			"master_user_name": {
-				Type:       schema.TypeString,
-				Optional:   true,
-				Deprecated: "Field 'master_user_name' has been deprecated from provider version 1.5.0. New resource 'alicloud_db_account' field 'name' replaces it.",
-			},
-
-			"master_user_password": {
-				Type:       schema.TypeString,
-				Optional:   true,
-				Deprecated: "Field 'master_user_password' has been deprecated from provider version 1.5.0. New resource 'alicloud_db_account' field 'password' replaces it.",
-			},
-
-			"preferred_backup_period": {
-				Type:       schema.TypeList,
-				Elem:       &schema.Schema{Type: schema.TypeString},
-				Optional:   true,
-				Deprecated: "Field 'preferred_backup_period' has been deprecated from provider version 1.5.0. New resource 'alicloud_db_backup_policy' field 'backup_period' replaces it.",
-			},
-
-			"preferred_backup_time": {
-				Type:       schema.TypeString,
-				Optional:   true,
-				Deprecated: "Field 'preferred_backup_time' has been deprecated from provider version 1.5.0. New resource 'alicloud_db_backup_policy' field 'backup_time' replaces it.",
-			},
-
-			"backup_retention_period": {
-				Type:       schema.TypeInt,
-				Optional:   true,
-				Deprecated: "Field 'backup_retention_period' has been deprecated from provider version 1.5.0. New resource 'alicloud_db_backup_policy' field 'retention_period' replaces it.",
-			},
-
 			"security_ips": {
 				Type:     schema.TypeSet,
 				Elem:     &schema.Schema{Type: schema.TypeString},
@@ -194,70 +125,34 @@ func resourceAlicloudDBInstance() *schema.Resource {
 				Optional: true,
 			},
 			"security_group_id": {
-				Type:     schema.TypeString,
+				Type:          schema.TypeString,
+				Optional:      true,
+				Computed:      true,
+				ConflictsWith: []string{"security_group_ids"},
+				Deprecated:    "Attribute `security_group_id` has been deprecated from 1.69.0 and use `security_group_ids` instead.",
+			},
+			"security_group_ids": {
+				Type:     schema.TypeSet,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				Optional: true,
 			},
-			"connections": {
-				Type: schema.TypeList,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"connection_string": {
-							Type:     schema.TypeString,
-							Required: true,
-						},
-						"ip_type": {
-							Type:     schema.TypeString,
-							Required: true,
-						},
-						"ip_address": {
-							Type:     schema.TypeString,
-							Optional: true,
-						},
-					},
-				},
-				Optional: true,
-				Computed: true,
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return true
-				},
-				Deprecated: "Field 'connections' has been deprecated from provider version 1.5.0. New resource 'alicloud_db_connection' replaces it.",
+			"security_ip_mode": {
+				Type:         schema.TypeString,
+				ValidateFunc: validation.StringInSlice([]string{NormalMode, SafetyMode}, false),
+				Optional:     true,
+				Default:      NormalMode,
 			},
 
-			"db_mappings": {
+			"parameters": {
 				Type: schema.TypeSet,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"db_name": {
+						"name": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
-						"character_set_name": {
-							Type:     schema.TypeString,
-							Required: true,
-						},
-						"db_description": {
-							Type:     schema.TypeString,
-							Optional: true,
-						},
-					},
-				},
-				Optional: true,
-				Computed: true,
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					return true
-				},
-				Deprecated: "Field 'db_mappings' has been deprecated from provider version 1.5.0. New resource 'alicloud_db_database' replaces it.",
-			},
-
-			"parameters": &schema.Schema{
-				Type: schema.TypeSet,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"name": &schema.Schema{
-							Type:     schema.TypeString,
-							Required: true,
-						},
-						"value": &schema.Schema{
+						"value": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
@@ -269,6 +164,40 @@ func resourceAlicloudDBInstance() *schema.Resource {
 			},
 
 			"tags": tagsSchema(),
+
+			"maintain_time": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+			},
+			// Default to Manual
+			"auto_upgrade_minor_version": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.StringInSlice([]string{"Auto", "Manual"}, false),
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("engine").(string) != "MySQL"
+				},
+			},
+			"db_instance_storage_type": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.StringInSlice([]string{"local_ssd", "cloud_ssd", "cloud_essd", "cloud_essd2", "cloud_essd3"}, false),
+			},
+			"sql_collector_status": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{"Enabled", "Disabled"}, false),
+				Default:      "Disabled",
+			},
+			"sql_collector_config_value": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				ValidateFunc: validation.IntInSlice([]int{30, 180, 365, 1095, 1825}),
+				Default:      30,
+			},
 		},
 	}
 }
@@ -323,22 +252,20 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 		return WrapError(err)
 	}
 
-	if !d.IsNewResource() && (d.HasChange("instance_charge_type")) {
+	payType := PayType(d.Get("instance_charge_type").(string))
+	if !d.IsNewResource() && d.HasChange("instance_charge_type") && payType == Prepaid {
 		prePaidRequest := rds.CreateModifyDBInstancePayTypeRequest()
 		prePaidRequest.RegionId = client.RegionId
 		prePaidRequest.DBInstanceId = d.Id()
-		payType := PayType(d.Get("instance_charge_type").(string))
 		prePaidRequest.PayType = string(payType)
-		if payType == Prepaid {
-			period := d.Get("period").(int)
-			prePaidRequest.UsedTime = requests.Integer(strconv.Itoa(period))
-			prePaidRequest.Period = string(Month)
-			if period > 9 {
-				prePaidRequest.UsedTime = requests.Integer(strconv.Itoa(period / 12))
-				prePaidRequest.Period = string(Year)
-			}
+		prePaidRequest.AutoPay = "true"
+		period := d.Get("period").(int)
+		prePaidRequest.UsedTime = requests.Integer(strconv.Itoa(period))
+		prePaidRequest.Period = string(Month)
+		if period > 9 {
+			prePaidRequest.UsedTime = requests.Integer(strconv.Itoa(period / 12))
+			prePaidRequest.Period = string(Year)
 		}
-
 		raw, err := client.WithRdsClient(func(client *rds.Client) (interface{}, error) {
 			return client.ModifyDBInstancePayType(prePaidRequest)
 		})
@@ -355,7 +282,7 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 
 	}
 
-	if d.HasChange("auto_renew") || d.HasChange("auto_renew_period") {
+	if payType == Prepaid && (d.HasChange("auto_renew") || d.HasChange("auto_renew_period")) {
 		request := rds.CreateModifyInstanceAutoRenewalAttributeRequest()
 		request.DBInstanceId = d.Id()
 		request.RegionId = client.RegionId
@@ -379,11 +306,16 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 		d.SetPartial("auto_renew_period")
 	}
 
-	if d.HasChange("security_group_id") {
-		err := rdsService.ModifySecurityGroupConfiguration(d.Id(), d.Get("security_group_id").(string))
+	if d.HasChange("security_group_ids") || d.HasChange("security_group_id") {
+		groupIds := d.Get("security_group_id").(string)
+		if d.HasChange("security_group_ids") {
+			groupIds = strings.Join(expandStringList(d.Get("security_group_ids").(*schema.Set).List())[:], COMMA_SEPARATED)
+		}
+		err := rdsService.ModifySecurityGroupConfiguration(d.Id(), groupIds)
 		if err != nil {
 			return WrapError(err)
 		}
+		d.SetPartial("security_group_ids")
 		d.SetPartial("security_group_id")
 	}
 
@@ -401,6 +333,39 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	}
+
+	if d.HasChange("maintain_time") {
+		request := rds.CreateModifyDBInstanceMaintainTimeRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		request.MaintainTime = d.Get("maintain_time").(string)
+		request.ClientToken = buildClientToken(request.GetActionName())
+
+		raw, err := client.WithRdsClient(func(client *rds.Client) (interface{}, error) {
+			return client.ModifyDBInstanceMaintainTime(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("maintain_time")
+	}
+	if d.HasChange("auto_upgrade_minor_version") {
+		request := rds.CreateModifyDBInstanceAutoUpgradeMinorVersionRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		request.AutoUpgradeMinorVersion = d.Get("auto_upgrade_minor_version").(string)
+		request.ClientToken = buildClientToken(request.GetActionName())
+
+		raw, err := client.WithRdsClient(func(client *rds.Client) (interface{}, error) {
+			return client.ModifyDBInstanceAutoUpgradeMinorVersion(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("auto_upgrade_minor_version")
 	}
 
 	if d.IsNewResource() {
@@ -439,11 +404,59 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 		d.SetPartial("security_ips")
 	}
 
+	if d.HasChange("security_ip_mode") && d.Get("security_ip_mode").(string) == SafetyMode {
+		request := rds.CreateMigrateSecurityIPModeRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+			return rdsClient.MigrateSecurityIPMode(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("security_ip_mode")
+	}
+
+	if d.HasChange("sql_collector_status") {
+		request := rds.CreateModifySQLCollectorPolicyRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		if d.Get("sql_collector_status").(string) == "Enabled" {
+			request.SQLCollectorStatus = "Enable"
+		} else {
+			request.SQLCollectorStatus = d.Get("sql_collector_status").(string)
+		}
+		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+			return rdsClient.ModifySQLCollectorPolicy(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("sql_collector_status")
+	}
+
+	if d.Get("sql_collector_status").(string) == "Enabled" && d.HasChange("sql_collector_config_value") && d.Get("sql_collector_config_value").(string) != "1" {
+		request := rds.CreateModifySQLCollectorRetentionRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		request.ConfigValue = strconv.Itoa(d.Get("sql_collector_config_value").(int))
+		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+			return rdsClient.ModifySQLCollectorRetention(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("sql_collector_config_value")
+	}
+
 	update := false
 	request := rds.CreateModifyDBInstanceSpecRequest()
 	request.RegionId = client.RegionId
 	request.DBInstanceId = d.Id()
-	request.PayType = string(Postpaid)
+	request.PayType = d.Get("instance_charge_type").(string)
 
 	if d.HasChange("instance_type") {
 		request.DBInstanceClass = d.Get("instance_type").(string)
@@ -454,7 +467,10 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 		request.DBInstanceStorage = requests.NewInteger(d.Get("instance_storage").(int))
 		update = true
 	}
-
+	if d.HasChange("db_instance_storage_type") {
+		request.DBInstanceStorageType = d.Get("db_instance_storage_type").(string)
+		update = true
+	}
 	if update {
 		// wait instance status is running before modifying
 		if _, err := stateConf.WaitForState(); err != nil {
@@ -465,7 +481,7 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 				return rdsClient.ModifyDBInstanceSpec(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{"InvalidOrderTask.NotSupport"}) {
+				if IsExpectedErrors(err, []string{"InvalidOrderTask.NotSupport"}) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -473,6 +489,7 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 			d.SetPartial("instance_type")
 			d.SetPartial("instance_storage")
+			d.SetPartial("db_instance_storage_type")
 			return nil
 		})
 
@@ -496,7 +513,7 @@ func resourceAlicloudDBInstanceRead(d *schema.ResourceData, meta interface{}) er
 
 	instance, err := rdsService.DescribeDBInstance(d.Id())
 	if err != nil {
-		if rdsService.NotFoundDBInstance(err) {
+		if NotFoundError(err) {
 			d.SetId("")
 			return nil
 		}
@@ -521,21 +538,45 @@ func resourceAlicloudDBInstanceRead(d *schema.ResourceData, meta interface{}) er
 		return WrapError(err)
 	}
 
+	sqlCollectorPolicy, err := rdsService.DescribeSQLCollectorPolicy(d.Id())
+	if err != nil {
+		return WrapError(err)
+	}
+
+	sqlCollectorRetention, err := rdsService.DescribeSQLCollectorRetention(d.Id())
+	if err != nil {
+		return WrapError(err)
+	}
+
 	d.Set("monitoring_period", monitoringPeriod)
 
 	d.Set("security_ips", ips)
+	d.Set("security_ip_mode", instance.SecurityIPMode)
 
 	d.Set("engine", instance.Engine)
 	d.Set("engine_version", instance.EngineVersion)
 	d.Set("instance_type", instance.DBInstanceClass)
 	d.Set("port", instance.Port)
 	d.Set("instance_storage", instance.DBInstanceStorage)
+	d.Set("db_instance_storage_type", instance.DBInstanceStorageType)
 	d.Set("zone_id", instance.ZoneId)
 	d.Set("instance_charge_type", instance.PayType)
 	d.Set("period", d.Get("period"))
 	d.Set("vswitch_id", instance.VSwitchId)
 	d.Set("connection_string", instance.ConnectionString)
 	d.Set("instance_name", instance.DBInstanceDescription)
+	d.Set("maintain_time", instance.MaintainTime)
+	d.Set("auto_upgrade_minor_version", instance.AutoUpgradeMinorVersion)
+	if sqlCollectorPolicy.SQLCollectorStatus == "Enable" {
+		d.Set("sql_collector_status", "Enabled")
+	} else {
+		d.Set("sql_collector_status", sqlCollectorPolicy.SQLCollectorStatus)
+	}
+	configValue, err := strconv.Atoi(sqlCollectorRetention.ConfigValue)
+	if err != nil {
+		return WrapError(err)
+	}
+	d.Set("sql_collector_config_value", configValue)
 
 	if err = rdsService.RefreshParameters(d, "parameters"); err != nil {
 		return WrapError(err)
@@ -556,18 +597,22 @@ func resourceAlicloudDBInstanceRead(d *schema.ResourceData, meta interface{}) er
 		response, _ := raw.(*rds.DescribeInstanceAutoRenewalAttributeResponse)
 		if response != nil && len(response.Items.Item) > 0 {
 			renew := response.Items.Item[0]
-			auto_renew := bool(renew.AutoRenew == "True")
-
-			d.Set("auto_renew", auto_renew)
+			d.Set("auto_renew", renew.AutoRenew == "True")
 			d.Set("auto_renew_period", renew.Duration)
 		}
+		period, err := computePeriodByUnit(instance.CreationTime, instance.ExpireTime, d.Get("period").(int), "Month")
+		if err != nil {
+			return WrapError(err)
+		}
+		d.Set("period", period)
 	}
 
-	object, err := rdsService.DescribeSecurityGroupConfiguration(d.Id())
+	groups, err := rdsService.DescribeSecurityGroupConfiguration(d.Id())
 	if err != nil {
 		return WrapError(err)
 	}
-	d.Set("security_group_id", object)
+	d.Set("security_group_id", strings.Join(groups, COMMA_SEPARATED))
+	d.Set("security_group_ids", groups)
 
 	return nil
 }
@@ -578,7 +623,7 @@ func resourceAlicloudDBInstanceDelete(d *schema.ResourceData, meta interface{}) 
 
 	instance, err := rdsService.DescribeDBInstance(d.Id())
 	if err != nil {
-		if rdsService.NotFoundDBInstance(err) {
+		if NotFoundError(err) {
 			return nil
 		}
 		return WrapError(err)
@@ -596,8 +641,8 @@ func resourceAlicloudDBInstanceDelete(d *schema.ResourceData, meta interface{}) 
 			return rdsClient.DeleteDBInstance(request)
 		})
 
-		if err != nil && !rdsService.NotFoundDBInstance(err) {
-			if IsExceptedErrors(err, []string{"OperationDenied.DBInstanceStatus", "OperationDenied.ReadDBInstanceStatus"}) {
+		if err != nil && !NotFoundError(err) {
+			if IsExpectedErrors(err, []string{"OperationDenied.DBInstanceStatus", "OperationDenied.ReadDBInstanceStatus"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -629,6 +674,7 @@ func buildDBCreateRequest(d *schema.ResourceData, meta interface{}) (*rds.Create
 	request.DBInstanceClass = Trim(d.Get("instance_type").(string))
 	request.DBInstanceNetType = string(Intranet)
 	request.DBInstanceDescription = d.Get("instance_name").(string)
+	request.DBInstanceStorageType = d.Get("db_instance_storage_type").(string)
 
 	if zone, ok := d.GetOk("zone_id"); ok && Trim(zone.(string)) != "" {
 		request.ZoneId = Trim(zone.(string))

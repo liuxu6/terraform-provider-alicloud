@@ -1,4 +1,5 @@
 ---
+subcategory: "Server Load Balancer (SLB)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_slb"
 sidebar_current: "docs-alicloud-resource-slb"
@@ -9,9 +10,6 @@ description: |-
 # alicloud\_slb
 
 Provides an Application Load Balancer resource.
-
--> **NOTE:** Resource `alicloud_slb` has deprecated 'listener' filed from terraform-alicloud-provider [version 1.3.0](https://github.com/alibaba/terraform-provider/releases/tag/V1.3.0) . You can create new listeners for Load Balancer by resource `alicloud_slb_listener`.
-If you have had several listeners in one load balancer, you can import them via the specified listener ID. In the `alicloud_slb_listener`, listener ID is consist of load balancer ID and frontend port, and its format is `<load balancer ID>:<frontend port>`, like "lb-hr2fwnf32t:8080".
 
 -> **NOTE:** At present, to avoid some unnecessary regulation confusion, SLB can not support alicloud international account to create "paybybandwidth" instance.
 
@@ -66,25 +64,28 @@ The following arguments are supported:
 * `name` - (Optional) The name of the SLB. This name must be unique within your AliCloud account, can have a maximum of 80 characters,
 must contain only alphanumeric characters or hyphens, such as "-","/",".","_", and must not begin or end with a hyphen. If not specified,
 Terraform will autogenerate a name beginning with `tf-lb`.
-* `internet` - (Optional, ForceNew) If true, the SLB addressType will be internet, false will be intranet, Default is false. If load balancer launched in VPC, this value must be "false".
+* `internet` - (Deprecated) Field 'internet' has been deprecated from provider version 1.55.3. Use 'address_type' replaces it.
+* `address_type` - (Optional, ForceNew, Available in 1.55.3+) The network type of the SLB instance. Valid values: ["internet", "intranet"]. If load balancer launched in VPC, this value must be "intranet".
+    - internet: After an Internet SLB instance is created, the system allocates a public IP address so that the instance can forward requests from the Internet.
+    - intranet: After an intranet SLB instance is created, the system allocates an intranet IP address so that the instance can only forward intranet requests.
 * `internet_charge_type` - (Optional, ForceNew) Valid
   values are `PayByBandwidth`, `PayByTraffic`. If this value is "PayByBandwidth", then argument "internet" must be "true". Default is "PayByTraffic". If load balancer launched in VPC, this value must be "PayByTraffic".
   Before version 1.10.1, the valid values are "paybybandwidth" and "paybytraffic".
 * `bandwidth` - (Optional) Valid
   value is between 1 and 1000, If argument "internet_charge_type" is "paybytraffic", then this value will be ignore.
-* `listener` - (Deprecated) The field has been deprecated from terraform-alicloud-provider [version 1.3.0](https://github.com/alibaba/terraform-provider/releases/tag/V1.3.0), and use resource `alicloud_slb_listener` to replace.
-* `vswitch_id` - (Required for a VPC SLB, Forces New Resource) The VSwitch ID to launch in.
+* `vswitch_id` - (Required for a VPC SLB, Forces New Resource) The VSwitch ID to launch in. If `address_type` is internet, it will be ignore.
 * `specification` - (Optional) The specification of the Server Load Balancer instance. Default to empty string indicating it is "Shared-Performance" instance.
  Launching "[Performance-guaranteed](https://www.alibabacloud.com/help/doc-detail/27657.htm)" instance, it is must be specified and it valid values are: "slb.s1.small", "slb.s2.small", "slb.s2.medium",
- "slb.s3.small", "slb.s3.medium" and "slb.s3.large".
+ "slb.s3.small", "slb.s3.medium", "slb.s3.large" and "slb.s4.large".
 * `tags` - (Optional) A mapping of tags to assign to the resource. The `tags` can have a maximum of 10 tag for every load balancer instance.
 * `instance_charge_type` - (Optional, Available in v1.34.0+) The billing method of the load balancer. Valid values are "PrePaid" and "PostPaid". Default to "PostPaid".
 * `period` - (Optional, Available in v1.34.0+) The duration that you will buy the resource, in month. It is valid when `instance_charge_type` is `PrePaid`. Default to 1. Valid values: [1-9, 12, 24, 36].
 * `master_zone_id` - (Optional, ForceNew, Available in v1.36.0+) The primary zone ID of the SLB instance. If not specified, the system will be randomly assigned. You can query the primary and standby zones in a region by calling the DescribeZone API.
 * `slave_zone_id` - (Optional, ForceNew, Available in v1.36.0+) The standby zone ID of the SLB instance. If not specified, the system will be randomly assigned. You can query the primary and standby zones in a region by calling the DescribeZone API.
 * `delete_protection` - (Optional, Available in v1.51.0+) Whether enable the deletion protection or not. on: Enable deletion protection. off: Disable deletion protection. Default to off. Only postpaid instance support this function.   
-* `address_ip_version` - (Optional, Available in v1.56.0+) The IP version of the SLB instance to be created, which can be set to ipv4 or ipv6 . Default to "ipv4". Now, only internet instance support ipv6 address.
-* `address` - (Optional, Available in v1.56.0+) Specify the IP address of the private network for the SLB instance, which must be in the destination CIDR block of the correspond ing switch.
+* `address_ip_version` - (Optional, Available in v1.55.2+) The IP version of the SLB instance to be created, which can be set to ipv4 or ipv6 . Default to "ipv4". Now, only internet instance support ipv6 address.
+* `address` - (Optional, Available in v1.55.2+) Specify the IP address of the private network for the SLB instance, which must be in the destination CIDR block of the correspond ing switch.
+* `resource_group_id` - (Optional, ForceNew, Available in v1.55.3+) The Id of resource group which the SLB belongs.
 
 -> **NOTE:** A "Shared-Performance" instance can be changed to "Performance-guaranteed", but the change is irreversible.
 
@@ -98,6 +99,7 @@ The following attributes are exported:
 
 * `id` - The ID of the load balancer.
 * `address` - The IP address of the load balancer.
+
 ## Import
 
 Load balancer can be imported using the id, e.g.

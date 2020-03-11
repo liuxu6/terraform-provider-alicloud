@@ -5,14 +5,16 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
 type SecurityGroup struct {
-	Attributes   ecs.DescribeSecurityGroupAttributeResponse
-	CreationTime string
-	Tags         ecs.TagsInDescribeSecurityGroups
+	Attributes        ecs.DescribeSecurityGroupAttributeResponse
+	CreationTime      string
+	SecurityGroupType string
+	ResourceGroupId   string
+	Tags              ecs.TagsInDescribeSecurityGroups
 }
 
 func dataSourceAlicloudSecurityGroups() *schema.Resource {
@@ -30,6 +32,11 @@ func dataSourceAlicloudSecurityGroups() *schema.Resource {
 				Optional: true,
 				ForceNew: true,
 			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
 			"output_file": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -39,6 +46,7 @@ func dataSourceAlicloudSecurityGroups() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"names": {
 				Type:     schema.TypeList,
@@ -67,6 +75,14 @@ func dataSourceAlicloudSecurityGroups() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"resource_group_id": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"security_group_type": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
 						"inner_access": {
 							Type:     schema.TypeBool,
 							Computed: true,
@@ -92,7 +108,7 @@ func dataSourceAlicloudSecurityGroupsRead(d *schema.ResourceData, meta interface
 	request.VpcId = d.Get("vpc_id").(string)
 	request.PageNumber = requests.NewInteger(1)
 	request.PageSize = requests.NewInteger(PageSizeLarge)
-
+	request.ResourceGroupId = d.Get("resource_group_id").(string)
 	var sg []SecurityGroup
 	var nameRegex *regexp.Regexp
 	if v, ok := d.GetOk("name_regex"); ok {
@@ -153,9 +169,11 @@ func dataSourceAlicloudSecurityGroupsRead(d *schema.ResourceData, meta interface
 
 			sg = append(sg,
 				SecurityGroup{
-					Attributes:   attr,
-					CreationTime: item.CreationTime,
-					Tags:         item.Tags,
+					Attributes:        attr,
+					CreationTime:      item.CreationTime,
+					SecurityGroupType: item.SecurityGroupType,
+					ResourceGroupId:   item.ResourceGroupId,
+					Tags:              item.Tags,
 				},
 			)
 		}
@@ -180,13 +198,15 @@ func securityGroupsDescription(d *schema.ResourceData, sg []SecurityGroup) error
 
 	for _, item := range sg {
 		mapping := map[string]interface{}{
-			"id":            item.Attributes.SecurityGroupId,
-			"name":          item.Attributes.SecurityGroupName,
-			"description":   item.Attributes.Description,
-			"vpc_id":        item.Attributes.VpcId,
-			"inner_access":  item.Attributes.InnerAccessPolicy == string(GroupInnerAccept),
-			"creation_time": item.CreationTime,
-			"tags":          tagsToMap(item.Tags.Tag),
+			"id":                  item.Attributes.SecurityGroupId,
+			"name":                item.Attributes.SecurityGroupName,
+			"description":         item.Attributes.Description,
+			"vpc_id":              item.Attributes.VpcId,
+			"resource_group_id":   item.ResourceGroupId,
+			"security_group_type": item.SecurityGroupType,
+			"inner_access":        item.Attributes.InnerAccessPolicy == string(GroupInnerAccept),
+			"creation_time":       item.CreationTime,
+			"tags":                tagsToMap(item.Tags.Tag),
 		}
 
 		ids = append(ids, string(item.Attributes.SecurityGroupId))

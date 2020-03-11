@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/gpdb"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -38,7 +40,7 @@ func resourceAlicloudGpdbConnection() *schema.Resource {
 				Optional:     true,
 				Computed:     true,
 				ForceNew:     true,
-				ValidateFunc: validateDBConnectionPrefix,
+				ValidateFunc: validation.StringLenBetween(1, 31),
 			},
 			"port": {
 				Type:         schema.TypeString,
@@ -78,7 +80,7 @@ func resourceAlicloudGpdbConnectionCreate(d *schema.ResourceData, meta interface
 			return gpdbClient.AllocateInstancePublicConnection(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, OperationDeniedDBStatus) {
+			if IsExpectedErrors(err, OperationDeniedDBStatus) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -153,7 +155,7 @@ func resourceAlicloudGpdbConnectionUpdate(d *schema.ResourceData, meta interface
 				return gpdbClient.ModifyDBInstanceConnectionString(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, OperationDeniedDBStatus) {
+				if IsExpectedErrors(err, OperationDeniedDBStatus) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -198,7 +200,7 @@ func resourceAlicloudGpdbConnectionDelete(d *schema.ResourceData, meta interface
 			return gpdbClient.ReleaseInstancePublicConnection(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{"OperationDenied.DBInstanceStatus"}) {
+			if IsExpectedErrors(err, []string{"OperationDenied.DBInstanceStatus"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -207,7 +209,7 @@ func resourceAlicloudGpdbConnectionDelete(d *schema.ResourceData, meta interface
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidGpdbNameNotFound, InvalidGpdbInstanceIdNotFound, InvalidCurrentConnectionStringNotFound, AtLeastOneNetTypeExists}) {
+		if IsExpectedErrors(err, []string{"InvalidDBInstanceId.NotFound", "InvalidCurrentConnectionString.NotFound", "AtLeastOneNetTypeExists"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

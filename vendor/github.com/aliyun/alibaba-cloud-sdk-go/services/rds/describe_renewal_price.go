@@ -77,19 +77,19 @@ func (client *Client) DescribeRenewalPriceWithCallback(request *DescribeRenewalP
 type DescribeRenewalPriceRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	ClientToken          string           `position:"Query" name:"ClientToken"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
+	BusinessInfo         string           `position:"Query" name:"BusinessInfo"`
 	Quantity             requests.Integer `position:"Query" name:"Quantity"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	ClientToken          string           `position:"Query" name:"ClientToken"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	CommodityCode        string           `position:"Query" name:"CommodityCode"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	UsedTime             string           `position:"Query" name:"UsedTime"`
+	UsedTime             requests.Integer `position:"Query" name:"UsedTime"`
 	DBInstanceClass      string           `position:"Query" name:"DBInstanceClass"`
 	PromotionCode        string           `position:"Query" name:"PromotionCode"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	TimeType             string           `position:"Query" name:"TimeType"`
 	PayType              string           `position:"Query" name:"PayType"`
-	BusinessInfo         string           `position:"Query" name:"BusinessInfo"`
 	OrderType            string           `position:"Query" name:"OrderType"`
 }
 

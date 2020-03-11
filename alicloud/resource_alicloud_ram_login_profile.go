@@ -5,7 +5,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ram"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -131,7 +131,7 @@ func resourceAlicloudRamLoginProfileDelete(d *schema.ResourceData, meta interfac
 		return ramClient.DeleteLoginProfile(request)
 	})
 	if err != nil {
-		if RamEntityNotExist(err) {
+		if IsExpectedErrors(err, []string{"EntityNotExist.User.LoginProfile"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

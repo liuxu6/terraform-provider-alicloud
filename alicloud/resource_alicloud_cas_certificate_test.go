@@ -8,9 +8,9 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cas"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -72,23 +72,23 @@ func testSweepCasCertificate(region string) error {
 		id := v.Id
 		skip := true
 		for _, prefix := range prefixes {
-			if strings.HasPrefix(strings.ToLower(name), "cert-"+strings.ToLower(prefix)) {
+			if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
 				skip = false
-				break
 			}
-		}
-		if skip {
-			log.Printf("[INFO] Skipping Certificate: %s (%d)", name, id)
-			continue
-		}
-		log.Printf("[INFO] Deleting Certificate: %s (%d)", name, id)
-		req := cas.CreateDeleteUserCertificateRequest()
-		req.CertId = requests.NewInteger(id)
-		_, err := client.WithCasClient(func(casClient *cas.Client) (interface{}, error) {
-			return casClient.DeleteUserCertificate(req)
-		})
-		if err != nil {
-			log.Printf("[ERROR] Failed to delete Certificate (%s (%d)): %s", name, id, err)
+
+			if skip {
+				log.Printf("[INFO] Skipping Certificate: %s (%d)", name, id)
+				continue
+			}
+			log.Printf("[INFO] Deleting Certificate: %s (%d)", name, id)
+			req := cas.CreateDeleteUserCertificateRequest()
+			req.CertId = requests.NewInteger(id)
+			_, err := client.WithCasClient(func(casClient *cas.Client) (interface{}, error) {
+				return casClient.DeleteUserCertificate(req)
+			})
+			if err != nil {
+				log.Printf("[ERROR] Failed to delete Certificate (%s (%d)): %s", name, id, err)
+			}
 		}
 	}
 
@@ -158,13 +158,14 @@ func testAccCheckCasCertificateDestroy(s *terraform.State) error {
 		client := testAccProvider.Meta().(*connectivity.AliyunClient)
 
 		casService := &CasService{client: client}
-		cert, err := casService.DescribeCas(rs.Primary.Attributes["id"])
-
-		if cert != nil {
+		_, err := casService.DescribeCas(rs.Primary.Attributes["id"])
+		if err != nil {
+			if NotFoundError(err) {
+				return nil
+			}
 			return WrapError(err)
 		}
 	}
-
 	return nil
 }
 

@@ -76,24 +76,27 @@ func (client *Client) DescribeAvailableResourceWithCallback(request *DescribeAva
 // DescribeAvailableResourceRequest is the request struct for api DescribeAvailableResource
 type DescribeAvailableResourceRequest struct {
 	*requests.RpcRequest
-	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	EngineVersion        string           `position:"Query" name:"EngineVersion"`
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	DBInstanceClass      string           `position:"Query" name:"DBInstanceClass"`
-	Engine               string           `position:"Query" name:"Engine"`
-	ZoneId               string           `position:"Query" name:"ZoneId"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
-	InstanceChargeType   string           `position:"Query" name:"InstanceChargeType"`
-	OrderType            string           `position:"Query" name:"OrderType"`
+	DBInstanceName        string           `position:"Query" name:"DBInstanceName"`
+	ResourceOwnerId       requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	EngineVersion         string           `position:"Query" name:"EngineVersion"`
+	Engine                string           `position:"Query" name:"Engine"`
+	DBInstanceId          string           `position:"Query" name:"DBInstanceId"`
+	DBInstanceStorageType string           `position:"Query" name:"DBInstanceStorageType"`
+	InstanceChargeType    string           `position:"Query" name:"InstanceChargeType"`
+	ResourceOwnerAccount  string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount          string           `position:"Query" name:"OwnerAccount"`
+	CommodityCode         string           `position:"Query" name:"CommodityCode"`
+	OwnerId               requests.Integer `position:"Query" name:"OwnerId"`
+	DBInstanceClass       string           `position:"Query" name:"DBInstanceClass"`
+	ZoneId                string           `position:"Query" name:"ZoneId"`
+	OrderType             string           `position:"Query" name:"OrderType"`
 }
 
 // DescribeAvailableResourceResponse is the response struct for api DescribeAvailableResource
 type DescribeAvailableResourceResponse struct {
 	*responses.BaseResponse
-	RequestId      string                                    `json:"RequestId" xml:"RequestId"`
-	AvailableZones AvailableZonesInDescribeAvailableResource `json:"AvailableZones" xml:"AvailableZones"`
+	RequestId      string         `json:"RequestId" xml:"RequestId"`
+	AvailableZones AvailableZones `json:"AvailableZones" xml:"AvailableZones"`
 }
 
 // CreateDescribeAvailableResourceRequest creates a request to invoke DescribeAvailableResource API

@@ -78,11 +78,11 @@ type QueryMonthlyInstanceConsumptionRequest struct {
 	*requests.RpcRequest
 	ProductCode      string           `position:"Query" name:"ProductCode"`
 	SubscriptionType string           `position:"Query" name:"SubscriptionType"`
-	PageSize         requests.Integer `position:"Query" name:"PageSize"`
 	BillingCycle     string           `position:"Query" name:"BillingCycle"`
 	OwnerId          requests.Integer `position:"Query" name:"OwnerId"`
 	PageNum          requests.Integer `position:"Query" name:"PageNum"`
 	ProductType      string           `position:"Query" name:"ProductType"`
+	PageSize         requests.Integer `position:"Query" name:"PageSize"`
 }
 
 // QueryMonthlyInstanceConsumptionResponse is the response struct for api QueryMonthlyInstanceConsumption

@@ -1,4 +1,5 @@
 ---
+subcategory: "CDN"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_cdn_domain_new"
 sidebar_current: "docs-alicloud-resource-cdn-domain-new"
@@ -43,6 +44,7 @@ The following arguments are supported:
 * `scope` - (Optional) Scope of the accelerated domain. Valid values are `domestic`, `overseas`, `global`. Default value is `domestic`. This parameter's setting is valid Only for the international users and domestic L3 and above users .
 * `sources` - (Optional, Type: list) The source address list of the accelerated domain. Defaults to null. See Block Sources.
 * `certificate_config` - (Optional, Type: list, Available in 1.52.0+)  Certificate config of the accelerated domain. It's a list and consist of at most 1 item.
+* `resource_group_id` - (Optional, Available in v1.67.0+) Resource group ID.
 
 ### Block sources
 
@@ -77,5 +79,5 @@ The following attributes are exported:
 CDN domain can be imported using the id, e.g.
 
 ```
-terraform import alicloud_cdn_domain_new.example cdn-abc123456
+terraform import alicloud_cdn_domain_new.example xxxx.com
 ```

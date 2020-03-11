@@ -78,12 +78,12 @@ type ModifyDBInstanceConnectionStringRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId         requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ConnectionStringPrefix  string           `position:"Query" name:"ConnectionStringPrefix"`
-	ResourceOwnerAccount    string           `position:"Query" name:"ResourceOwnerAccount"`
-	Port                    string           `position:"Query" name:"Port"`
-	OwnerAccount            string           `position:"Query" name:"OwnerAccount"`
 	DBInstanceId            string           `position:"Query" name:"DBInstanceId"`
+	ResourceOwnerAccount    string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount            string           `position:"Query" name:"OwnerAccount"`
 	OwnerId                 requests.Integer `position:"Query" name:"OwnerId"`
 	CurrentConnectionString string           `position:"Query" name:"CurrentConnectionString"`
+	Port                    string           `position:"Query" name:"Port"`
 }
 
 // ModifyDBInstanceConnectionStringResponse is the response struct for api ModifyDBInstanceConnectionString

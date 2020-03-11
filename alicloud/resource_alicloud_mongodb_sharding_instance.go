@@ -5,10 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/dds"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -30,24 +32,24 @@ func resourceAlicloudMongoDBShardingInstance() *schema.Resource {
 			},
 			"storage_engine": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue([]string{string(WiredTiger), string(RocksDB)}),
+				ValidateFunc: validation.StringInSlice([]string{"WiredTiger", "RocksDB"}, false),
 				Optional:     true,
 				Computed:     true,
 				ForceNew:     true,
 			},
 			"instance_charge_type": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue([]string{string(PrePaid), string(PostPaid)}),
+				ValidateFunc: validation.StringInSlice([]string{string(PrePaid), string(PostPaid)}, false),
 				Optional:     true,
 				ForceNew:     true,
 				Computed:     true,
 			},
 			"period": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateAllowedIntValue([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 24, 36}),
+				ValidateFunc:     validation.IntInSlice([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 24, 36}),
 				Optional:         true,
 				Computed:         true,
-				DiffSuppressFunc: mongoDBPeriodDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"zone_id": {
 				Type:     schema.TypeString,
@@ -62,7 +64,7 @@ func resourceAlicloudMongoDBShardingInstance() *schema.Resource {
 			"name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateDBInstanceName,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 			"security_ip_list": {
 				Type:     schema.TypeSet,
@@ -75,6 +77,19 @@ func resourceAlicloudMongoDBShardingInstance() *schema.Resource {
 				Optional:  true,
 				Sensitive: true,
 			},
+			"kms_encrypted_password": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				DiffSuppressFunc: kmsDiffSuppressFunc,
+			},
+			"kms_encryption_context": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("kms_encrypted_password").(string) == ""
+				},
+				Elem: schema.TypeString,
+			},
 			"backup_period": {
 				Type:     schema.TypeSet,
 				Elem:     &schema.Schema{Type: schema.TypeString},
@@ -83,7 +98,7 @@ func resourceAlicloudMongoDBShardingInstance() *schema.Resource {
 			},
 			"backup_time": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue(BACKUP_TIME),
+				ValidateFunc: validation.StringInSlice(BACKUP_TIME, false),
 				Optional:     true,
 				Computed:     true,
 			},
@@ -101,9 +116,8 @@ func resourceAlicloudMongoDBShardingInstance() *schema.Resource {
 							Required: true,
 						},
 						"node_storage": {
-							Type:         schema.TypeInt,
-							Required:     true,
-							ValidateFunc: validateIntegerInRange(10, 1000),
+							Type:     schema.TypeInt,
+							Required: true,
 						},
 						//Computed
 						"node_id": {
@@ -156,7 +170,19 @@ func buildMongoDBShardingCreateRequest(d *schema.ResourceData, meta interface{})
 	request.EngineVersion = Trim(d.Get("engine_version").(string))
 	request.Engine = "MongoDB"
 	request.DBInstanceDescription = d.Get("name").(string)
+
 	request.AccountPassword = d.Get("account_password").(string)
+	if request.AccountPassword == "" {
+		if v := d.Get("kms_encrypted_password").(string); v != "" {
+			kmsService := KmsService{client}
+			decryptResp, err := kmsService.Decrypt(v, d.Get("kms_encryption_context").(map[string]interface{}))
+			if err != nil {
+				return request, WrapError(err)
+			}
+			request.AccountPassword = decryptResp.Plaintext
+		}
+	}
+
 	request.ZoneId = d.Get("zone_id").(string)
 
 	shardList, ok := d.GetOk("shard_list")
@@ -279,6 +305,13 @@ func resourceAlicloudMongoDBShardingInstanceRead(d *schema.ResourceData, meta in
 	d.Set("storage_engine", instance.StorageEngine)
 	d.Set("zone_id", instance.ZoneId)
 	d.Set("instance_charge_type", instance.ChargeType)
+	if instance.ChargeType == "PrePaid" {
+		period, err := computePeriodByUnit(instance.CreationTime, instance.ExpireTime, d.Get("period").(int), "Month")
+		if err != nil {
+			return WrapError(err)
+		}
+		d.Set("period", period)
+	}
 	d.Set("vswitch_id", instance.VSwitchId)
 
 	mongosList := []map[string]interface{}{}
@@ -310,7 +343,7 @@ func resourceAlicloudMongoDBShardingInstanceRead(d *schema.ResourceData, meta in
 		return WrapError(err)
 	}
 
-	ips, err := ddsService.GetSecurityIps(d.Id())
+	ips, err := ddsService.DescribeMongoDBSecurityIps(d.Id())
 	if err != nil {
 		return WrapError(err)
 	}
@@ -373,8 +406,22 @@ func resourceAlicloudMongoDBShardingInstanceUpdate(d *schema.ResourceData, meta 
 		d.SetPartial("name")
 	}
 
-	if d.HasChange("account_password") {
-		err := ddsService.ResetAccountPassword(d, d.Get("account_password").(string))
+	if d.HasChange("account_password") || d.HasChange("kms_encrypted_password") {
+		var accountPassword string
+		if accountPassword = d.Get("account_password").(string); accountPassword != "" {
+			d.SetPartial("account_password")
+		} else if kmsPassword := d.Get("kms_encrypted_password").(string); kmsPassword != "" {
+			kmsService := KmsService{meta.(*connectivity.AliyunClient)}
+			decryptResp, err := kmsService.Decrypt(kmsPassword, d.Get("kms_encryption_context").(map[string]interface{}))
+			if err != nil {
+				return WrapError(err)
+			}
+			accountPassword = decryptResp.Plaintext
+			d.SetPartial("kms_encrypted_password")
+			d.SetPartial("kms_encryption_context")
+		}
+
+		err := ddsService.ResetAccountPassword(d, accountPassword)
 		if err != nil {
 			return WrapError(err)
 		}
@@ -412,7 +459,7 @@ func resourceAlicloudMongoDBShardingInstanceDelete(d *schema.ResourceData, meta 
 		})
 
 		if err != nil {
-			if ddsService.NotFoundMongoDBInstance(err) {
+			if IsExpectedErrors(err, []string{"InvalidDBInstanceId.NotFound"}) {
 				return resource.NonRetryableError(err)
 			}
 			return resource.RetryableError(err)
@@ -422,6 +469,9 @@ func resourceAlicloudMongoDBShardingInstanceDelete(d *schema.ResourceData, meta 
 	})
 
 	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidDBInstanceId.NotFound"}) {
+			return nil
+		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	return WrapError(ddsService.WaitForMongoDBInstance(d.Id(), Deleted, DefaultTimeout))

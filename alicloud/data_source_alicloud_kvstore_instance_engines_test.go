@@ -49,7 +49,7 @@ func TestAccAlicloudKVStoreInstanceEngines(t *testing.T) {
 		fakeConfig: testAccConfig(map[string]interface{}{
 			"zone_id":              "${data.alicloud_zones.resources.zones.0.id}",
 			"instance_charge_type": "PostPaid",
-			"engine":               "Fake",
+			"engine":               "Redis",
 			"engine_version":       "5.6",
 		}),
 	}
@@ -74,5 +74,7 @@ func TestAccAlicloudKVStoreInstanceEngines(t *testing.T) {
 		existMapFunc: existKVStoreInstanceMapFunc,
 		fakeMapFunc:  fakeKVStoreInstanceMapFunc,
 	}
-	KVStoreInstanceCheckInfo.dataSourceTestCheck(t, rand, EngineVersionConfRedis, EngineVersionConfMemcache, ChargeTypeConfPostpaid, allConf)
+	// At present, the datasource does not support memcache
+	//KVStoreInstanceCheckInfo.dataSourceTestCheck(t, rand, EngineVersionConfRedis, EngineVersionConfMemcache, ChargeTypeConfPostpaid, allConf)
+	KVStoreInstanceCheckInfo.dataSourceTestCheck(t, rand, EngineVersionConfRedis, ChargeTypeConfPostpaid, EngineVersionConfMemcache, allConf)
 }

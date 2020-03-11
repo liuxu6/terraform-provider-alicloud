@@ -78,8 +78,8 @@ type DescribeAvailableRecoveryTimeRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	CrossBackupId        requests.Integer `position:"Query" name:"CrossBackupId"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	CrossBackupId        requests.Integer `position:"Query" name:"CrossBackupId"`
 }
 
 // DescribeAvailableRecoveryTimeResponse is the response struct for api DescribeAvailableRecoveryTime

@@ -6,8 +6,8 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -65,7 +65,7 @@ func resourceAlicloudCenInstanceGrantCreate(d *schema.ResourceData, meta interfa
 			return vpcClient.GrantInstanceToCen(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{OperationBlocking, UnknownError}) {
+			if IsExpectedErrors(err, []string{"Operation.Blocking", "UnknownError"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -138,9 +138,9 @@ func resourceAlicloudCenInstanceGrantDelete(d *schema.ResourceData, meta interfa
 		})
 
 		if err != nil {
-			if IsExceptedError(err, InvalidInstanceIdNotFound) {
+			if IsExpectedErrors(err, []string{"InvalidInstanceId.NotFound"}) {
 				return nil
-			} else if IsExceptedErrors(err, []string{IncorrectStatus, TaskConflict}) {
+			} else if IsExpectedErrors(err, []string{"IncorrectStatus", "TaskConflict"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)

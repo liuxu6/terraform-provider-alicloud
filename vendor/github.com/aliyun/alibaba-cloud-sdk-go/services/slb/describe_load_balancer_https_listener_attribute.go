@@ -79,11 +79,11 @@ type DescribeLoadBalancerHTTPSListenerAttributeRequest struct {
 	AccessKeyId          string           `position:"Query" name:"access_key_id"`
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ListenerPort         requests.Integer `position:"Query" name:"ListenerPort"`
-	LoadBalancerId       string           `position:"Query" name:"LoadBalancerId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	Tags                 string           `position:"Query" name:"Tags"`
+	LoadBalancerId       string           `position:"Query" name:"LoadBalancerId"`
 }
 
 // DescribeLoadBalancerHTTPSListenerAttributeResponse is the response struct for api DescribeLoadBalancerHTTPSListenerAttribute
@@ -92,7 +92,7 @@ type DescribeLoadBalancerHTTPSListenerAttributeResponse struct {
 	RequestId              string                                                       `json:"RequestId" xml:"RequestId"`
 	ListenerPort           int                                                          `json:"ListenerPort" xml:"ListenerPort"`
 	BackendServerPort      int                                                          `json:"BackendServerPort" xml:"BackendServerPort"`
-	BackendProtocol        int                                                          `json:"BackendProtocol" xml:"BackendProtocol"`
+	BackendProtocol        string                                                       `json:"BackendProtocol" xml:"BackendProtocol"`
 	Bandwidth              int                                                          `json:"Bandwidth" xml:"Bandwidth"`
 	Status                 string                                                       `json:"Status" xml:"Status"`
 	SecurityStatus         string                                                       `json:"SecurityStatus" xml:"SecurityStatus"`
@@ -115,6 +115,7 @@ type DescribeLoadBalancerHTTPSListenerAttributeResponse struct {
 	ServerCertificateId    string                                                       `json:"ServerCertificateId" xml:"ServerCertificateId"`
 	CACertificateId        string                                                       `json:"CACertificateId" xml:"CACertificateId"`
 	HealthCheckMethod      string                                                       `json:"HealthCheckMethod" xml:"HealthCheckMethod"`
+	HealthCheckHttpVersion string                                                       `json:"HealthCheckHttpVersion" xml:"HealthCheckHttpVersion"`
 	MaxConnection          int                                                          `json:"MaxConnection" xml:"MaxConnection"`
 	VServerGroupId         string                                                       `json:"VServerGroupId" xml:"VServerGroupId"`
 	Gzip                   string                                                       `json:"Gzip" xml:"Gzip"`
@@ -130,6 +131,7 @@ type DescribeLoadBalancerHTTPSListenerAttributeResponse struct {
 	EnableHttp2            string                                                       `json:"EnableHttp2" xml:"EnableHttp2"`
 	TLSCipherPolicy        string                                                       `json:"TLSCipherPolicy" xml:"TLSCipherPolicy"`
 	Description            string                                                       `json:"Description" xml:"Description"`
+	AclIds                 AclIdsInDescribeLoadBalancerHTTPSListenerAttribute           `json:"AclIds" xml:"AclIds"`
 	Rules                  RulesInDescribeLoadBalancerHTTPSListenerAttribute            `json:"Rules" xml:"Rules"`
 	DomainExtensions       DomainExtensionsInDescribeLoadBalancerHTTPSListenerAttribute `json:"DomainExtensions" xml:"DomainExtensions"`
 }

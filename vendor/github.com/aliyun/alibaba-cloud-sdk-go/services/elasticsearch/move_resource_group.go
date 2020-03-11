@@ -76,14 +76,15 @@ func (client *Client) MoveResourceGroupWithCallback(request *MoveResourceGroupRe
 // MoveResourceGroupRequest is the request struct for api MoveResourceGroup
 type MoveResourceGroupRequest struct {
 	*requests.RoaRequest
-	InstanceId string `position:"Path" name:"InstanceId"`
+	InstanceId  string `position:"Path" name:"InstanceId"`
+	ClientToken string `position:"Query" name:"clientToken"`
 }
 
 // MoveResourceGroupResponse is the response struct for api MoveResourceGroup
 type MoveResourceGroupResponse struct {
 	*responses.BaseResponse
-	RequestId string `json:"RequestId" xml:"RequestId"`
-	Result    Result `json:"Result" xml:"Result"`
+	RequestId string                    `json:"RequestId" xml:"RequestId"`
+	Result    ResultInMoveResourceGroup `json:"Result" xml:"Result"`
 }
 
 // CreateMoveResourceGroupRequest creates a request to invoke MoveResourceGroup API
@@ -92,7 +93,7 @@ func CreateMoveResourceGroupRequest() (request *MoveResourceGroupRequest) {
 		RoaRequest: &requests.RoaRequest{},
 	}
 	request.InitWithApiInfo("elasticsearch", "2017-06-13", "MoveResourceGroup", "/openapi/instances/[InstanceId]/resourcegroup", "elasticsearch", "openAPI")
-	request.Method = requests.POST
+	request.Method = requests.PATCH
 	return
 }
 

@@ -1,4 +1,5 @@
 ---
+subcategory: "RDS"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_db_instance"
 sidebar_current: "docs-alicloud-resource-db-instance"
@@ -93,9 +94,7 @@ The following arguments are supported:
 
 * `engine` - (Required,ForceNew) Database type. Value options: MySQL, SQLServer, PostgreSQL, and PPAS.
 * `engine_version` - (Required,ForceNew) Database version. Value options can refer to the latest docs [CreateDBInstance](https://www.alibabacloud.com/help/doc-detail/26228.htm) `EngineVersion`.
-* `db_instance_class` - (Deprecated) It has been deprecated from version 1.5.0 and use 'instance_type' to replace.
 * `instance_type` - (Required) DB Instance type. For details, see [Instance type table](https://www.alibabacloud.com/help/doc-detail/26312.htm).
-* `db_instance_storage` - (Deprecated) It has been deprecated from version 1.5.0 and use 'instance_storage' to replace.
 * `instance_storage` - (Required) User-defined DB instance storage space. Value range:
     - [5, 2000] for MySQL/PostgreSQL/PPAS HA dual node edition;
     - [20,1000] for MySQL 5.7 basic single node edition;
@@ -104,6 +103,16 @@ The following arguments are supported:
     Increase progressively at a rate of 5 GB. For details, see [Instance type table](https://www.alibabacloud.com/help/doc-detail/26312.htm).
     Note: There is extra 5 GB storage for SQL Server Instance and it is not in specified `instance_storage`.
 
+* `db_instance_storage_type` - (Optional, Available in 1.68.0+) The storage type of the instance. Valid values:
+    - local_ssd: specifies to use local SSDs. This value is recommended.
+    - cloud_ssd: specifies to use standard SSDs.
+    - cloud_essd: specifies to use enhanced SSDs (ESSDs).
+    - cloud_essd2: specifies to use enhanced SSDs (ESSDs).
+    - cloud_essd3: specifies to use enhanced SSDs (ESSDs).
+
+* `sql_collector_status` - (Optional, Available in 1.70.0+) The sql collector status of the instance. Valid values are `Enabled`, `Disabled`, Default to `Disabled`.
+* `sql_collector_config_value` - (Optional, Available in 1.70.0+) The sql collector keep time of the instance. Valid values are `1`, `30`, `180`, `365`, `1095`, `1825`, `1` is the initial value, and can't change it to `1`.
+    
 * `instance_name` - (Optional) The name of DB instance. It a string of 2 to 256 characters.
 * `instance_charge_type` - (Optional) Valid values are `Prepaid`, `Postpaid`, Default to `Postpaid`. Currently, the resource only supports PostPaid to PrePaid.
 * `period` - (Optional) The duration that you will buy DB instance (in month). It is valid when instance_charge_type is `PrePaid`. Valid values: [1~9], 12, 24, 36. Default to 1.
@@ -113,21 +122,24 @@ The following arguments are supported:
 * `zone_id` - (ForceNew) The Zone to launch the DB instance. From version 1.8.1, it supports multiple zone.
 If it is a multi-zone and `vswitch_id` is specified, the vswitch must in the one of them.
 The multiple zone ID can be retrieved by setting `multi` to "true" in the data source `alicloud_zones`.
-* `multi_az` - (Optional) It has been deprecated from version 1.8.1, and `zone_id` can support multiple zone.
-* `db_instance_net_type` - (Deprecated) It has been deprecated from version 1.5.0. If you want to set public connection, please use new resource `alicloud_db_connection`. Default to Intranet.
-* `allocate_public_connection` - (Deprecated) It has been deprecated from version 1.5.0. If you want to allocate public connection string, please use new resource `alicloud_db_connection`.
-* `instance_network_type` - (Deprecated) It has been deprecated from version 1.5.0. If you want to create instances in VPC network, this parameter must be set.
 * `vswitch_id` - (ForceNew) The virtual switch ID to launch DB instances in one VPC.
-* `master_user_name` - (Deprecated) It has been deprecated from version 1.5.0. New resource `alicloud_db_account` field 'name' replaces it.
-* `master_user_password`  - (Deprecated) It has been deprecated from version 1.5.0. New resource `alicloud_db_account` field 'password' replaces it.
-* `preferred_backup_period`  - (Deprecated) It has been deprecated from version 1.5.0. New resource `alicloud_db_backup_policy` field 'backup_period' replaces it.
-* `preferred_backup_time` - (Deprecated) It has been deprecated from version 1.5.0. New resource `alicloud_db_backup_policy` field 'backup_time' replaces it.
-* `backup_retention_period` - (Deprecated) It has been deprecated from version 1.5.0. New resource `alicloud_db_backup_policy` field 'retention_period' replaces it.
 * `security_ips` - (Optional) List of IP addresses allowed to access all databases of an instance. The list contains up to 1,000 IP addresses, separated by commas. Supported formats include 0.0.0.0/0, 10.23.12.24 (IP), and 10.23.12.24/24 (Classless Inter-Domain Routing (CIDR) mode. /24 represents the length of the prefix in an IP address. The range of the prefix length is [1,32]).
-* `db_mappings` - (Deprecated) It has been deprecated from version 1.5.0. New resource `alicloud_db_database` replaces it.
+* `security_ip_mode` - (Optional, Available in 1.62.1+)  Valid values are `normal`, `safety`, Default to `normal`. support `safety` switch to high security access mode 
 * `parameters` - (Optional) Set of parameters needs to be set after DB instance was launched. Available parameters can refer to the latest docs [View database parameter templates](https://www.alibabacloud.com/help/doc-detail/26284.htm) .
-* `tags` - (Optional) the instance bound to the tag. The format of the incoming value is `json` string, including `TagKey` and `TagValue`. `TagKey` cannot be null, and `TagValue` can be empty, and both cannot begin with `aliyun`. Format example `{"key1":"value1"}`.
-* `security_group_id` - (Optional) Input the ECS Security Group ID to join ECS Security Group. Only support mysql 5.5, mysql 5.6
+* `tags` - (Optional) A mapping of tags to assign to the resource.
+    - Key: It can be up to 64 characters in length. It cannot begin with "aliyun", "acs:", "http://", or "https://". It cannot be a null string.
+    - Value: It can be up to 128 characters in length. It cannot begin with "aliyun", "acs:", "http://", or "https://". It can be a null string.
+
+   Note: From 1.63.0, the tag key and value are case sensitive. Before that, they are not case sensitive.
+
+* `security_group_id` - (Deprecated) It has been deprecated from 1.69.0 and use `security_group_ids` instead.
+* `security_group_ids` - (Optional, List(string), Available in 1.69.0+) The list IDs to join ECS Security Group. At most supports three security groups.
+* `maintain_time` - (Optional, Available in 1.56.0+) Maintainable time period format of the instance: HH:MMZ-HH:MMZ (UTC time)
+* `auto_upgrade_minor_version` - (Optional, Available in 1.62.1+) The upgrade method to use. Valid values:
+   - Auto: Instances are automatically upgraded to a higher minor version.
+   - Manual: Instances are forcibly upgraded to a higher minor version when the current version is unpublished.
+   
+   Default to "Manual". See more [details and limitation](https://www.alibabacloud.com/help/doc-detail/123605.htm).
 
 -> **NOTE:** Because of data backup and migration, change DB instance type and storage would cost 15~20 minutes. Please make full preparation before changing them.
 

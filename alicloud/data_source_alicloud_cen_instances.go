@@ -6,7 +6,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cbn"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -19,13 +20,14 @@ func dataSourceAlicloudCenInstances() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				ForceNew: true,
 			},
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"output_file": {
 				Type:     schema.TypeString,
@@ -123,7 +125,7 @@ func getCenInstances(filters []cbn.DescribeCensFilter, d *schema.ResourceData, m
 			return cbnClient.DescribeCens(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, CenThrottlingUser) {
+			if IsExpectedErrors(err, []string{ThrottlingUser}) {
 				if time.Now().After(deadline) {
 					return nil, WrapErrorf(err, DataDefaultErrorMsg, "alicloud_cen_instances", request.GetActionName(), AlibabaCloudSdkGoERROR)
 				}
@@ -153,11 +155,11 @@ func getCenInstances(filters []cbn.DescribeCensFilter, d *schema.ResourceData, m
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return allCens, WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 	return allCens, nil
 }
@@ -273,11 +275,11 @@ func censDescribeCenAttachedChildInstances(d *schema.ResourceData, cenId string,
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return instanceIds, WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	return instanceIds, nil

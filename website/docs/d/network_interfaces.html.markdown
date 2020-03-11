@@ -1,4 +1,5 @@
 ---
+subcategory: "ECS"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_network_interfaces"
 sidebar_current: "docs-alicloud-datasource-network-interfaces"
@@ -104,6 +105,7 @@ The following arguments are supported:
 * `instance_id` - (Optional) The ECS instance ID that the ENI is attached to.
 * `tags` - (Optional) A map of tags assigned to ENIs.
 * `output_file` - (Optional) The name of output file that saves the filter results.
+* `resource_group_id` - (Optional, ForceNew, Available in 1.57.0+) The Id of resource group which the network interface belongs.
 
 ## Attributes Reference
 
@@ -125,3 +127,4 @@ The following attributes are exported in addition to the arguments listed above:
     * `instance_id` - ID of the instance that the ENI is attached to.
     * `creation_time` - Creation time of the ENI.
     * `tags` - A map of tags assigned to the ENI.
+    * `resource_group_id` - The Id of resource group.

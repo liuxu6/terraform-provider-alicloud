@@ -1,11 +1,9 @@
 package alicloud
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -23,23 +21,12 @@ func resourceAliyunRouteTable() *schema.Resource {
 			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceDescription,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 			"name": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-					if len(value) < 2 || len(value) > 128 {
-						errors = append(errors, fmt.Errorf("%s cannot be longer than 128 characters", k))
-					}
-
-					if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-						errors = append(errors, fmt.Errorf("%s cannot starts with http:// or https://", k))
-					}
-
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 
 			"vpc_id": {
@@ -47,6 +34,7 @@ func resourceAliyunRouteTable() *schema.Resource {
 				Required: true,
 				ForceNew: true,
 			},
+			"tags": tagsSchema(),
 		},
 	}
 }
@@ -77,7 +65,7 @@ func resourceAliyunRouteTableCreate(d *schema.ResourceData, meta interface{}) er
 		return WrapError(err)
 	}
 
-	return resourceAliyunRouteTableRead(d, meta)
+	return resourceAliyunRouteTableUpdate(d, meta)
 }
 
 func resourceAliyunRouteTableRead(d *schema.ResourceData, meta interface{}) error {
@@ -94,12 +82,20 @@ func resourceAliyunRouteTableRead(d *schema.ResourceData, meta interface{}) erro
 	d.Set("vpc_id", object.VpcId)
 	d.Set("name", object.RouteTableName)
 	d.Set("description", object.Description)
+	d.Set("tags", vpcTagsToMap(object.Tags.Tag))
 	return nil
 }
 
 func resourceAliyunRouteTableUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-
+	vpcService := VpcService{client}
+	if err := vpcService.setInstanceTags(d, TagResourceRouteTable); err != nil {
+		return WrapError(err)
+	}
+	if d.IsNewResource() {
+		d.Partial(false)
+		return resourceAliyunRouteTableRead(d, meta)
+	}
 	request := vpc.CreateModifyRouteTableAttributesRequest()
 	request.RegionId = client.RegionId
 	request.RouteTableId = d.Id()

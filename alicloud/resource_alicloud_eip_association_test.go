@@ -7,8 +7,8 @@ import (
 	"github.com/hashicorp/terraform/helper/acctest"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -155,7 +155,7 @@ data "alicloud_instance_types" "default" {
 }
 
 data "alicloud_images" "default" {
-	name_regex = "^ubuntu_14.*_64"
+	name_regex = "^ubuntu_18.*64"
 	most_recent = true
 	owners = "system"
 }
@@ -217,7 +217,7 @@ data "alicloud_instance_types" "default" {
 }
 
 data "alicloud_images" "default" {
-	name_regex = "^ubuntu_14.*_64"
+	name_regex = "^ubuntu_18.*64"
 	most_recent = true
 	owners = "system"
 }

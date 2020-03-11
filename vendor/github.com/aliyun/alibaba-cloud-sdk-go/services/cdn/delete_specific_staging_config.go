@@ -77,9 +77,9 @@ func (client *Client) DeleteSpecificStagingConfigWithCallback(request *DeleteSpe
 type DeleteSpecificStagingConfigRequest struct {
 	*requests.RpcRequest
 	SecurityToken string           `position:"Query" name:"SecurityToken"`
-	ConfigId      string           `position:"Query" name:"ConfigId"`
 	DomainName    string           `position:"Query" name:"DomainName"`
 	OwnerId       requests.Integer `position:"Query" name:"OwnerId"`
+	ConfigId      string           `position:"Query" name:"ConfigId"`
 }
 
 // DeleteSpecificStagingConfigResponse is the response struct for api DeleteSpecificStagingConfig
@@ -93,7 +93,7 @@ func CreateDeleteSpecificStagingConfigRequest() (request *DeleteSpecificStagingC
 	request = &DeleteSpecificStagingConfigRequest{
 		RpcRequest: &requests.RpcRequest{},
 	}
-	request.InitWithApiInfo("Cdn", "2018-05-10", "DeleteSpecificStagingConfig", "cdn", "openAPI")
+	request.InitWithApiInfo("Cdn", "2018-05-10", "DeleteSpecificStagingConfig", "", "")
 	return
 }
 

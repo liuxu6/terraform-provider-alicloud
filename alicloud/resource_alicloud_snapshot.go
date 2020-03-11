@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -26,17 +26,17 @@ func resourceAliyunSnapshot() *schema.Resource {
 		},
 
 		Schema: map[string]*schema.Schema{
-			"disk_id": &schema.Schema{
+			"disk_id": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 			},
-			"description": &schema.Schema{
+			"description": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
@@ -132,7 +132,7 @@ func resourceAliyunSnapshotDelete(d *schema.ResourceData, meta interface{}) erro
 			return ecsClient.DeleteSnapshot(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, SnapshotInvalidOperations) {
+			if IsExpectedErrors(err, SnapshotInvalidOperations) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -141,7 +141,7 @@ func resourceAliyunSnapshotDelete(d *schema.ResourceData, meta interface{}) erro
 		return nil
 	})
 	if err != nil {
-		if IsExceptedError(err, SnapshotNotFound) {
+		if IsExpectedErrors(err, []string{"InvalidSnapshotId.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

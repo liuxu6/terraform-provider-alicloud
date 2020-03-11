@@ -3,17 +3,18 @@ package alicloud
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -41,8 +42,8 @@ func (s *SlbService) BuildSlbCommonRequest() (*requests.CommonRequest, error) {
 	return req, err
 }
 
-func (s *SlbService) DescribeSlb(id string) (response *slb.DescribeLoadBalancerAttributeResponse, err error) {
-
+func (s *SlbService) DescribeSlb(id string) (*slb.DescribeLoadBalancerAttributeResponse, error) {
+	response := &slb.DescribeLoadBalancerAttributeResponse{}
 	request := slb.CreateDescribeLoadBalancerAttributeRequest()
 	request.RegionId = s.client.RegionId
 	request.LoadBalancerId = id
@@ -50,22 +51,23 @@ func (s *SlbService) DescribeSlb(id string) (response *slb.DescribeLoadBalancerA
 		return slbClient.DescribeLoadBalancerAttribute(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{LoadBalancerNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidLoadBalancerId.NotFound"}) {
 			err = WrapErrorf(Error(GetNotFoundMessage("Slb", id)), NotFoundMsg, AlibabaCloudSdkGoERROR)
 		} else {
 			err = WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
-		return
+		return response, err
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest)
 	response, _ = raw.(*slb.DescribeLoadBalancerAttributeResponse)
 	if response.LoadBalancerId == "" {
 		err = WrapErrorf(Error(GetNotFoundMessage("Slb", id)), NotFoundMsg, ProviderERROR)
 	}
-	return
+	return response, err
 }
 
 func (s *SlbService) DescribeSlbRule(id string) (*slb.DescribeRuleAttributeResponse, error) {
+	response := &slb.DescribeRuleAttributeResponse{}
 	request := slb.CreateDescribeRuleAttributeRequest()
 	request.RegionId = s.client.RegionId
 	request.RuleId = id
@@ -73,20 +75,21 @@ func (s *SlbService) DescribeSlbRule(id string) (*slb.DescribeRuleAttributeRespo
 		return slbClient.DescribeRuleAttribute(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidRuleIdNotFound}) {
-			return nil, WrapErrorf(Error(GetNotFoundMessage("SlbRule", id)), NotFoundMsg, AlibabaCloudSdkGoERROR)
+		if IsExpectedErrors(err, []string{"InvalidRuleId.NotFound"}) {
+			return response, WrapErrorf(Error(GetNotFoundMessage("SlbRule", id)), NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
-		return nil, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	response, _ := raw.(*slb.DescribeRuleAttributeResponse)
+	response, _ = raw.(*slb.DescribeRuleAttributeResponse)
 	if response.RuleId != id {
-		return nil, WrapErrorf(Error(GetNotFoundMessage("SlbRule", id)), NotFoundMsg, AlibabaCloudSdkGoERROR)
+		return response, WrapErrorf(Error(GetNotFoundMessage("SlbRule", id)), NotFoundMsg, AlibabaCloudSdkGoERROR)
 	}
 	return response, nil
 }
 
 func (s *SlbService) DescribeSlbServerGroup(id string) (*slb.DescribeVServerGroupAttributeResponse, error) {
+	response := &slb.DescribeVServerGroupAttributeResponse{}
 	request := slb.CreateDescribeVServerGroupAttributeRequest()
 	request.RegionId = s.client.RegionId
 	request.VServerGroupId = id
@@ -94,20 +97,21 @@ func (s *SlbService) DescribeSlbServerGroup(id string) (*slb.DescribeVServerGrou
 		return slbClient.DescribeVServerGroupAttribute(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{VServerGroupNotFoundMessage, InvalidParameter}) {
-			return nil, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+		if IsExpectedErrors(err, []string{"The specified VServerGroupId does not exist", "InvalidParameter"}) {
+			return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
-		return nil, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	response, _ := raw.(*slb.DescribeVServerGroupAttributeResponse)
+	response, _ = raw.(*slb.DescribeVServerGroupAttributeResponse)
 	if response.VServerGroupId == "" {
-		return nil, WrapErrorf(Error(GetNotFoundMessage("SlbServerGroup", id)), NotFoundMsg, ProviderERROR)
+		return response, WrapErrorf(Error(GetNotFoundMessage("SlbServerGroup", id)), NotFoundMsg, ProviderERROR)
 	}
 	return response, err
 }
 
-func (s *SlbService) DescribeSlbMasterSlaveServerGroup(id string) (response *slb.DescribeMasterSlaveServerGroupAttributeResponse, err error) {
+func (s *SlbService) DescribeSlbMasterSlaveServerGroup(id string) (*slb.DescribeMasterSlaveServerGroupAttributeResponse, error) {
+	response := &slb.DescribeMasterSlaveServerGroupAttributeResponse{}
 	request := slb.CreateDescribeMasterSlaveServerGroupAttributeRequest()
 	request.RegionId = s.client.RegionId
 	request.MasterSlaveServerGroupId = id
@@ -115,7 +119,7 @@ func (s *SlbService) DescribeSlbMasterSlaveServerGroup(id string) (response *slb
 		return slbClient.DescribeMasterSlaveServerGroupAttribute(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{MasterSlaveServerGroupNotFoundMessage, InvalidParameter}) {
+		if IsExpectedErrors(err, []string{"The specified MasterSlaveGroupId does not exist", "InvalidParameter"}) {
 			return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 		return response, WrapErrorf(err, DefaultDebugMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -129,6 +133,7 @@ func (s *SlbService) DescribeSlbMasterSlaveServerGroup(id string) (response *slb
 }
 
 func (s *SlbService) DescribeSlbBackendServer(id string) (*slb.DescribeLoadBalancerAttributeResponse, error) {
+	response := &slb.DescribeLoadBalancerAttributeResponse{}
 	request := slb.CreateDescribeLoadBalancerAttributeRequest()
 	request.RegionId = s.client.RegionId
 	request.LoadBalancerId = id
@@ -136,27 +141,27 @@ func (s *SlbService) DescribeSlbBackendServer(id string) (*slb.DescribeLoadBalan
 		return slbClient.DescribeLoadBalancerAttribute(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{LoadBalancerNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidLoadBalancerId.NotFound"}) {
 			err = WrapErrorf(Error(GetNotFoundMessage("SlbBackendServers", id)), NotFoundMsg, AlibabaCloudSdkGoERROR)
 		} else {
 			err = WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
-		return nil, err
+		return response, err
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	response, _ := raw.(*slb.DescribeLoadBalancerAttributeResponse)
+	response, _ = raw.(*slb.DescribeLoadBalancerAttributeResponse)
 	if response.LoadBalancerId == "" {
 		err = WrapErrorf(Error(GetNotFoundMessage("SlbBackendServers", id)), NotFoundMsg, ProviderERROR)
 	}
 	return response, err
 }
 
-func (s *SlbService) DescribeSlbListener(id string, protocol Protocol) (listener map[string]interface{}, err error) {
-	parts, err := ParseResourceId(id, 2)
+func (s *SlbService) DescribeSlbListener(id string) (listener map[string]interface{}, err error) {
+	parts, err := ParseSlbListenerId(id)
 	if err != nil {
 		return nil, WrapError(err)
 	}
-
+	protocol := parts[1]
 	request, err := s.BuildSlbCommonRequest()
 	request.RegionId = s.client.RegionId
 	if err != nil {
@@ -165,18 +170,17 @@ func (s *SlbService) DescribeSlbListener(id string, protocol Protocol) (listener
 	}
 	request.ApiName = fmt.Sprintf("DescribeLoadBalancer%sListenerAttribute", strings.ToUpper(string(protocol)))
 	request.QueryParams["LoadBalancerId"] = parts[0]
-	port, _ := strconv.Atoi(parts[1])
+	port, _ := strconv.Atoi(parts[2])
 	request.QueryParams["ListenerPort"] = string(requests.NewInteger(port))
-
 	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 		raw, err := s.client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
 			return slbClient.ProcessCommonRequest(request)
 		})
 
 		if err != nil {
-			if IsExceptedError(err, ListenerNotFound) {
+			if IsExpectedErrors(err, []string{"The specified resource does not exist"}) {
 				return resource.NonRetryableError(WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR))
-			} else if IsExceptedErrors(err, SlbIsBusy) {
+			} else if IsExpectedErrors(err, SlbIsBusy) {
 				return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR))
 			}
 			return resource.NonRetryableError(WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR))
@@ -196,23 +200,8 @@ func (s *SlbService) DescribeSlbListener(id string, protocol Protocol) (listener
 	return
 }
 
-func (s *SlbService) DescribeSlbHttpListener(id string) (listener map[string]interface{}, err error) {
-	return s.DescribeSlbListener(id, Protocol("http"))
-}
-
-func (s *SlbService) DescribeSlbHttpsListener(id string) (listener map[string]interface{}, err error) {
-	return s.DescribeSlbListener(id, Protocol("https"))
-}
-
-func (s *SlbService) DescribeSlbTcpListener(id string) (listener map[string]interface{}, err error) {
-	return s.DescribeSlbListener(id, Protocol("tcp"))
-}
-
-func (s *SlbService) DescribeSlbUdpListener(id string) (listener map[string]interface{}, err error) {
-	return s.DescribeSlbListener(id, Protocol("udp"))
-}
-
-func (s *SlbService) DescribeSlbAcl(id string) (response *slb.DescribeAccessControlListAttributeResponse, err error) {
+func (s *SlbService) DescribeSlbAcl(id string) (*slb.DescribeAccessControlListAttributeResponse, error) {
+	response := &slb.DescribeAccessControlListAttributeResponse{}
 	request := slb.CreateDescribeAccessControlListAttributeRequest()
 	request.RegionId = s.client.RegionId
 	request.AclId = id
@@ -222,15 +211,15 @@ func (s *SlbService) DescribeSlbAcl(id string) (response *slb.DescribeAccessCont
 	})
 	if err != nil {
 		if err != nil {
-			if IsExceptedError(err, SlbAclNotExists) {
-				return nil, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+			if IsExpectedErrors(err, []string{"AclNotExist"}) {
+				return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 			}
-			return nil, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+			return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	response, _ = raw.(*slb.DescribeAccessControlListAttributeResponse)
-	return
+	return response, nil
 }
 
 func (s *SlbService) WaitForSlbAcl(id string, status Status, timeout int) error {
@@ -266,8 +255,9 @@ func (s *SlbService) WaitForSlb(id string, status Status, timeout int) error {
 				if status == Deleted {
 					return nil
 				}
+			} else {
+				return WrapError(err)
 			}
-			return WrapError(err)
 		} else if strings.ToLower(object.LoadBalancerStatus) == strings.ToLower(string(status)) {
 			//TODO
 			break
@@ -280,17 +270,18 @@ func (s *SlbService) WaitForSlb(id string, status Status, timeout int) error {
 	return nil
 }
 
-func (s *SlbService) WaitForSlbListener(id string, protocol Protocol, status Status, timeout int) error {
+func (s *SlbService) WaitForSlbListener(id string, status Status, timeout int) error {
 	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
 	for {
-		object, err := s.DescribeSlbListener(id, protocol)
-		if err != nil && !IsExceptedErrors(err, []string{LoadBalancerNotFound}) {
+		object, err := s.DescribeSlbListener(id)
+		if err != nil && !IsExpectedErrors(err, []string{"InvalidLoadBalancerId.NotFound"}) {
 			if NotFoundError(err) {
 				if status == Deleted {
 					return nil
 				}
+			} else {
+				return WrapError(err)
 			}
-			return WrapError(err)
 		}
 		gotStatus := ""
 		if value, ok := object["Status"]; ok {
@@ -318,8 +309,9 @@ func (s *SlbService) WaitForSlbRule(id string, status Status, timeout int) error
 				if status == Deleted {
 					return nil
 				}
+			} else {
+				return WrapError(err)
 			}
-			return WrapError(err)
 		}
 		if object.RuleId == id && status != Deleted {
 			break
@@ -342,8 +334,9 @@ func (s *SlbService) WaitForSlbServerGroup(id string, status Status, timeout int
 				if status == Deleted {
 					return nil
 				}
+			} else {
+				return WrapError(err)
 			}
-			return WrapError(err)
 		}
 		if object.VServerGroupId == id {
 			break
@@ -418,7 +411,7 @@ func (s *SlbService) slbRemoveAccessControlListEntryPerTime(list []interface{}, 
 		return slbClient.RemoveAccessControlListEntry(request)
 	})
 	if err != nil {
-		if !IsExceptedError(err, SlbAclEntryEmpty) {
+		if !IsExpectedErrors(err, []string{"AclEntryEmpty"}) {
 			return WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 	}
@@ -527,6 +520,7 @@ func (s *SlbService) flattenSlbRelatedListenerMappings(list []slb.RelatedListene
 }
 
 func (s *SlbService) DescribeSlbCACertificate(id string) (*slb.CACertificate, error) {
+	certificate := &slb.CACertificate{}
 	request := slb.CreateDescribeCACertificatesRequest()
 	request.RegionId = s.client.RegionId
 	request.CACertificateId = id
@@ -534,15 +528,14 @@ func (s *SlbService) DescribeSlbCACertificate(id string) (*slb.CACertificate, er
 		return slbClient.DescribeCACertificates(request)
 	})
 	if err != nil {
-		return nil, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return certificate, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	response, _ := raw.(*slb.DescribeCACertificatesResponse)
 	if len(response.CACertificates.CACertificate) < 1 {
-		return nil, WrapErrorf(Error(GetNotFoundMessage("SlbCACertificate", id)), NotFoundMsg, ProviderERROR)
+		return certificate, WrapErrorf(Error(GetNotFoundMessage("SlbCACertificate", id)), NotFoundMsg, ProviderERROR)
 	}
-	serverCertificate := response.CACertificates.CACertificate[0]
-	return &serverCertificate, nil
+	return &response.CACertificates.CACertificate[0], nil
 }
 
 func (s *SlbService) WaitForSlbCACertificate(id string, status Status, timeout int) error {
@@ -568,6 +561,7 @@ func (s *SlbService) WaitForSlbCACertificate(id string, status Status, timeout i
 }
 
 func (s *SlbService) DescribeSlbServerCertificate(id string) (*slb.ServerCertificate, error) {
+	certificate := &slb.ServerCertificate{}
 	request := slb.CreateDescribeServerCertificatesRequest()
 	request.RegionId = s.client.RegionId
 	request.ServerCertificateId = id
@@ -576,13 +570,13 @@ func (s *SlbService) DescribeSlbServerCertificate(id string) (*slb.ServerCertifi
 		return slbClient.DescribeServerCertificates(request)
 	})
 	if err != nil {
-		return nil, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return certificate, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	response, _ := raw.(*slb.DescribeServerCertificatesResponse)
 
 	if len(response.ServerCertificates.ServerCertificate) < 1 || response.ServerCertificates.ServerCertificate[0].ServerCertificateId != id {
-		return nil, WrapErrorf(Error(GetNotFoundMessage("SlbServerCertificate", id)), NotFoundMsg, ProviderERROR)
+		return certificate, WrapErrorf(Error(GetNotFoundMessage("SlbServerCertificate", id)), NotFoundMsg, ProviderERROR)
 	}
 
 	return &response.ServerCertificates.ServerCertificate[0], nil
@@ -612,43 +606,6 @@ func (s *SlbService) WaitForSlbServerCertificate(id string, status Status, timeo
 	return nil
 }
 
-func (s *SlbService) readFileContent(file_name string) (string, error) {
-	b, err := ioutil.ReadFile(file_name)
-	if err != nil {
-		return "", err
-	}
-	return string(b), err
-}
-
-// setTags is a helper to set the tags for a resource. It expects the
-// tags field to be named "tags"
-func (s *SlbService) setSlbInstanceTags(d *schema.ResourceData) error {
-
-	if d.HasChange("tags") {
-		oraw, nraw := d.GetChange("tags")
-		o := oraw.(map[string]interface{})
-		n := nraw.(map[string]interface{})
-		create, remove := diffTags(tagsFromMap(o), tagsFromMap(n))
-
-		// Set tags
-		if len(remove) > 0 {
-			if err := s.slbRemoveTags(remove, d.Id()); err != nil {
-				return err
-			}
-		}
-
-		if len(create) > 0 {
-			if err := s.slbAddTags(create, d.Id()); err != nil {
-				return err
-			}
-		}
-
-		d.SetPartial("tags")
-	}
-
-	return nil
-}
-
 func toSlbTagsString(tags []Tag) string {
 	slbTags := make([]SlbTag, 0, len(tags))
 
@@ -665,144 +622,221 @@ func toSlbTagsString(tags []Tag) string {
 	return string(b)
 }
 
-func (s *SlbService) slbAddTagsPerTime(tags []Tag, id string) error {
-	request := slb.CreateAddTagsRequest()
-	request.RegionId = s.client.RegionId
-	request.LoadBalancerId = id
-	request.Tags = toSlbTagsString(tags)
-
-	raw, err := s.client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
-		return slbClient.AddTags(request)
-	})
-
-	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	return nil
-}
-
-func (s *SlbService) slbRemoveTagsPerTime(tags []Tag, id string) error {
-	request := slb.CreateRemoveTagsRequest()
-	request.LoadBalancerId = id
-	request.Tags = toSlbTagsString(tags)
-
-	raw, err := s.client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
-		return slbClient.RemoveTags(request)
-	})
-
-	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	return nil
-}
-
-func (s *SlbService) slbAddTags(tags []Tag, id string) error {
-	num := len(tags)
-
-	if num <= 0 {
-		return nil
-	}
-
-	t := (num + tags_max_num_per_time - 1) / tags_max_num_per_time
-	for i := 0; i < t; i++ {
-		start := i * tags_max_num_per_time
-		end := (i + 1) * tags_max_num_per_time
-
-		if end > num {
-			end = num
-		}
-		slice := tags[start:end]
-		if err := s.slbAddTagsPerTime(slice, id); err != nil {
-			return WrapError(err)
-		}
-	}
-
-	return nil
-}
-
-func (s *SlbService) slbRemoveTags(tags []Tag, id string) error {
-	num := len(tags)
-
-	if num <= 0 {
-		return nil
-	}
-
-	t := (num + tags_max_num_per_time - 1) / tags_max_num_per_time
-	for i := 0; i < t; i++ {
-		start := i * tags_max_num_per_time
-		end := (i + 1) * tags_max_num_per_time
-
-		if end > num {
-			end = num
-		}
-		slice := tags[start:end]
-		if err := s.slbRemoveTagsPerTime(slice, id); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (s *SlbService) toTags(tagSet []slb.TagSet) (tags []Tag) {
-	result := make([]Tag, 0, len(tagSet))
-	for _, t := range tagSet {
-		tag := Tag{
-			Key:   t.TagKey,
-			Value: t.TagValue,
-		}
-		result = append(result, tag)
-	}
-
-	return result
-}
-
-func (s *SlbService) describeTagsPerTime(id string, pageNumber, pageSize int) (tags []Tag, err error) {
-	request := slb.CreateDescribeTagsRequest()
-	request.RegionId = s.client.RegionId
-	request.LoadBalancerId = id
-	request.PageNumber = requests.NewInteger(pageNumber)
-	request.PageSize = requests.NewInteger(pageSize)
-
-	raw, err := s.client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
-		return slbClient.DescribeTags(request)
-	})
-
-	if err != nil {
-		tmp := make([]Tag, 0)
-		return tmp, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	resp, _ := raw.(*slb.DescribeTagsResponse)
-
-	return s.toTags(resp.TagSets.TagSet), nil
-}
-
-func (s *SlbService) describeTags(id string) (tags []Tag, err error) {
-	result := make([]Tag, 0, 50)
-
-	for i := 1; ; i++ {
-		tagList, err := s.describeTagsPerTime(id, i, tags_max_page_size)
+func (s *SlbService) DescribeDomainExtensionAttribute(domainExtensionId string) (*slb.DescribeDomainExtensionAttributeResponse, error) {
+	response := &slb.DescribeDomainExtensionAttributeResponse{}
+	request := slb.CreateDescribeDomainExtensionAttributeRequest()
+	request.DomainExtensionId = domainExtensionId
+	var raw interface{}
+	var err error
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		raw, err = s.client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
+			return slbClient.DescribeDomainExtensionAttribute(request)
+		})
 		if err != nil {
-			return result, err
+			if IsExpectedErrors(err, []string{AliyunGoClientFailure, "ServiceUnavailable", Throttling}) {
+				time.Sleep(10 * time.Second)
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
 		}
-
-		if len(tagList) == 0 {
-			break
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		return nil
+	})
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidParameter.DomainExtensionId", "InvalidParameter"}) {
+			return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
-		result = append(result, tagList...)
+		return response, WrapErrorf(err, DefaultErrorMsg, domainExtensionId, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-
-	return result, nil
+	response, _ = raw.(*slb.DescribeDomainExtensionAttributeResponse)
+	if response.DomainExtensionId != domainExtensionId {
+		return response, WrapErrorf(Error(GetNotFoundMessage("SLBDomainExtension", domainExtensionId)), NotFoundMsg, ProviderERROR)
+	}
+	return response, nil
 }
 
-func (s *SlbService) slbTagsToMap(tags []Tag) map[string]string {
+func (s *SlbService) WaitForSlbDomainExtension(id string, status Status, timeout int) error {
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+
+	for {
+		_, err := s.DescribeDomainExtensionAttribute(id)
+		if err != nil {
+			if NotFoundError(err) {
+				if status == Deleted {
+					return nil
+				}
+			} else {
+				return WrapError(err)
+			}
+		}
+		if time.Now().After(deadline) {
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, Null, string(status), ProviderERROR)
+		}
+	}
+	return nil
+}
+
+func (s *SlbService) setInstanceTags(d *schema.ResourceData, resourceType TagResourceType) error {
+	oraw, nraw := d.GetChange("tags")
+	o := oraw.(map[string]interface{})
+	n := nraw.(map[string]interface{})
+	create, remove := s.diffTags(s.tagsFromMap(o), s.tagsFromMap(n))
+
+	if len(remove) > 0 {
+		var tagKey []string
+		for _, v := range remove {
+			tagKey = append(tagKey, v.Key)
+		}
+		request := slb.CreateUntagResourcesRequest()
+		request.ResourceId = &[]string{d.Id()}
+		request.ResourceType = string(resourceType)
+		request.TagKey = &tagKey
+		request.RegionId = s.client.RegionId
+
+		wait := incrementalWait(1*time.Second, 1*time.Second)
+		err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+			raw, err := s.client.WithSlbClient(func(client *slb.Client) (interface{}, error) {
+				return client.UntagResources(request)
+			})
+			if err != nil {
+				if IsThrottling(err) {
+					wait()
+					return resource.RetryableError(err)
+
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+			return nil
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+	}
+
+	if len(create) > 0 {
+		request := slb.CreateTagResourcesRequest()
+		request.ResourceId = &[]string{d.Id()}
+		request.Tag = &create
+		request.ResourceType = string(resourceType)
+		request.RegionId = s.client.RegionId
+
+		wait := incrementalWait(1*time.Second, 1*time.Second)
+		err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+			raw, err := s.client.WithSlbClient(func(client *slb.Client) (interface{}, error) {
+				return client.TagResources(request)
+			})
+			if err != nil {
+				if IsThrottling(err) {
+					wait()
+					return resource.RetryableError(err)
+
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+			return nil
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+	}
+
+	d.SetPartial("tags")
+
+	return nil
+}
+
+func (s *SlbService) tagsToMap(tags []slb.TagResource) map[string]string {
 	result := make(map[string]string)
 	for _, t := range tags {
-		result[t.Key] = t.Value
+		if !s.ignoreTag(t) {
+			result[t.TagKey] = t.TagValue
+		}
+	}
+	return result
+}
+
+func (s *SlbService) ignoreTag(t slb.TagResource) bool {
+	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
+	for _, v := range filter {
+		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, t.TagKey)
+		ok, _ := regexp.MatchString(v, t.TagKey)
+		if ok {
+			log.Printf("[DEBUG] Found Alibaba Cloud specific t %s (val: %s), ignoring.\n", t.TagKey, t.TagValue)
+			return true
+		}
+	}
+	return false
+}
+
+func (s *SlbService) diffTags(oldTags, newTags []slb.TagResourcesTag) ([]slb.TagResourcesTag, []slb.TagResourcesTag) {
+	// First, we're creating everything we have
+	create := make(map[string]interface{})
+	for _, t := range newTags {
+		create[t.Key] = t.Value
+	}
+
+	// Build the list of what to remove
+	var remove []slb.TagResourcesTag
+	for _, t := range oldTags {
+		old, ok := create[t.Key]
+		if !ok || old != t.Value {
+			// Delete it!
+			remove = append(remove, t)
+		}
+	}
+
+	return s.tagsFromMap(create), remove
+}
+
+func (s *SlbService) tagsFromMap(m map[string]interface{}) []slb.TagResourcesTag {
+	result := make([]slb.TagResourcesTag, 0, len(m))
+	for k, v := range m {
+		result = append(result, slb.TagResourcesTag{
+			Key:   k,
+			Value: v.(string),
+		})
 	}
 
 	return result
+}
+
+func (s *SlbService) DescribeTags(resourceId string, resourceTags map[string]interface{}, resourceType TagResourceType) (tags []slb.TagResource, err error) {
+	request := slb.CreateListTagResourcesRequest()
+	request.RegionId = s.client.RegionId
+	request.ResourceType = string(resourceType)
+	request.ResourceId = &[]string{resourceId}
+	if resourceTags != nil && len(resourceTags) > 0 {
+		var reqTags []slb.ListTagResourcesTag
+		for key, value := range resourceTags {
+			reqTags = append(reqTags, slb.ListTagResourcesTag{
+				Key:   key,
+				Value: value.(string),
+			})
+		}
+		request.Tag = &reqTags
+	}
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		raw, err := s.client.WithSlbClient(func(Client *slb.Client) (interface{}, error) {
+			return Client.ListTagResources(request)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{Throttling}) {
+				time.Sleep(2 * time.Second)
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		response, _ := raw.(*slb.ListTagResourcesResponse)
+		tags = response.TagResources.TagResource
+		return nil
+	})
+	if err != nil {
+		err = WrapErrorf(err, DefaultErrorMsg, resourceId, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return
+	}
+
+	return
 }

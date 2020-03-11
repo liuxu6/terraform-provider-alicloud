@@ -2,12 +2,14 @@ package alicloud
 
 import (
 	"fmt"
+	"log"
+	"regexp"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/dds"
@@ -16,13 +18,6 @@ import (
 
 type MongoDBService struct {
 	client *connectivity.AliyunClient
-}
-
-func (s *MongoDBService) NotFoundMongoDBInstance(err error) bool {
-	if NotFoundError(err) || IsExceptedErrors(err, []string{InvalidMongoDBInstanceIdNotFound, InvalidMongoDBNameNotFound}) {
-		return true
-	}
-	return false
 }
 
 func (s *MongoDBService) DescribeMongoDBInstance(id string) (instance dds.DBInstance, err error) {
@@ -34,7 +29,7 @@ func (s *MongoDBService) DescribeMongoDBInstance(id string) (instance dds.DBInst
 	})
 	response, _ := raw.(*dds.DescribeDBInstanceAttributeResponse)
 	if err != nil {
-		if IsExceptedErrors(err, []string{"InvalidDBInstanceId.NotFound"}) {
+		if IsExpectedErrors(err, []string{"InvalidDBInstanceId.NotFound"}) {
 			return instance, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 		return instance, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -53,7 +48,7 @@ func (s *MongoDBService) WaitForMongoDBInstance(instanceId string, status Status
 	for {
 		instance, err := s.DescribeMongoDBInstance(instanceId)
 		if err != nil {
-			if s.NotFoundMongoDBInstance(err) {
+			if NotFoundError(err) {
 				if status == Deleted {
 					return nil
 				}
@@ -101,21 +96,31 @@ func (s *MongoDBService) RdsMongodbDBInstanceStateRefreshFunc(id string, failSta
 	}
 }
 
-func (s *MongoDBService) GetSecurityIps(instanceId string) ([]string, error) {
-	arr, err := s.DescribeMongoDBSecurityIps(instanceId)
+func (s *MongoDBService) DescribeMongoDBSecurityIps(instanceId string) (ips []string, err error) {
+	request := dds.CreateDescribeSecurityIpsRequest()
+	request.RegionId = s.client.RegionId
+	request.DBInstanceId = instanceId
 
+	raw, err := s.client.WithDdsClient(func(client *dds.Client) (interface{}, error) {
+		return client.DescribeSecurityIps(request)
+	})
 	if err != nil {
-		return nil, WrapError(err)
+		return ips, WrapErrorf(err, DefaultErrorMsg, instanceId, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
+	response, _ := raw.(*dds.DescribeSecurityIpsResponse)
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 
-	var ips, separator string
+	var ipstr, separator string
 	ipsMap := make(map[string]string)
-	for _, ip := range arr {
-		ips += separator + ip.SecurityIpList
+	for _, ip := range response.SecurityIpGroups.SecurityIpGroup {
+		if ip.SecurityIpGroupAttribute == "hidden" {
+			continue
+		}
+		ipstr += separator + ip.SecurityIpList
 		separator = COMMA_SEPARATED
 	}
 
-	for _, ip := range strings.Split(ips, COMMA_SEPARATED) {
+	for _, ip := range strings.Split(ipstr, COMMA_SEPARATED) {
 		ipsMap[ip] = ip
 	}
 
@@ -125,24 +130,8 @@ func (s *MongoDBService) GetSecurityIps(instanceId string) ([]string, error) {
 			finalIps = append(finalIps, key)
 		}
 	}
+
 	return finalIps, nil
-}
-
-func (s *MongoDBService) DescribeMongoDBSecurityIps(instanceId string) (ips []dds.SecurityIpGroup, err error) {
-	request := dds.CreateDescribeSecurityIpsRequest()
-	request.RegionId = s.client.RegionId
-	request.DBInstanceId = instanceId
-
-	raw, err := s.client.WithDdsClient(func(client *dds.Client) (interface{}, error) {
-		return client.DescribeSecurityIps(request)
-	})
-	if err != nil {
-		return nil, WrapErrorf(err, DefaultErrorMsg, instanceId, request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	respone, _ := raw.(*dds.DescribeSecurityIpsResponse)
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-
-	return respone.SecurityIpGroups.SecurityIpGroup, nil
 }
 
 func (s *MongoDBService) ModifyMongoDBSecurityIps(instanceId, ips string) error {
@@ -164,6 +153,26 @@ func (s *MongoDBService) ModifyMongoDBSecurityIps(instanceId, ips string) error 
 		return WrapError(err)
 	}
 	return nil
+}
+
+func (s *MongoDBService) DescribeMongoDBSecurityGroupId(id string) (*dds.DescribeSecurityGroupConfigurationResponse, error) {
+	response := &dds.DescribeSecurityGroupConfigurationResponse{}
+	request := dds.CreateDescribeSecurityGroupConfigurationRequest()
+	request.RegionId = s.client.RegionId
+	request.DBInstanceId = id
+	if err := s.WaitForMongoDBInstance(id, Running, DefaultTimeoutMedium); err != nil {
+		return response, WrapError(err)
+	}
+	raw, err := s.client.WithDdsClient(func(ddsClient *dds.Client) (interface{}, error) {
+		return ddsClient.DescribeSecurityGroupConfiguration(request)
+	})
+	if err != nil {
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	response, _ = raw.(*dds.DescribeSecurityGroupConfigurationResponse)
+
+	return response, nil
 }
 
 func (server *MongoDBService) ModifyMongodbShardingInstanceNode(
@@ -279,7 +288,8 @@ func (server *MongoDBService) ModifyMongodbShardingInstanceNode(
 	return nil
 }
 
-func (s *MongoDBService) DescribeMongoDBBackupPolicy(id string) (response *dds.DescribeBackupPolicyResponse, err error) {
+func (s *MongoDBService) DescribeMongoDBBackupPolicy(id string) (*dds.DescribeBackupPolicyResponse, error) {
+	response := &dds.DescribeBackupPolicyResponse{}
 	request := dds.CreateDescribeBackupPolicyRequest()
 	request.RegionId = s.client.RegionId
 	request.DBInstanceId = id
@@ -334,4 +344,104 @@ func (s *MongoDBService) ResetAccountPassword(d *schema.ResourceData, password s
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	return err
+}
+
+func (s *MongoDBService) setInstanceTags(d *schema.ResourceData) error {
+	oraw, nraw := d.GetChange("tags")
+	o := oraw.(map[string]interface{})
+	n := nraw.(map[string]interface{})
+
+	create, remove := s.diffTags(s.tagsFromMap(o), s.tagsFromMap(n))
+
+	if len(remove) > 0 {
+		var tagKey []string
+		for _, v := range remove {
+			tagKey = append(tagKey, v.Key)
+		}
+		request := dds.CreateUntagResourcesRequest()
+		request.ResourceId = &[]string{d.Id()}
+		request.ResourceType = "INSTANCE"
+		request.TagKey = &tagKey
+		request.RegionId = s.client.RegionId
+		raw, err := s.client.WithDdsClient(func(ddsClient *dds.Client) (interface{}, error) {
+			return ddsClient.UntagResources(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	}
+
+	if len(create) > 0 {
+		request := dds.CreateTagResourcesRequest()
+		request.ResourceId = &[]string{d.Id()}
+		request.Tag = &create
+		request.ResourceType = "INSTANCE"
+		request.RegionId = s.client.RegionId
+		raw, err := s.client.WithDdsClient(func(ddsClient *dds.Client) (interface{}, error) {
+			return ddsClient.TagResources(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	}
+
+	d.SetPartial("tags")
+	return nil
+}
+
+func (s *MongoDBService) tagsToMap(tags []dds.Tag) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		if !s.ignoreTag(t) {
+			result[t.Key] = t.Value
+		}
+	}
+	return result
+}
+
+func (s *MongoDBService) ignoreTag(t dds.Tag) bool {
+	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
+	for _, v := range filter {
+		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, t.Key)
+		ok, _ := regexp.MatchString(v, t.Key)
+		if ok {
+			log.Printf("[DEBUG] Found Alibaba Cloud specific t %s (val: %s), ignoring.\n", t.Key, t.Value)
+			return true
+		}
+	}
+	return false
+}
+
+func (s *MongoDBService) diffTags(oldTags, newTags []dds.TagResourcesTag) ([]dds.TagResourcesTag, []dds.TagResourcesTag) {
+	// First, we're creating everything we have
+	create := make(map[string]interface{})
+	for _, t := range newTags {
+		create[t.Key] = t.Value
+	}
+
+	// Build the list of what to remove
+	var remove []dds.TagResourcesTag
+	for _, t := range oldTags {
+		old, ok := create[t.Key]
+		if !ok || old != t.Value {
+			// Delete it!
+			remove = append(remove, t)
+		}
+	}
+
+	return s.tagsFromMap(create), remove
+}
+
+func (s *MongoDBService) tagsFromMap(m map[string]interface{}) []dds.TagResourcesTag {
+	result := make([]dds.TagResourcesTag, 0, len(m))
+	for k, v := range m {
+		result = append(result, dds.TagResourcesTag{
+			Key:   k,
+			Value: v.(string),
+		})
+	}
+
+	return result
 }

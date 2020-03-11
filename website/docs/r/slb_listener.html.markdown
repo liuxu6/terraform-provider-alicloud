@@ -1,4 +1,5 @@
 ---
+subcategory: "Server Load Balancer (SLB)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_slb_listener"
 sidebar_current: "docs-alicloud-resource-slb-listener"
@@ -85,6 +86,7 @@ The following arguments are supported:
 * `backend_port` - (Optional, ForceNew) Port used by the Server Load Balancer instance backend. Valid value range: [1-65535].
 * `protocol` - (Required, ForceNew) The protocol to listen on. Valid values are [`http`, `https`, `tcp`, `udp`].
 * `bandwidth` - (Optional) Bandwidth peak of Listener. For the public network instance charged per traffic consumed, the Bandwidth on Listener can be set to -1, indicating the bandwidth peak is unlimited. Valid values are [-1, 1-1000] in Mbps.
+* `description` - (Optional, Available in 1.69.0+) The description of slb listener. This description can have a string of 1 to 80 characters. Default value: null.
 * `scheduler` - (Optional) Scheduling algorithm, Valid values are `wrr`, `rr` and `wlc`.  Default to "wrr".
 * `sticky_session` - (Optional) Whether to enable session persistence, Valid values are `on` and `off`. Default to `off`.
 * `sticky_session_type` - (Optional) Mode for handling the cookie. If `sticky_session` is "on", it is mandatory. Otherwise, it will be ignored. Valid values are `insert` and `server`. `insert` means it is inserted from Server Load Balancer; `server` means the Server Load Balancer learns from the backend server.
@@ -101,7 +103,9 @@ The following arguments are supported:
 * `health_check_timeout` - (Optional) Maximum timeout of each health check response. It is required when `health_check` is on. Valid value range: [1-300] in seconds. Default to 5. Note: If `health_check_timeout` < `health_check_interval`, its will be replaced by `health_check_interval`.
 * `health_check_interval` - (Optional) Time interval of health checks. It is required when `health_check` is on. Valid value range: [1-50] in seconds. Default to 2.
 * `health_check_http_code` - (Optional) Regular health check HTTP status code. Multiple codes are segmented by “,”. It is required when `health_check` is on. Default to `http_2xx`.  Valid values are: `http_2xx`,  `http_3xx`, `http_4xx` and `http_5xx`.
-* `ssl_certificate_id` - (Optional) Security certificate ID. It is required when `protocol` is `https`.
+* `health_check_method` - (Optional, Available in 1.70.0+) HealthCheckMethod used for health check.`http` and `https` support regions ap-northeast-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, us-east-1, us-west-1, eu-central-1, ap-south-1, me-east-1, cn-huhehaote, cn-zhangjiakou, ap-southeast-5, cn-shenzhen, cn-hongkong, cn-qingdao, cn-chengdu, eu-west-1, cn-hangzhou", cn-beijing, cn-shanghai.This function does not support the TCP protocol .
+* `ssl_certificate_id` - (Deprecated) It has been deprecated from 1.59.0 and using `server_certificate_id` instead. 
+* `server_certificate_id` - (Optional, Available in 1.59.0+) SLB Server certificate ID. It is required when `protocol` is `https`.
 * `gzip` - (Optional) Whether to enable "Gzip Compression". If enabled, files of specific file types will be compressed, otherwise, no files will be compressed. Default to true. Available in v1.13.0+.
 * `x_forwarded_for` - (Optional) Whether to set additional HTTP Header field "X-Forwarded-For" (documented below). Available in v1.13.0+.
 * `acl_status` - (Optional) Whether to enable "acl(access control list)", the acl is specified by `acl_id`. Valid values are `on` and `off`. Default to `off`.
@@ -115,6 +119,8 @@ The following arguments are supported:
 * `server_group_id` - (Optional) the id of server group to be apply on the listener, is the id of resource `alicloud_slb_server_group`.
 * `listener_forward` - (Optional, ForceNew, Available in 1.40.0+) Whether to enable http redirect to https, Valid values are `on` and `off`. Default to `off`.
 * `forward_port` - (Optional, ForceNew, Available in 1.40.0+) The port that http redirect to https.
+* `health_check_method` - (Optional, ForceNew, Available in 1.70.0+) The method of health check. Valid values: ["head", "get"].
+* `delete_protection_validation` - (Optional, Available in 1.63.0+) Checking DeleteProtection of SLB instance before deleting. If true, this resource will not be deleted when its SLB instance enabled DeleteProtection. Default to false.
 
 -> **NOTE:** Once enable the http redirect to https function, any parameters excepted forward_port,listener_forward,load_balancer_id,frontend_port,protocol will be ignored. More info, please refer to [Redirect http to https](https://www.alibabacloud.com/help/doc-detail/89151.htm?spm=a2c63.p38356.b99.186.42f66384mpjUTB).
 
@@ -147,6 +153,7 @@ persistence_timeout | tcp & udp | 0-3600 |
 health_check | http & https | on or off | 
 health_check_type | tcp | tcp or http | 
 health_check_domain | http & https & tcp | 
+health_check_method | http & https & tcp | 
 health_check_uri | http & https & tcp |  | 
 health_check_connect_port | http & https & tcp & udp | 1-65535 or -520 | 
 healthy_threshold | http & https & tcp & udp | 1-10 | 
@@ -154,7 +161,7 @@ unhealthy_threshold | http & https & tcp & udp | 1-10 |
 health_check_timeout | http & https & tcp & udp | 1-300 |
 health_check_interval | http & https & tcp & udp | 1-50 |
 health_check_http_code | http & https & tcp | http_2xx,http_3xx,http_4xx,http_5xx | 
-ssl_certificate_id | https |  |
+server_certificate_id | https |  |
 gzip | http & https | true or false  |
 x_forwarded_for | http & https |  |
 acl_status | http & https & tcp & udp | on or off |
@@ -173,7 +180,7 @@ The listener mapping supports the following:
 
 The following attributes are exported:
 
-* `id` - The ID of the load balancer listener. It is consist of `load_balancer_id` and `frontend_port`: `<load_balancer_id>:<frontend_port>`.
+* `id` - The ID of the load balancer listener. Its format as `<load_balancer_id>:<protocol>:<frontend_port>`. Before verson 1.57.1, the foramt as `<load_balancer_id>:<frontend_port>`.
 * `load_balancer_id` - The Load Balancer ID which is used to launch a new listener.
 * `frontend_port` - Port used by the Server Load Balancer instance frontend.
 * `backend_port` - Port used by the Server Load Balancer instance backend.
@@ -188,6 +195,7 @@ The following attributes are exported:
 * `health_check` - Whether to enable health check.
 * `health_check_type` - Type of health check.
 * `health_check_domain` - Domain name used for health check.
+* `health_check_method` - HealthCheckMethod used for health check.
 * `health_check_uri` - URI used for health check.
 * `health_check_connect_port` - Port used for health check.
 * `healthy_threshold` - Threshold determining the result of the health check is success.
@@ -195,7 +203,7 @@ The following attributes are exported:
 * `health_check_timeout` - Maximum timeout of each health check response.
 * `health_check_interval` - Time interval of health checks.
 * `health_check_http_code` - Regular health check HTTP status code.
-* `ssl_certificate_id` - (Optional) Security certificate ID.
+* `server_certificate_id` - (Optional) Security certificate ID.
 
 ## Import
 

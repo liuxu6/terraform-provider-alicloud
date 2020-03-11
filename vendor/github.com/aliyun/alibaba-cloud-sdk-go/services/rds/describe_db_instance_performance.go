@@ -76,25 +76,26 @@ func (client *Client) DescribeDBInstancePerformanceWithCallback(request *Describ
 // DescribeDBInstancePerformanceRequest is the request struct for api DescribeDBInstancePerformance
 type DescribeDBInstancePerformanceRequest struct {
 	*requests.RpcRequest
-	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	EndTime              string           `position:"Query" name:"EndTime"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
-	StartTime            string           `position:"Query" name:"StartTime"`
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	Key                  string           `position:"Query" name:"Key"`
+	ResourceOwnerId         requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	StartTime               string           `position:"Query" name:"StartTime"`
+	DBInstanceId            string           `position:"Query" name:"DBInstanceId"`
+	Key                     string           `position:"Query" name:"Key"`
+	ResourceOwnerAccount    string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount            string           `position:"Query" name:"OwnerAccount"`
+	EndTime                 string           `position:"Query" name:"EndTime"`
+	OwnerId                 requests.Integer `position:"Query" name:"OwnerId"`
+	UseNullWhenMissingPoint requests.Boolean `position:"Query" name:"UseNullWhenMissingPoint"`
 }
 
 // DescribeDBInstancePerformanceResponse is the response struct for api DescribeDBInstancePerformance
 type DescribeDBInstancePerformanceResponse struct {
 	*responses.BaseResponse
-	RequestId       string          `json:"RequestId" xml:"RequestId"`
-	DBInstanceId    string          `json:"DBInstanceId" xml:"DBInstanceId"`
-	Engine          string          `json:"Engine" xml:"Engine"`
-	StartTime       string          `json:"StartTime" xml:"StartTime"`
-	EndTime         string          `json:"EndTime" xml:"EndTime"`
-	PerformanceKeys PerformanceKeys `json:"PerformanceKeys" xml:"PerformanceKeys"`
+	RequestId       string                                         `json:"RequestId" xml:"RequestId"`
+	DBInstanceId    string                                         `json:"DBInstanceId" xml:"DBInstanceId"`
+	Engine          string                                         `json:"Engine" xml:"Engine"`
+	StartTime       string                                         `json:"StartTime" xml:"StartTime"`
+	EndTime         string                                         `json:"EndTime" xml:"EndTime"`
+	PerformanceKeys PerformanceKeysInDescribeDBInstancePerformance `json:"PerformanceKeys" xml:"PerformanceKeys"`
 }
 
 // CreateDescribeDBInstancePerformanceRequest creates a request to invoke DescribeDBInstancePerformance API

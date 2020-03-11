@@ -1,4 +1,5 @@
 ---
+subcategory: "ECS"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_key_pair"
 sidebar_current: "docs-alicloud-resource-key-pair"
@@ -38,7 +39,8 @@ The following arguments are supported:
 * `key_name_prefix` - (ForceNew) The key pair name's prefix. It is conflict with `key_name`. If it is specified, terraform will using it to build the only key name.
 * `public_key` - (ForceNew) You can import an existing public key and using Alicloud key pair to manage it.
 * `key_file` - (ForceNew) The name of file to save your new key pair's private key. Strongly suggest you to specified it when you creating key pair, otherwise, you wouldn't get its private key ever.
-
+* `resource_group_id` - (ForceNew, Available in 1.57.0+) The Id of resource group which the key pair belongs.
+* `tags` - (Optional, Available in v1.66.0+) A mapping of tags to assign to the resource.
 -> **NOTE:** If `key_name` and `key_name_prefix` are not set, terraform will produce a specified ID to replace.
 
 ## Attributes Reference

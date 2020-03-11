@@ -2,7 +2,8 @@ package alicloud
 
 import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/nas"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,18 +18,18 @@ func resourceAlicloudNasAccessGroup() *schema.Resource {
 		},
 
 		Schema: map[string]*schema.Schema{
-			"name": &schema.Schema{
+			"name": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"type": &schema.Schema{
+			"type": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ValidateFunc: validateAllowedStringValue([]string{string(Vpc), string(Classic)}),
+				ValidateFunc: validation.StringInSlice([]string{"Vpc", "Classic"}, false),
 				ForceNew:     true,
 			},
-			"description": &schema.Schema{
+			"description": {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
@@ -108,7 +109,7 @@ func resourceAlicloudNasAccessGroupDelete(d *schema.ResourceData, meta interface
 	})
 
 	if err != nil {
-		if IsExceptedError(err, ForbiddenNasNotFound) {
+		if IsExpectedErrors(err, []string{"Forbidden.NasNotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

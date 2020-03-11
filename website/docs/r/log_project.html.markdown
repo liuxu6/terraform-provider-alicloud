@@ -1,4 +1,5 @@
 ---
+subcategory: "Log Service (SLS)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_log_project"
 sidebar_current: "docs-alicloud-resource-log-project"
@@ -21,6 +22,12 @@ resource "alicloud_log_project" "example" {
   description = "created by terraform"
 }
 ```
+
+## Module Support
+
+You can use the existing [sls module](https://registry.terraform.io/modules/terraform-alicloud-modules/sls/alicloud) 
+to create SLS project, store and store index one-click, like ECS instances.
+
 ## Argument Reference
 
 The following arguments are supported:

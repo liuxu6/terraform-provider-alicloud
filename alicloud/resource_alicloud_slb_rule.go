@@ -5,12 +5,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"strconv"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -33,7 +35,7 @@ func resourceAliyunSlbRule() *schema.Resource {
 
 			"frontend_port": {
 				Type:         schema.TypeInt,
-				ValidateFunc: validateIntegerInRange(1, 65535),
+				ValidateFunc: validation.IntBetween(1, 65535),
 				Required:     true,
 				ForceNew:     true,
 			},
@@ -41,19 +43,18 @@ func resourceAliyunSlbRule() *schema.Resource {
 			"name": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 				Default:  "tf-slb-rule",
 			},
 
 			"listener_sync": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue([]string{string(OnFlag), string(OffFlag)}),
+				ValidateFunc: validation.StringInSlice([]string{"on", "off"}, false),
 				Optional:     true,
 				Default:      string(OnFlag),
 			},
 			"scheduler": {
 				Type:             schema.TypeString,
-				ValidateFunc:     validateSlbListenerScheduler,
+				ValidateFunc:     validation.StringInSlice([]string{"wrr", "wlc", "rr"}, false),
 				Optional:         true,
 				Default:          WRRScheduler,
 				DiffSuppressFunc: slbRuleListenerSyncDiffSuppressFunc,
@@ -74,19 +75,19 @@ func resourceAliyunSlbRule() *schema.Resource {
 			},
 			"cookie": {
 				Type:             schema.TypeString,
-				ValidateFunc:     validateSlbListenerCookie,
+				ValidateFunc:     validation.StringLenBetween(1, 200),
 				Optional:         true,
 				DiffSuppressFunc: slbRuleCookieDiffSuppressFunc,
 			},
 			"cookie_timeout": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateSlbListenerCookieTimeout,
+				ValidateFunc:     validation.IntBetween(1, 86400),
 				Optional:         true,
 				DiffSuppressFunc: slbRuleCookieTimeoutDiffSuppressFunc,
 			},
 			"health_check": {
 				Type:             schema.TypeString,
-				ValidateFunc:     validateAllowedStringValue([]string{string(OnFlag), string(OffFlag)}),
+				ValidateFunc:     validation.StringInSlice([]string{"on", "off"}, false),
 				Optional:         true,
 				Default:          OnFlag,
 				DiffSuppressFunc: slbRuleListenerSyncDiffSuppressFunc,
@@ -101,48 +102,50 @@ func resourceAliyunSlbRule() *schema.Resource {
 			},
 			"health_check_interval": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateIntegerInRange(1, 50),
+				ValidateFunc:     validation.IntBetween(1, 50),
 				Optional:         true,
 				Default:          2,
 				DiffSuppressFunc: slbRuleHealthCheckDiffSuppressFunc,
 			},
 			"health_check_domain": {
 				Type:             schema.TypeString,
-				ValidateFunc:     validateSlbListenerHealthCheckDomain,
+				ValidateFunc:     validation.StringLenBetween(1, 80),
 				Optional:         true,
 				DiffSuppressFunc: slbRuleHealthCheckDiffSuppressFunc,
 			},
 			"health_check_uri": {
 				Type:             schema.TypeString,
-				ValidateFunc:     validateSlbListenerHealthCheckUri,
+				ValidateFunc:     validation.StringLenBetween(1, 80),
 				Optional:         true,
 				Default:          "/",
 				DiffSuppressFunc: slbRuleHealthCheckDiffSuppressFunc,
 			},
 			"health_check_connect_port": {
-				Type:             schema.TypeInt,
-				ValidateFunc:     validateSlbListenerHealthCheckConnectPort,
+				Type: schema.TypeInt,
+				ValidateFunc: validation.Any(
+					validation.IntBetween(1, 65535),
+					validation.IntInSlice([]int{-520})),
 				Optional:         true,
 				Computed:         true,
 				DiffSuppressFunc: slbRuleHealthCheckDiffSuppressFunc,
 			},
 			"health_check_timeout": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateIntegerInRange(1, 300),
+				ValidateFunc:     validation.IntBetween(1, 300),
 				Optional:         true,
 				Default:          5,
 				DiffSuppressFunc: slbRuleHealthCheckDiffSuppressFunc,
 			},
 			"healthy_threshold": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateIntegerInRange(1, 10),
+				ValidateFunc:     validation.IntBetween(1, 10),
 				Optional:         true,
 				Default:          3,
 				DiffSuppressFunc: slbRuleHealthCheckDiffSuppressFunc,
 			},
 			"unhealthy_threshold": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateIntegerInRange(1, 10),
+				ValidateFunc:     validation.IntBetween(1, 10),
 				Optional:         true,
 				Default:          3,
 				DiffSuppressFunc: slbRuleHealthCheckDiffSuppressFunc,
@@ -150,7 +153,7 @@ func resourceAliyunSlbRule() *schema.Resource {
 			//http & https
 			"sticky_session": {
 				Type:             schema.TypeString,
-				ValidateFunc:     validateAllowedStringValue([]string{string(OnFlag), string(OffFlag)}),
+				ValidateFunc:     validation.StringInSlice([]string{"on", "off"}, false),
 				Optional:         true,
 				Default:          OffFlag,
 				DiffSuppressFunc: slbRuleListenerSyncDiffSuppressFunc,
@@ -158,11 +161,16 @@ func resourceAliyunSlbRule() *schema.Resource {
 			//http & https
 			"sticky_session_type": {
 				Type: schema.TypeString,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(InsertStickySessionType),
-					string(ServerStickySessionType)}),
+					string(ServerStickySessionType)}, false),
 				Optional:         true,
 				DiffSuppressFunc: slbRuleStickySessionTypeDiffSuppressFunc,
+			},
+			"delete_protection_validation": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
 			},
 		},
 	}
@@ -206,7 +214,7 @@ func resourceAliyunSlbRuleCreate(d *schema.ResourceData, meta interface{}) error
 			return slbClient.CreateRules(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{BackendServerConfiguring}) {
+			if IsExpectedErrors(err, []string{"BackendServer.configuring", "OperationFailed.ListenerStatusNotSupport"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -290,6 +298,12 @@ func resourceAliyunSlbRuleUpdate(d *schema.ResourceData, meta interface{}) error
 		request.VServerGroupId = d.Get("server_group_id").(string)
 		update = true
 	}
+
+	if d.HasChange("name") {
+		request.RuleName = d.Get("name").(string)
+		update = true
+	}
+
 	fullUpdate = d.HasChange("listener_sync") || d.HasChange("scheduler") || d.HasChange("cookie") || d.HasChange("cookie_timeout") || d.HasChange("health_check") || d.HasChange("health_check_http_code") ||
 		d.HasChange("health_check_interval") || d.HasChange("health_check_domain") || d.HasChange("health_check_uri") || d.HasChange("health_check_connect_port") || d.HasChange("health_check_timeout") ||
 		d.HasChange("healthy_threshold") || d.HasChange("unhealthy_threshold") || d.HasChange("sticky_session") || d.HasChange("sticky_session_type")
@@ -344,21 +358,45 @@ func resourceAliyunSlbRuleUpdate(d *schema.ResourceData, meta interface{}) error
 func resourceAliyunSlbRuleDelete(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	slbService := SlbService{client}
+
+	if d.Get("delete_protection_validation").(bool) {
+		lbId := d.Get("load_balancer_id").(string)
+		lbInstance, err := slbService.DescribeSlb(lbId)
+		if err != nil {
+			if NotFoundError(err) {
+				return nil
+			}
+			return WrapError(err)
+		}
+		if lbInstance.DeleteProtection == "on" {
+			return WrapError(fmt.Errorf("Current rule's SLB Instance %s has enabled DeleteProtection. Please set delete_protection_validation to false to delete the rule.", lbId))
+		}
+	}
+
 	request := slb.CreateDeleteRulesRequest()
 	request.RegionId = client.RegionId
 	request.RuleIds = fmt.Sprintf("['%s']", d.Id())
 
-	raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
-		return slbClient.DeleteRules(request)
+	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+		raw, err := client.WithSlbClient(func(slbClient *slb.Client) (interface{}, error) {
+			return slbClient.DeleteRules(request)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{"OperationFailed.ListenerStatusNotSupport"}) {
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		return nil
 	})
+
 	if err != nil {
-		if IsExceptedError(err, InvalidRuleIdNotFound) {
+		if IsExpectedErrors(err, []string{"InvalidRuleId.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-
 	return WrapError(slbService.WaitForSlbRule(d.Id(), Deleted, DefaultTimeoutMedium))
 
 }

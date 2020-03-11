@@ -5,7 +5,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -18,13 +19,20 @@ func dataSourceAlicloudKeyPairs() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
 			},
 			"ids": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
+			"tags": tagsSchema(),
 			"finger_print": {
 				Type:     schema.TypeBool,
 				Optional: true,
@@ -49,6 +57,10 @@ func dataSourceAlicloudKeyPairs() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"resource_group_id": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
 						"key_name": {
 							Type:     schema.TypeString,
 							Computed: true,
@@ -62,6 +74,7 @@ func dataSourceAlicloudKeyPairs() *schema.Resource {
 							Computed: true,
 							Elem:     &schema.Resource{Schema: outputInstancesSchema()},
 						},
+						"tags": tagsSchema(),
 					},
 				},
 			},
@@ -87,6 +100,21 @@ func dataSourceAlicloudKeyPairsRead(d *schema.ResourceData, meta interface{}) er
 	request.RegionId = client.RegionId
 	if fingerPrint, ok := d.GetOk("finger_print"); ok {
 		request.KeyPairFingerPrint = fingerPrint.(string)
+	}
+	if v, ok := d.GetOk("resource_group_id"); ok {
+		request.ResourceGroupId = v.(string)
+	}
+	tags := d.Get("tags").(map[string]interface{})
+	if tags != nil && len(tags) > 0 {
+		KeyPairsTags := make([]ecs.DescribeKeyPairsTag, 0, len(tags))
+		for k, v := range tags {
+			imageTag := ecs.DescribeKeyPairsTag{
+				Key:   k,
+				Value: v.(string),
+			}
+			KeyPairsTags = append(KeyPairsTags, imageTag)
+		}
+		request.Tag = &KeyPairsTags
 	}
 	request.PageNumber = requests.NewInteger(1)
 	request.PageSize = requests.NewInteger(PageSizeLarge)
@@ -120,11 +148,11 @@ func dataSourceAlicloudKeyPairsRead(d *schema.ResourceData, meta interface{}) er
 		if len(response.KeyPairs.KeyPair) < PageSizeLarge {
 			break
 		}
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	describeInstancesRequest := ecs.CreateDescribeInstancesRequest()
@@ -145,23 +173,23 @@ func dataSourceAlicloudKeyPairsRead(d *schema.ResourceData, meta interface{}) er
 		}
 		for _, inst := range object.Instances.Instance {
 			if _, ok := keyPairsAttach[inst.KeyPairName]; ok {
-				public_ip := inst.EipAddress.IpAddress
-				if public_ip == "" && len(inst.PublicIpAddress.IpAddress) > 0 {
-					public_ip = inst.PublicIpAddress.IpAddress[0]
+				publicIp := inst.EipAddress.IpAddress
+				if publicIp == "" && len(inst.PublicIpAddress.IpAddress) > 0 {
+					publicIp = inst.PublicIpAddress.IpAddress[0]
 				}
-				var private_ip string
+				var privateIp string
 				if len(inst.InnerIpAddress.IpAddress) > 0 {
-					private_ip = inst.InnerIpAddress.IpAddress[0]
+					privateIp = inst.InnerIpAddress.IpAddress[0]
 				} else if len(inst.VpcAttributes.PrivateIpAddress.IpAddress) > 0 {
-					private_ip = inst.VpcAttributes.PrivateIpAddress.IpAddress[0]
+					privateIp = inst.VpcAttributes.PrivateIpAddress.IpAddress[0]
 				}
 				mapping := map[string]interface{}{
 					"availability_zone": inst.ZoneId,
 					"instance_id":       inst.InstanceId,
 					"instance_name":     inst.InstanceName,
 					"vswitch_id":        inst.VpcAttributes.VSwitchId,
-					"public_ip":         public_ip,
-					"private_ip":        private_ip,
+					"public_ip":         publicIp,
+					"private_ip":        privateIp,
 				}
 				if val, ok := keyPairsAttach[inst.KeyPairName]; ok {
 					val = append(val, mapping)
@@ -175,26 +203,28 @@ func dataSourceAlicloudKeyPairsRead(d *schema.ResourceData, meta interface{}) er
 			break
 		}
 
-		if page, err := getNextpageNumber(describeInstancesRequest.PageNumber); err != nil {
+		page, err := getNextpageNumber(describeInstancesRequest.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			describeInstancesRequest.PageNumber = page
 		}
+		describeInstancesRequest.PageNumber = page
 	}
 
-	return keyPairsDescriptionAttributes(d, keyPairs, keyPairsAttach)
+	return keyPairsDescriptionAttributes(d, keyPairs, keyPairsAttach, meta)
 }
 
-func keyPairsDescriptionAttributes(d *schema.ResourceData, keyPairs []ecs.KeyPair, keyPairsAttach map[string][]map[string]interface{}) error {
+func keyPairsDescriptionAttributes(d *schema.ResourceData, keyPairs []ecs.KeyPair, keyPairsAttach map[string][]map[string]interface{}, meta interface{}) error {
 	var names []string
 	var ids []string
 	var s []map[string]interface{}
 	for _, key := range keyPairs {
 		mapping := map[string]interface{}{
-			"id":           key.KeyPairName,
-			"key_name":     key.KeyPairName,
-			"finger_print": key.KeyPairFingerPrint,
-			"instances":    keyPairsAttach[key.KeyPairName],
+			"id":                key.KeyPairName,
+			"key_name":          key.KeyPairName,
+			"finger_print":      key.KeyPairFingerPrint,
+			"resource_group_id": key.ResourceGroupId,
+			"instances":         keyPairsAttach[key.KeyPairName],
+			"tags":              tagsToMap(key.Tags.Tag),
 		}
 
 		names = append(names, string(key.KeyPairName))

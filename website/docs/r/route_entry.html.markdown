@@ -1,4 +1,5 @@
 ---
+subcategory: "VPC"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_route_entry"
 sidebar_current: "docs-alicloud-resource-route-entry"
@@ -24,7 +25,7 @@ data "alicloud_instance_types" "default" {
   memory_size       = 2
 }
 data "alicloud_images" "default" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }
@@ -82,6 +83,12 @@ resource "alicloud_route_entry" "foo" {
   nexthop_id            = "${alicloud_instance.foo.id}"
 }
 ```
+
+## Module Support
+
+You can use to the existing [vpc module](https://registry.terraform.io/modules/alibaba/vpc/alicloud) 
+to create a VPC, several VSwitches and add several route entries one-click.
+
 ## Argument Reference
 
 The following arguments are supported:

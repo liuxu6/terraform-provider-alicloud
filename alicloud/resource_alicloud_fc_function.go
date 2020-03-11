@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"strings"
 
 	"github.com/aliyun/fc-go-sdk"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -35,21 +37,13 @@ func resourceAlicloudFCFunction() *schema.Resource {
 				Computed:      true,
 				ForceNew:      true,
 				ConflictsWith: []string{"name_prefix"},
-				ValidateFunc:  validateStringLengthInRange(1, 128),
+				ValidateFunc:  validation.StringLenBetween(1, 128),
 			},
 			"name_prefix": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					// uuid is 26 characters, limit the prefix to 229.
-					value := v.(string)
-					if len(value) > 122 {
-						errors = append(errors, fmt.Errorf(
-							"%q cannot be longer than 102 characters, name is limited to 128", k))
-					}
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.StringLenBetween(0, 122),
 			},
 
 			"oss_bucket": {
@@ -75,6 +69,12 @@ func resourceAlicloudFCFunction() *schema.Resource {
 				Optional: true,
 			},
 
+			"code_checksum": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+			},
+
 			"environment_variables": {
 				Type:     schema.TypeMap,
 				Optional: true,
@@ -88,7 +88,7 @@ func resourceAlicloudFCFunction() *schema.Resource {
 				Type:         schema.TypeInt,
 				Optional:     true,
 				Default:      128,
-				ValidateFunc: validateIntegerInRange(128, 3072),
+				ValidateFunc: validation.IntBetween(128, 3072),
 			},
 			"runtime": {
 				Type:     schema.TypeString,
@@ -160,7 +160,7 @@ func resourceAlicloudFCFunctionCreate(d *schema.ResourceData, meta interface{}) 
 			return fcClient.CreateFunction(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{AccessDenied}) {
+			if IsExpectedErrors(err, []string{"AccessDenied"}) {
 				return resource.RetryableError(WrapError(err))
 			}
 			return resource.NonRetryableError(WrapError(err))
@@ -200,6 +200,7 @@ func resourceAlicloudFCFunctionRead(d *schema.ResourceData, meta interface{}) er
 		return WrapError(err)
 	}
 	d.Set("service", parts[0])
+	d.Set("code_checksum", object.CodeChecksum)
 	d.Set("name", object.FunctionName)
 	d.Set("function_id", object.FunctionID)
 	d.Set("description", object.Description)
@@ -218,27 +219,32 @@ func resourceAlicloudFCFunctionUpdate(d *schema.ResourceData, meta interface{}) 
 
 	request := &fc.UpdateFunctionInput{}
 
+	update := false
 	if d.HasChange("filename") || d.HasChange("oss_bucket") || d.HasChange("oss_key") {
-		d.SetPartial("filename")
-		d.SetPartial("oss_bucket")
-		d.SetPartial("oss_key")
+		update = true
 	}
 	if d.HasChange("description") {
+		update = true
 		request.Description = StringPointer(d.Get("description").(string))
 	}
 	if d.HasChange("handler") {
+		update = true
 		request.Handler = StringPointer(d.Get("handler").(string))
 	}
 	if d.HasChange("memory_size") {
+		update = true
 		request.MemorySize = Int32Pointer(int32(d.Get("memory_size").(int)))
 	}
 	if d.HasChange("timeout") {
+		update = true
 		request.Timeout = Int32Pointer(int32(d.Get("timeout").(int)))
 	}
 	if d.HasChange("runtime") {
+		update = true
 		request.Runtime = StringPointer(d.Get("runtime").(string))
 	}
 	if d.HasChange("environment_variables") {
+		update = true
 		byteVar, err := json.Marshal(d.Get("environment_variables").(map[string]interface{}))
 		if err != nil {
 			return WrapError(err)
@@ -249,7 +255,7 @@ func resourceAlicloudFCFunctionUpdate(d *schema.ResourceData, meta interface{}) 
 		}
 	}
 
-	if request != nil {
+	if update {
 		split := strings.Split(d.Id(), COLON_SEPARATED)
 		request.ServiceName = StringPointer(split[0])
 		request.FunctionName = StringPointer(split[1])
@@ -289,7 +295,7 @@ func resourceAlicloudFCFunctionDelete(d *schema.ResourceData, meta interface{}) 
 		return fcClient.DeleteFunction(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{ServiceNotFound, FunctionNotFound}) {
+		if IsExpectedErrors(err, []string{"ServiceNotFound", "FunctionNotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "DeleteFunction", FcGoSdk)
@@ -310,7 +316,7 @@ func getFunctionCode(d *schema.ResourceData) (*fc.Code, error) {
 		bucket, bucketOk := d.GetOk("oss_bucket")
 		key, keyOk := d.GetOk("oss_key")
 		if !bucketOk || !keyOk {
-			return code, WrapError(Error("'oss_bucket' and 'oss_key' must all be set while using OSS code source."))
+			return code, nil
 		}
 		code.WithOSSBucketName(bucket.(string)).WithOSSObjectName(key.(string))
 	}

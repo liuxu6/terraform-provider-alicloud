@@ -11,8 +11,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cbn"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -20,6 +20,9 @@ func init() {
 	resource.AddTestSweepers("alicloud_cen_bandwidth_package", &resource.Sweeper{
 		Name: "alicloud_cen_bandwidth_package",
 		F:    testSweepCenBandwidthPackage,
+		Dependencies: []string{
+			"alicloud_cen_bandwidth_limit",
+		},
 	})
 }
 
@@ -48,7 +51,7 @@ func testSweepCenBandwidthPackage(region string) error {
 				return cbnClient.DescribeCenBandwidthPackages(request)
 			})
 			if err != nil {
-				if IsExceptedError(err, CenThrottlingUser) {
+				if IsExpectedErrors(err, []string{ThrottlingUser}) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -101,7 +104,7 @@ func testSweepCenBandwidthPackage(region string) error {
 				return cbnClient.UnassociateCenBandwidthPackage(request)
 			})
 			if err != nil {
-				log.Printf("[ERROR] Failed to delete CEN bandwidth package attachment (%s (%s)): %s", name, id, err)
+				log.Printf("[ERROR] Failed to Unassociate CEN bandwidth package (%s (%s)): %s", name, id, err)
 			}
 		}
 		log.Printf("[INFO] Deleting CEN bandwidth package: %s (%s)", name, id)
@@ -143,6 +146,7 @@ func TestAccAlicloudCenBandwidthPackage_basic(t *testing.T) {
 		PreCheck: func() {
 			testAccPreCheck(t)
 			testAccPreCheckWithAccountSiteType(t, DomesticSite)
+			testAccPreCheckWithRegions(t, true, connectivity.CenNoSkipRegions)
 		},
 		// module name
 		IDRefreshName: resourceId,
@@ -234,6 +238,7 @@ func TestAccAlicloudCenBandwidthPackage_multi(t *testing.T) {
 		PreCheck: func() {
 			testAccPreCheck(t)
 			testAccPreCheckWithAccountSiteType(t, DomesticSite)
+			testAccPreCheckWithRegions(t, true, connectivity.CenNoSkipRegions)
 		},
 		// module name
 		IDRefreshName: resourceId,

@@ -6,7 +6,8 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -23,7 +24,7 @@ func dataSourceAlicloudVSwitches() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 			"is_default": {
@@ -41,6 +42,7 @@ func dataSourceAlicloudVSwitches() *schema.Resource {
 				Optional: true,
 				ForceNew: true,
 			},
+			"tags": tagsSchema(),
 			"output_file": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -49,11 +51,17 @@ func dataSourceAlicloudVSwitches() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"names": {
 				Type:     schema.TypeList,
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
 			},
 			// Computed values
 			"vswitches": {
@@ -106,9 +114,11 @@ func dataSourceAlicloudVSwitches() *schema.Resource {
 }
 func dataSourceAlicloudVSwitchesRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	vpcService := VpcService{client}
 
 	request := vpc.CreateDescribeVSwitchesRequest()
 	request.RegionId = string(client.Region)
+	request.ResourceGroupId = d.Get("resource_group_id").(string)
 	// API DescribeVSwitches has some limitations
 	// If there is no vpc_id, setting PageSizeSmall can avoid ServiceUnavailable Error
 	request.PageSize = requests.NewInteger(PageSizeSmall)
@@ -174,6 +184,15 @@ func dataSourceAlicloudVSwitchesRead(d *schema.ResourceData, meta interface{}) e
 					continue
 				}
 			}
+			if value, ok := d.GetOk("tags"); ok && len(value.(map[string]interface{})) > 0 {
+				tags, err := vpcService.DescribeTags(vsw.VSwitchId, value.(map[string]interface{}), TagResourceVSwitch)
+				if err != nil {
+					return WrapError(err)
+				}
+				if len(tags) < 1 {
+					continue
+				}
+			}
 			allVSwitches = append(allVSwitches, vsw)
 		}
 
@@ -181,11 +200,11 @@ func dataSourceAlicloudVSwitchesRead(d *schema.ResourceData, meta interface{}) e
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	return VSwitchesDecriptionAttributes(d, allVSwitches, meta)
@@ -223,12 +242,12 @@ func VSwitchesDecriptionAttributes(d *schema.ResourceData, vsws []vpc.VSwitch, m
 
 		response, _ := raw.(*ecs.DescribeInstancesResponse)
 		if len(response.Instances.Instance) > 0 {
-			instance_ids := make([]string, 0, len(response.Instances.Instance))
+			instanceIds := make([]string, 0, len(response.Instances.Instance))
 
 			for _, inst := range response.Instances.Instance {
-				instance_ids = append(instance_ids, inst.InstanceId)
+				instanceIds = append(instanceIds, inst.InstanceId)
 			}
-			mapping["instance_ids"] = instance_ids
+			mapping["instance_ids"] = instanceIds
 		}
 
 		ids = append(ids, vsw.VSwitchId)

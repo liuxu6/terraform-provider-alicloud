@@ -5,14 +5,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/denverdino/aliyungo/common"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r-kvstore"
+	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r_kvstore"
 
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform/helper/hashcode"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -36,13 +40,25 @@ func resourceAlicloudKVStoreInstance() *schema.Resource {
 			"instance_name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateRKVInstanceName,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 			"password": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				Sensitive:    true,
-				ValidateFunc: validateRKVPassword,
+				Type:      schema.TypeString,
+				Optional:  true,
+				Sensitive: true,
+			},
+			"kms_encrypted_password": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				DiffSuppressFunc: kmsDiffSuppressFunc,
+			},
+			"kms_encryption_context": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("kms_encrypted_password").(string) == ""
+				},
+				Elem: schema.TypeString,
 			},
 			"instance_class": {
 				Type:     schema.TypeString,
@@ -56,39 +72,39 @@ func resourceAlicloudKVStoreInstance() *schema.Resource {
 			},
 			"instance_charge_type": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateInstanceChargeType,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 				Optional:     true,
 				Default:      PostPaid,
 			},
 			"period": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateAllowedIntValue([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 24, 36}),
+				ValidateFunc:     validation.IntInSlice([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 24, 36}),
 				Optional:         true,
 				Default:          1,
-				DiffSuppressFunc: rkvPostPaidDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"auto_renew": {
 				Type:             schema.TypeBool,
 				Optional:         true,
 				Default:          false,
-				DiffSuppressFunc: rkvPostPaidDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"auto_renew_period": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validateIntegerInRange(1, 12),
+				ValidateFunc:     validation.IntBetween(1, 12),
 				Optional:         true,
 				Default:          1,
-				DiffSuppressFunc: rkvPostPaidDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidAndRenewDiffSuppressFunc,
 			},
 			"instance_type": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 				Default:  string(KVStoreRedis),
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(KVStoreMemcache),
 					string(KVStoreRedis),
-				}),
+				}, false),
 			},
 			"vswitch_id": {
 				Type:     schema.TypeString,
@@ -96,11 +112,10 @@ func resourceAlicloudKVStoreInstance() *schema.Resource {
 				Optional: true,
 			},
 			"engine_version": {
-				Type:         schema.TypeString,
-				ForceNew:     true,
-				Optional:     true,
-				Default:      KVStore2Dot8,
-				ValidateFunc: validateAllowedStringValue([]string{string(KVStore2Dot8), string(KVStore4Dot0)}),
+				Type:     schema.TypeString,
+				ForceNew: true,
+				Optional: true,
+				Default:  KVStore2Dot8,
 			},
 			"connection_domain": {
 				Type:     schema.TypeString,
@@ -115,7 +130,7 @@ func resourceAlicloudKVStoreInstance() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
-
+			"tags": tagsSchema(),
 			"security_ips": {
 				Type:     schema.TypeSet,
 				Elem:     &schema.Schema{Type: schema.TypeString},
@@ -127,18 +142,18 @@ func resourceAlicloudKVStoreInstance() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Computed:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"Open", "Close"}),
+				ValidateFunc: validation.StringInSlice([]string{"Open", "Close"}, false),
 			},
 
-			"parameters": &schema.Schema{
+			"parameters": {
 				Type: schema.TypeSet,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"name": &schema.Schema{
+						"name": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
-						"value": &schema.Schema{
+						"value": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
@@ -148,6 +163,18 @@ func resourceAlicloudKVStoreInstance() *schema.Resource {
 					return hashcode.String(
 						v.(map[string]interface{})["name"].(string) + "|" + v.(map[string]interface{})["value"].(string))
 				},
+				Optional: true,
+				Computed: true,
+			},
+
+			"maintain_start_time": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+			},
+
+			"maintain_end_time": {
+				Type:     schema.TypeString,
 				Optional: true,
 				Computed: true,
 			},
@@ -190,6 +217,9 @@ func resourceAlicloudKVStoreInstanceUpdate(d *schema.ResourceData, meta interfac
 	d.Partial(true)
 	stateConf := BuildStateConf([]string{"DBInstanceClassChanging", "DBInstanceNetTypeChanging", "Changing"}, []string{"Normal"}, d.Timeout(schema.TimeoutUpdate), 1*time.Minute, kvstoreService.RdsKvstoreInstanceStateRefreshFunc(d.Id(), []string{"Deleting"}))
 
+	if err := kvstoreService.setInstanceTags(d); err != nil {
+		return WrapError(err)
+	}
 	if d.HasChange("parameters") {
 		config := make(map[string]interface{})
 		documented := d.Get("parameters").(*schema.Set).List()
@@ -267,33 +297,31 @@ func resourceAlicloudKVStoreInstanceUpdate(d *schema.ResourceData, meta interfac
 			}
 		}
 	}
-
-	if !d.IsNewResource() && (d.HasChange("instance_charge_type") || d.HasChange("period")) {
+	configPayType := PayType(d.Get("instance_charge_type").(string))
+	if !d.IsNewResource() && d.HasChange("instance_charge_type") && configPayType == PrePaid {
+		// for now we just support charge change from PostPaid to PrePaid
 		prePaidRequest := r_kvstore.CreateTransformToPrePaidRequest()
 		prePaidRequest.RegionId = client.RegionId
 		prePaidRequest.InstanceId = d.Id()
 		prePaidRequest.Period = requests.Integer(strconv.Itoa(d.Get("period").(int)))
 
-		// for now we just support charge change from PostPaid to PrePaid
-		configPayType := PayType(d.Get("instance_charge_type").(string))
-		if configPayType == PrePaid {
-			raw, err := client.WithRkvClient(func(rkvClient *r_kvstore.Client) (interface{}, error) {
-				return rkvClient.TransformToPrePaid(prePaidRequest)
-			})
-			if err != nil {
-				return WrapErrorf(err, DefaultErrorMsg, d.Id(), prePaidRequest.GetActionName(), AlibabaCloudSdkGoERROR)
-			}
-			addDebug(prePaidRequest.GetActionName(), raw, prePaidRequest.RpcRequest, prePaidRequest)
-			// wait instance status is Normal after modifying
-			if _, err := stateConf.WaitForState(); err != nil {
-				return WrapError(err)
-			}
-			d.SetPartial("instance_charge_type")
-			d.SetPartial("period")
+		prePaidRequest.AutoPay = requests.NewBoolean(true)
+		raw, err := client.WithRkvClient(func(rkvClient *r_kvstore.Client) (interface{}, error) {
+			return rkvClient.TransformToPrePaid(prePaidRequest)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), prePaidRequest.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
+		addDebug(prePaidRequest.GetActionName(), raw, prePaidRequest.RpcRequest, prePaidRequest)
+		// wait instance status is Normal after modifying
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapError(err)
+		}
+		d.SetPartial("instance_charge_type")
+		d.SetPartial("period")
 	}
 
-	if d.HasChange("auto_renew") || d.HasChange("auto_renew_period") {
+	if configPayType == PrePaid && (d.HasChange("auto_renew") || d.HasChange("auto_renew_period")) {
 		request := r_kvstore.CreateModifyInstanceAutoRenewalAttributeRequest()
 		request.RegionId = client.RegionId
 		request.DBInstanceId = d.Id()
@@ -315,6 +343,24 @@ func resourceAlicloudKVStoreInstanceUpdate(d *schema.ResourceData, meta interfac
 		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 		d.SetPartial("auto_renew")
 		d.SetPartial("auto_renew_period")
+	}
+
+	if d.HasChange("maintain_start_time") || d.HasChange("maintain_end_time") {
+		request := r_kvstore.CreateModifyInstanceMaintainTimeRequest()
+		request.RegionId = client.RegionId
+		request.InstanceId = d.Id()
+		request.MaintainStartTime = d.Get("maintain_start_time").(string)
+		request.MaintainEndTime = d.Get("maintain_end_time").(string)
+
+		raw, err := client.WithRkvClient(func(client *r_kvstore.Client) (interface{}, error) {
+			return client.ModifyInstanceMaintainTime(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("maintain_start_time")
+		d.SetPartial("maintain_end_time")
 	}
 
 	if d.IsNewResource() {
@@ -339,7 +385,7 @@ func resourceAlicloudKVStoreInstanceUpdate(d *schema.ResourceData, meta interfac
 				return rkvClient.ModifyInstanceSpec(request)
 			})
 			if err != nil {
-				if IsExceptedError(err, "MissingRedisUsedmemoryUnsupportPerfItem") {
+				if IsExpectedErrors(err, []string{"MissingRedisUsedmemoryUnsupportPerfItem"}) {
 					time.Sleep(time.Duration(5) * time.Second)
 					return resource.RetryableError(err)
 				}
@@ -356,7 +402,7 @@ func resourceAlicloudKVStoreInstanceUpdate(d *schema.ResourceData, meta interfac
 			return WrapError(err)
 		}
 		// There needs more time to sync instance class update
-		if err = resource.Retry(1*time.Minute, func() *resource.RetryError {
+		err = resource.Retry(1*time.Minute, func() *resource.RetryError {
 			object, err := kvstoreService.DescribeKVstoreInstance(d.Id())
 			if err != nil {
 				return resource.NonRetryableError(err)
@@ -366,7 +412,8 @@ func resourceAlicloudKVStoreInstanceUpdate(d *schema.ResourceData, meta interfac
 					object.InstanceClass, request.InstanceClass))
 			}
 			return nil
-		}); err != nil {
+		})
+		if err != nil {
 			return WrapError(err)
 		}
 
@@ -382,9 +429,23 @@ func resourceAlicloudKVStoreInstanceUpdate(d *schema.ResourceData, meta interfac
 		update = true
 	}
 
-	if d.HasChange("password") {
-		request.NewPassword = d.Get("password").(string)
-		update = true
+	if d.HasChange("password") || d.HasChange("kms_encrypted_password") {
+		if v := d.Get("password").(string); v != "" {
+			d.SetPartial("password")
+			request.NewPassword = v
+			update = true
+		}
+		if v := d.Get("kms_encrypted_password").(string); v != "" {
+			kmsService := KmsService{meta.(*connectivity.AliyunClient)}
+			decryptResp, err := kmsService.Decrypt(v, d.Get("kms_encryption_context").(map[string]interface{}))
+			if err != nil {
+				return WrapError(err)
+			}
+			request.NewPassword = decryptResp.Plaintext
+			d.SetPartial("kms_encrypted_password")
+			d.SetPartial("kms_encryption_context")
+			update = true
+		}
 	}
 
 	if update {
@@ -433,8 +494,15 @@ func resourceAlicloudKVStoreInstanceRead(d *schema.ResourceData, meta interface{
 	d.Set("private_ip", object.PrivateIp)
 	d.Set("security_ips", strings.Split(object.SecurityIPList, COMMA_SEPARATED))
 	d.Set("vpc_auth_mode", object.VpcAuthMode)
+	d.Set("maintain_start_time", object.MaintainStartTime)
+	d.Set("maintain_end_time", object.MaintainEndTime)
+	tags, err := kvstoreService.DescribeTags(d.Id(), TagResourceInstance)
+	if err != nil {
+		return WrapError(err)
+	}
+	d.Set("tags", kvstoreService.tagsToMap(tags))
 
-	if object.ChargeType == string(Prepaid) {
+	if object.ChargeType == string(PrePaid) {
 		request := r_kvstore.CreateDescribeInstanceAutoRenewalAttributeRequest()
 		request.RegionId = client.RegionId
 		request.DBInstanceId = d.Id()
@@ -454,6 +522,11 @@ func resourceAlicloudKVStoreInstanceRead(d *schema.ResourceData, meta interface{
 			d.Set("auto_renew", auto_renew)
 			d.Set("auto_renew_period", renew.Duration)
 		}
+		period, err := computePeriodByUnit(object.CreateTime, object.EndTime, d.Get("period").(int), "Month")
+		if err != nil {
+			return WrapError(err)
+		}
+		d.Set("period", period)
 	}
 	//refresh parameters
 	if err = refreshParameters(d, meta); err != nil {
@@ -474,8 +547,8 @@ func resourceAlicloudKVStoreInstanceDelete(d *schema.ResourceData, meta interfac
 		}
 		return WrapError(err)
 	}
-	if PayType(object.ChargeType) == Prepaid {
-		return WrapError(Error("At present, 'Prepaid' instance cannot be deleted and must wait it to be expired and release it automatically"))
+	if PayType(object.ChargeType) == PrePaid {
+		return WrapError(Error("At present, 'PrePaid' instance cannot be deleted and must wait it to be expired and release it automatically"))
 	}
 	request := r_kvstore.CreateDeleteInstanceRequest()
 	request.RegionId = client.RegionId
@@ -486,7 +559,7 @@ func resourceAlicloudKVStoreInstanceDelete(d *schema.ResourceData, meta interfac
 	})
 
 	if err != nil {
-		if !IsExceptedError(err, InvalidKVStoreInstanceIdNotFound) {
+		if !IsExpectedErrors(err, []string{"InvalidInstanceId.NotFound"}) {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 	}
@@ -508,7 +581,19 @@ func buildKVStoreCreateRequest(d *schema.ResourceData, meta interface{}) (*r_kvs
 	request.EngineVersion = Trim(d.Get("engine_version").(string))
 	request.InstanceClass = Trim(d.Get("instance_class").(string))
 	request.ChargeType = Trim(d.Get("instance_charge_type").(string))
-	request.Password = Trim(d.Get("password").(string))
+
+	request.Password = d.Get("password").(string)
+	if request.Password == "" {
+		if v := d.Get("kms_encrypted_password").(string); v != "" {
+			kmsService := KmsService{client}
+			decryptResp, err := kmsService.Decrypt(v, d.Get("kms_encryption_context").(map[string]interface{}))
+			if err != nil {
+				return request, WrapError(err)
+			}
+			request.Password = decryptResp.Plaintext
+		}
+	}
+
 	request.BackupId = Trim(d.Get("backup_id").(string))
 
 	if PayType(request.ChargeType) == PrePaid {

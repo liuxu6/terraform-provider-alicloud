@@ -5,7 +5,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/pvtz"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -26,6 +26,7 @@ func dataSourceAlicloudPvtzZoneRecords() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"output_file": {
 				Type:     schema.TypeString,
@@ -121,12 +122,12 @@ func dataSourceAlicloudPvtzZoneRecordsRead(d *schema.ResourceData, meta interfac
 
 		for _, key := range response.Records.Record {
 			if len(idsMap) > 0 {
-				if _, ok := idsMap[strconv.Itoa(key.RecordId)]; !ok {
+				if _, ok := idsMap[strconv.FormatInt(key.RecordId, 10)]; !ok {
 					continue
 				}
 			}
 			pvtzZoneRecords = append(pvtzZoneRecords, key)
-			ids = append(ids, strconv.Itoa(key.RecordId))
+			ids = append(ids, strconv.FormatInt(key.RecordId, 10))
 		}
 
 		if page, err := getNextpageNumber(request.PageNumber); err != nil {

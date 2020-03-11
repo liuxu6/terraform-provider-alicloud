@@ -76,7 +76,8 @@ func (client *Client) UpdateBlackIpsWithCallback(request *UpdateBlackIpsRequest,
 // UpdateBlackIpsRequest is the request struct for api UpdateBlackIps
 type UpdateBlackIpsRequest struct {
 	*requests.RoaRequest
-	InstanceId string `position:"Path" name:"InstanceId"`
+	InstanceId  string `position:"Path" name:"InstanceId"`
+	ClientToken string `position:"Query" name:"clientToken"`
 }
 
 // UpdateBlackIpsResponse is the response struct for api UpdateBlackIps
@@ -92,7 +93,7 @@ func CreateUpdateBlackIpsRequest() (request *UpdateBlackIpsRequest) {
 		RoaRequest: &requests.RoaRequest{},
 	}
 	request.InitWithApiInfo("elasticsearch", "2017-06-13", "UpdateBlackIps", "/openapi/instances/[InstanceId]/black-ips", "elasticsearch", "openAPI")
-	request.Method = requests.POST
+	request.Method = requests.PATCH
 	return
 }
 

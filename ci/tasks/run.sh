@@ -5,6 +5,7 @@ set -e
 : ${ALICLOUD_ACCESS_KEY:?}
 : ${ALICLOUD_SECRET_KEY:?}
 : ${ALICLOUD_REGION:?}
+: ${ALICLOUD_ACCOUNT_ID:?}
 : ${ALICLOUD_ACCOUNT_SITE:="Domestic"}
 : ${TEST_CASE_CODE:?}
 : ${SWEEPER:?}
@@ -14,12 +15,15 @@ set -e
 : ${DING_TALK_TOKEN:=""}
 : ${BUCKET_NAME:=?}
 : ${BUCKET_REGION:=?}
+: ${ALICLOUD_RESOURCE_GROUP_ID:=""}
 
 
 export ALICLOUD_ACCESS_KEY=${ALICLOUD_ACCESS_KEY}
 export ALICLOUD_SECRET_KEY=${ALICLOUD_SECRET_KEY}
 export ALICLOUD_REGION=${ALICLOUD_REGION}
 export ALICLOUD_ACCOUNT_SITE=${ALICLOUD_ACCOUNT_SITE}
+export ALICLOUD_ASSUME_ROLE_ARN=acs:ram::${ALICLOUD_ACCOUNT_ID}:role/terraform-provider-assume-role
+export ALICLOUD_RESOURCE_GROUP_ID=${ALICLOUD_RESOURCE_GROUP_ID}
 export DEBUG=terraform
 
 echo -e "Account Site: ${ALICLOUD_ACCOUNT_SITE}"
@@ -54,10 +58,10 @@ if [[ ${SWEEPER} = true ]]; then
     echo -e "\n--------------- Running Sweeper Test Cases ---------------"
     if [[ ${TEST_SWEEPER_CASE_CODE} == "alicloud_"* ]]; then
         echo -e "TF_ACC=1 go test ./alicloud -v  -sweep=${ALICLOUD_REGION} -sweep-run=${TEST_SWEEPER_CASE_CODE}"
-        TF_ACC=1 go test ./alicloud -v  -sweep=${ALICLOUD_REGION} -sweep-run=${TEST_SWEEPER_CASE_CODE}
+        TF_ACC=1 go test ./alicloud -v  -sweep=${ALICLOUD_REGION} -sweep-run=${TEST_SWEEPER_CASE_CODE} -timeout=60m
     else
         echo -e "TF_ACC=1 go test ./alicloud -v  -sweep=${ALICLOUD_REGION}"
-        TF_ACC=1 go test ./alicloud -v  -sweep=${ALICLOUD_REGION}
+        TF_ACC=1 go test ./alicloud -v  -sweep=${ALICLOUD_REGION} -timeout=60m
     fi
     echo -e "\n--------------- END ---------------"
     exit 0
@@ -65,7 +69,7 @@ fi
 
 EXITCODE=0
 # Clear cache
-export GOCACHE=off
+go clean -cache -modcache -i -r
 ## Run test cases and restore the log
 RESULT="---  Terraform-${TEST_CASE_CODE}-CI-Test Result ($3) --- \n  Region       Total     Failed     Skipped     Passed     \n"
 

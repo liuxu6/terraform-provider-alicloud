@@ -7,7 +7,7 @@ variable "count_format" {
 }
 
 variable "image_id" {
-  default = "ubuntu_140405_64_40G_cloudinit_20161115.vhd"
+  default = "ubuntu_18_04_64_20G_alibase_20190624.vhd"
 }
 
 variable "role" {
@@ -90,3 +90,4 @@ variable "sg_name" {
   description = "The security group name used to launch a new security group when sg is not set."
   default     = "TF_Security_Group"
 }
+

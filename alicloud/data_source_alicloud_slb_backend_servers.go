@@ -2,7 +2,7 @@ package alicloud
 
 import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -19,6 +19,7 @@ func dataSourceAlicloudSlbBackendServers() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				ForceNew: true,
 				MinItems: 1,
 			},
@@ -72,7 +73,7 @@ func dataSourceAlicloudSlbBackendServersRead(d *schema.ResourceData, meta interf
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	response, _ := raw.(*slb.DescribeLoadBalancerAttributeResponse)
-	var filteredBackendServersTemp []slb.BackendServer
+	var filteredBackendServersTemp []slb.BackendServerInDescribeLoadBalancerAttribute
 	if len(idsMap) > 0 {
 		for _, backendServer := range response.BackendServers.BackendServer {
 			if len(idsMap) > 0 {
@@ -90,7 +91,7 @@ func dataSourceAlicloudSlbBackendServersRead(d *schema.ResourceData, meta interf
 	return slbBackendServersDescriptionAttributes(d, filteredBackendServersTemp)
 }
 
-func slbBackendServersDescriptionAttributes(d *schema.ResourceData, backendServers []slb.BackendServer) error {
+func slbBackendServersDescriptionAttributes(d *schema.ResourceData, backendServers []slb.BackendServerInDescribeLoadBalancerAttribute) error {
 	var ids []string
 	var s []map[string]interface{}
 

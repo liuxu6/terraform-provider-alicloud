@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -81,6 +82,26 @@ func TestAccAlicloudInstancesDataSourceBasic(t *testing.T) {
 		}),
 	}
 
+	ramRoleNameConf := dataSourceTestAccConfig{
+		existConfig: testAccCheckAlicloudInstancesDataSourceConfig(rand, map[string]string{
+			"ram_role_name": `"${alicloud_instance.default.role_name}"`,
+		}),
+		fakeConfig: testAccCheckAlicloudInstancesDataSourceConfig(rand, map[string]string{
+			"ram_role_name": `"${alicloud_instance.default.role_name}_fake"`,
+		}),
+	}
+
+	resourceGroupIdConf := dataSourceTestAccConfig{
+		existConfig: testAccCheckAlicloudInstancesDataSourceConfig(rand, map[string]string{
+			"name_regex":        fmt.Sprintf(`"tf-testAccCheckAlicloudInstancesDataSource%d"`, rand),
+			"resource_group_id": `"${var.resource_group_id}"`,
+		}),
+		fakeConfig: testAccCheckAlicloudInstancesDataSourceConfig(rand, map[string]string{
+			"name_regex":        fmt.Sprintf(`"tf-testAccCheckAlicloudInstancesDataSource%d"`, rand),
+			"resource_group_id": `"${var.resource_group_id}_fake"`,
+		}),
+	}
+
 	tagsConf := dataSourceTestAccConfig{
 		existConfig: testAccCheckAlicloudInstancesDataSourceConfigWithTag(rand, map[string]string{
 			"name_regex": fmt.Sprintf(`"tf-testAccCheckAlicloudInstancesDataSource%d"`, rand),
@@ -119,6 +140,7 @@ func TestAccAlicloudInstancesDataSourceBasic(t *testing.T) {
 			"vpc_id":            `"${alicloud_vpc.default.id}"`,
 			"vswitch_id":        `"${alicloud_vswitch.default.id}"`,
 			"availability_zone": `"${data.alicloud_instance_types.default.instance_types.0.availability_zones.0}"`,
+			"resource_group_id": `"${var.resource_group_id}"`,
 		},
 			`tags = {
 				from = "datasource"
@@ -138,6 +160,7 @@ func TestAccAlicloudInstancesDataSourceBasic(t *testing.T) {
 			"vpc_id":            `"${alicloud_vpc.default.id}"`,
 			"vswitch_id":        `"${alicloud_vswitch.default.id}"`,
 			"availability_zone": `"${data.alicloud_instance_types.default.instance_types.0.availability_zones.0}"`,
+			"resource_group_id": `"${var.resource_group_id}"`,
 		},
 			`tags = {
 				from = "datasource_fake"
@@ -152,7 +175,7 @@ func TestAccAlicloudInstancesDataSourceBasic(t *testing.T) {
 	}
 
 	instancesCheckInfo.dataSourceTestCheck(t, rand, nameRegexConf, idsConf, imageIdConf, statusConf,
-		vpcIdConf, vSwitchConf, availabilityZoneConf, tagsConf, allConf)
+		vpcIdConf, vSwitchConf, availabilityZoneConf, ramRoleNameConf, resourceGroupIdConf, tagsConf, allConf)
 }
 
 func testAccCheckAlicloudInstancesDataSourceConfig(rand int, attrMap map[string]string) string {
@@ -163,6 +186,11 @@ func testAccCheckAlicloudInstancesDataSourceConfig(rand int, attrMap map[string]
 
 	config := fmt.Sprintf(`
 	%s
+
+	variable "resource_group_id" {
+		default = "%s"
+	}
+
 	variable "name" {
 		default = "tf-testAccCheckAlicloudInstancesDataSource%d"
 	}
@@ -176,6 +204,20 @@ func testAccCheckAlicloudInstancesDataSourceConfig(rand int, attrMap map[string]
 		instance_name = "${var.name}"
 		system_disk_category = "cloud_efficiency"
 		security_groups = ["${alicloud_security_group.default.id}"]
+		resource_group_id = "${var.resource_group_id}"
+		role_name = "${alicloud_ram_role.default.name}"
+		data_disks {
+				name  = "${var.name}-disk1"
+				size =        "20"
+				category =  "cloud_efficiency"
+				description = "disk1"
+		}
+		data_disks {
+				name  = "${var.name}-disk2"
+				size =        "20"
+				category =  "cloud_efficiency"
+				description = "disk2"
+		}
         tags = {
 			from = "datasource"
 			usage1 = "test"
@@ -187,10 +229,32 @@ func testAccCheckAlicloudInstancesDataSourceConfig(rand int, attrMap map[string]
 
 		}
 	}
+	
+	resource "alicloud_ram_role" "default" {
+	  name = "${var.name}"
+	  document = <<EOF
+		{
+		  "Statement": [
+			{
+			  "Action": "sts:AssumeRole",
+			  "Effect": "Allow",
+			  "Principal": {
+				"Service": [
+				  "ecs.aliyuncs.com"
+				]
+			  }
+			}
+		  ],
+		  "Version": "1"
+		}
+	  EOF
+	  description = "this is a test"
+	  force = true
+	}
 
 	data "alicloud_instances" "default" {
 		%s
-	}`, EcsInstanceCommonNoZonesTestCase, rand, strings.Join(pairs, "\n  "))
+	}`, EcsInstanceCommonNoZonesTestCase, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"), rand, strings.Join(pairs, "\n  "))
 	return config
 }
 
@@ -202,6 +266,11 @@ func testAccCheckAlicloudInstancesDataSourceConfigWithTag(rand int, attrMap map[
 
 	config := fmt.Sprintf(`
 	%s
+
+	variable "resource_group_id" {
+		default = "%s"
+	}
+
 	variable "name" {
 		default = "tf-testAccCheckAlicloudInstancesDataSource%d"
 	}
@@ -215,6 +284,19 @@ func testAccCheckAlicloudInstancesDataSourceConfigWithTag(rand int, attrMap map[
 		instance_name = "${var.name}"
 		system_disk_category = "cloud_efficiency"
 		security_groups = ["${alicloud_security_group.default.id}"]
+		resource_group_id = "${var.resource_group_id}"
+		data_disks {
+				name  = "${var.name}-disk1"
+				size =        "20"
+				category =  "cloud_efficiency"
+				description = "disk1"
+		}
+		data_disks {
+				name  = "${var.name}-disk2"
+				size =        "20"
+				category =  "cloud_efficiency"
+				description = "disk2"
+		}
         tags = {
 			from = "datasource"
 			usage1 = "test"
@@ -230,7 +312,7 @@ func testAccCheckAlicloudInstancesDataSourceConfigWithTag(rand int, attrMap map[
 	data "alicloud_instances" "default" {
 		%s
 		%s
-	}`, EcsInstanceCommonNoZonesTestCase, rand, strings.Join(pairs, "\n  "), tags)
+	}`, EcsInstanceCommonNoZonesTestCase, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"), rand, strings.Join(pairs, "\n  "), tags)
 	return config
 }
 
@@ -249,6 +331,7 @@ var existInstancesMapFunc = func(rand int) map[string]string {
 		"instances.0.vpc_id":                     CHECKSET,
 		"instances.0.vswitch_id":                 CHECKSET,
 		"instances.0.image_id":                   CHECKSET,
+		"instances.0.resource_group_id":          CHECKSET,
 		"instances.0.public_ip":                  "",
 		"instances.0.eip":                        "",
 		"instances.0.description":                "",
@@ -258,7 +341,7 @@ var existInstancesMapFunc = func(rand int) map[string]string {
 		"instances.0.instance_charge_type":       string(PostPaid),
 		"instances.0.internet_max_bandwidth_out": "0",
 		"instances.0.spot_strategy":              string(NoSpot),
-		"instances.0.disk_device_mappings.#":     "1",
+		"instances.0.disk_device_mappings.#":     "3",
 	}
 }
 

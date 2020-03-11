@@ -1,4 +1,5 @@
 ---
+subcategory: "VPC"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_eip_association"
 sidebar_current: "docs-alicloud-resource-eip-association"
@@ -44,7 +45,7 @@ data "alicloud_instance_types" "default" {
 }
 
 data "alicloud_images" "default" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }
@@ -74,6 +75,11 @@ resource "alicloud_security_group" "group" {
   vpc_id      = "${alicloud_vpc.vpc.id}"
 }
 ```
+
+## Module Support
+
+You can use the existing [eip module](https://registry.terraform.io/modules/terraform-alicloud-modules/eip/alicloud) 
+to create several EIP instances and associate them with other resources one-click, like ECS instances, SLB, Nat Gateway and so on.
 
 ## Argument Reference
 

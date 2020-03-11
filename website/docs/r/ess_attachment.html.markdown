@@ -1,4 +1,5 @@
 ---
+subcategory: "Auto Scaling(ESS)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ess_attachment"
 sidebar_current: "docs-alicloud-resource-ess-attachment"
@@ -33,7 +34,7 @@ data "alicloud_instance_types" "default" {
 }
 
 data "alicloud_images" "default" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }

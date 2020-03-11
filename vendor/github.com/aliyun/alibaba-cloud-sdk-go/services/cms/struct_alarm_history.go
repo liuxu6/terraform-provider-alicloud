@@ -17,8 +17,8 @@ package cms
 
 // AlarmHistory is a nested struct in cms response
 type AlarmHistory struct {
+	Id              string                                  `json:"Id" xml:"Id"`
 	RuleId          string                                  `json:"RuleId" xml:"RuleId"`
-	AlertName       string                                  `json:"AlertName" xml:"AlertName"`
 	GroupId         string                                  `json:"GroupId" xml:"GroupId"`
 	Namespace       string                                  `json:"Namespace" xml:"Namespace"`
 	MetricName      string                                  `json:"MetricName" xml:"MetricName"`
@@ -26,11 +26,12 @@ type AlarmHistory struct {
 	Expression      string                                  `json:"Expression" xml:"Expression"`
 	EvaluationCount int                                     `json:"EvaluationCount" xml:"EvaluationCount"`
 	Value           string                                  `json:"Value" xml:"Value"`
-	AlertTime       int                                     `json:"AlertTime" xml:"AlertTime"`
-	LastTime        int                                     `json:"LastTime" xml:"LastTime"`
+	AlertTime       int64                                   `json:"AlertTime" xml:"AlertTime"`
+	LastTime        int64                                   `json:"LastTime" xml:"LastTime"`
 	Level           string                                  `json:"Level" xml:"Level"`
+	PreLevel        string                                  `json:"PreLevel" xml:"PreLevel"`
 	RuleName        string                                  `json:"RuleName" xml:"RuleName"`
-	AlertState      string                                  `json:"AlertState" xml:"AlertState"`
+	State           string                                  `json:"State" xml:"State"`
 	Status          int                                     `json:"Status" xml:"Status"`
 	Webhooks        string                                  `json:"Webhooks" xml:"Webhooks"`
 	InstanceName    string                                  `json:"InstanceName" xml:"InstanceName"`

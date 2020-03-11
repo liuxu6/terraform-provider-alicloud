@@ -3,9 +3,11 @@ package alicloud
 import (
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/actiontrail"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -27,8 +29,8 @@ func resourceAlicloudActiontrail() *schema.Resource {
 			"event_rw": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				Default:      EventWrite,
-				ValidateFunc: validateActiontrailEventrw,
+				Default:      "Write",
+				ValidateFunc: validation.StringInSlice([]string{"Read", "Write", "All"}, false),
 			},
 			"oss_bucket_name": {
 				Type:     schema.TypeString,
@@ -91,7 +93,7 @@ func resourceAlicloudActiontrailCreate(d *schema.ResourceData, meta interface{})
 			return actiontrailClient.CreateTrail(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InsufficientBucketPolicyException}) {
+			if IsExpectedErrors(err, []string{"InsufficientBucketPolicyException"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -175,7 +177,7 @@ func resourceAlicloudActiontrailUpdate(d *schema.ResourceData, meta interface{})
 			return actiontrailClient.UpdateTrail(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InsufficientBucketPolicyException, TrailNeedRamAuthorize}) {
+			if IsExpectedErrors(err, []string{"InsufficientBucketPolicyException", "NeedRamAuthorize"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -203,7 +205,7 @@ func resourceAlicloudActiontrailDelete(d *schema.ResourceData, meta interface{})
 	})
 
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidVpcIDNotFound, ForbiddenVpcNotFound, InvalidTrailNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidVpcID.NotFound", "Forbidden.VpcNotFound", "TrailNotFoundException"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultTimeoutMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

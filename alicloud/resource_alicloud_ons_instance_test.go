@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform/helper/acctest"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ons"
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -42,7 +42,6 @@ func testSweepOnsInstance(region string) error {
 	}
 
 	request := ons.CreateOnsInstanceInServiceListRequest()
-	request.PreventCache = onsService.GetPreventCache()
 
 	raw, err := onsService.client.WithOnsClient(func(onsClient *ons.Client) (interface{}, error) {
 		return onsClient.OnsInstanceInServiceList(request)
@@ -71,7 +70,6 @@ func testSweepOnsInstance(region string) error {
 
 		request := ons.CreateOnsInstanceDeleteRequest()
 		request.InstanceId = v.InstanceId
-		request.PreventCache = onsService.GetPreventCache()
 
 		_, err := onsService.client.WithOnsClient(func(onsClient *ons.Client) (interface{}, error) {
 			return onsClient.OnsInstanceDelete(request)

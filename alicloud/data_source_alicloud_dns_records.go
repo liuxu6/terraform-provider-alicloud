@@ -7,7 +7,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/alidns"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -32,28 +33,22 @@ func dataSourceAlicloudDnsRecords() *schema.Resource {
 				ForceNew: true,
 			},
 			"type": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ForceNew:     true,
-				ValidateFunc: validateDomainRecordType,
-			},
-			"line": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ForceNew:     true,
-				ValidateFunc: validateDomainRecordLine,
-			},
-			"status": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-					if strings.ToLower(value) != "enable" && strings.ToLower(value) != "disable" {
-						errors = append(errors, fmt.Errorf("%q must be 'enable' or 'disable', regardless of uppercase and lowercase.", k))
-					}
-					return
-				},
+				// must be one of [A, NS, MX, TXT, CNAME, SRV, AAAA, CAA, REDIRECT_URL, FORWORD_URL]
+				ValidateFunc: validation.StringInSlice([]string{"A", "NS", "MX", "TXT", "CNAME", "SRV", "AAAA", "CAA", "REDIRECT_URL", "FORWORD_URL"}, false),
+			},
+			"line": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"status": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.StringInSlice([]string{"enable", "disable"}, true),
 			},
 			"is_locked": {
 				Type:     schema.TypeBool,
@@ -64,6 +59,7 @@ func dataSourceAlicloudDnsRecords() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"output_file": {
 				Type:     schema.TypeString,
@@ -158,11 +154,11 @@ func dataSourceAlicloudDnsRecordsRead(d *schema.ResourceData, meta interface{}) 
 		if len(records) < PageSizeLarge {
 			break
 		}
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	var filteredRecords []alidns.Record

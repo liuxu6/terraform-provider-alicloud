@@ -78,17 +78,17 @@ type ModifySecurityIpsRequest struct {
 	*requests.RpcRequest
 	DBInstanceIPArrayName      string           `position:"Query" name:"DBInstanceIPArrayName"`
 	ResourceOwnerId            requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ModifyMode                 string           `position:"Query" name:"ModifyMode"`
-	ResourceOwnerAccount       string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken                string           `position:"Query" name:"ClientToken"`
-	OwnerAccount               string           `position:"Query" name:"OwnerAccount"`
 	SecurityIps                string           `position:"Query" name:"SecurityIps"`
 	SecurityGroupId            string           `position:"Query" name:"SecurityGroupId"`
-	OwnerId                    requests.Integer `position:"Query" name:"OwnerId"`
 	WhitelistNetworkType       string           `position:"Query" name:"WhitelistNetworkType"`
-	DBInstanceIPArrayAttribute string           `position:"Query" name:"DBInstanceIPArrayAttribute"`
 	SecurityIPType             string           `position:"Query" name:"SecurityIPType"`
 	DBInstanceId               string           `position:"Query" name:"DBInstanceId"`
+	ModifyMode                 string           `position:"Query" name:"ModifyMode"`
+	ResourceOwnerAccount       string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount               string           `position:"Query" name:"OwnerAccount"`
+	OwnerId                    requests.Integer `position:"Query" name:"OwnerId"`
+	DBInstanceIPArrayAttribute string           `position:"Query" name:"DBInstanceIPArrayAttribute"`
 }
 
 // ModifySecurityIpsResponse is the response struct for api ModifySecurityIps

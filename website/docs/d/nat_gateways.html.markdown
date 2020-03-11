@@ -1,4 +1,5 @@
 ---
+subcategory: "VPC"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_nat_gateways"
 sidebar_current: "docs-alicloud-datasource-nat-gateways"
@@ -65,4 +66,5 @@ The following attributes are exported in addition to the arguments listed above:
   * `status` - The status of the NAT gateway.
   * `snat_table_id` - The snat table id.
   * `forward_table_id` - The forward table id. 
+  * `vpc_id` - The ID of the VPC.
 

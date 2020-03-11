@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -24,7 +26,7 @@ func resourceAliyunHaVip() *schema.Resource {
 			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceDescription,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 			"ip_address": {
 				Type:     schema.TypeString,
@@ -124,7 +126,7 @@ func resourceAliyunHaVipDelete(d *schema.ResourceData, meta interface{}) error {
 			return vpcClient.DeleteHaVip(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, InvalidHaVipIdNotFound) {
+			if IsExpectedErrors(err, []string{"InvalidHaVipId.NotFound"}) {
 				return nil
 			}
 			return resource.NonRetryableError(err)

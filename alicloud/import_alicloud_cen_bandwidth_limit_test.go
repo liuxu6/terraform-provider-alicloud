@@ -5,14 +5,14 @@ import (
 
 	"github.com/hashicorp/terraform/helper/acctest"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 )
 
 // This testcase can not work in the multi region.
 // The current resource does not need to support same region.
-func SkipTestAccAlicloudCenBandwidthLimit_importBasic(t *testing.T) {
+func SkipTestAccAlicloudCenBandwidthLimitImportBasic(t *testing.T) {
 	resourceName := "alicloud_cen_bandwidth_limit.default"
 	rand := acctest.RandIntRange(1000000, 9999999)
 

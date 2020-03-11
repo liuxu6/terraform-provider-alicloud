@@ -10,8 +10,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -27,6 +27,7 @@ func init() {
 			"alicloud_ots_instance",
 			"alicloud_router_interface",
 			"alicloud_route_table",
+			"alicloud_cen_instance",
 		},
 	})
 }
@@ -73,11 +74,11 @@ func testSweepVpcs(region string) error {
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			log.Printf("[ERROR] %s", WrapError(err))
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	for _, v := range vpcs {
@@ -98,34 +99,10 @@ func testSweepVpcs(region string) error {
 		service := VpcService{client}
 		err := service.sweepVpc(id)
 		if err != nil {
-			fmt.Printf("[ERROR] Failed to delete VPC (%s (%s)): %s", name, id, err)
+			log.Printf("[ERROR] Failed to delete VPC (%s (%s)): %s", name, id, err)
 		}
 	}
 	return nil
-}
-
-func testAccCheckVpcExists(n string, vpc *vpc.DescribeVpcAttributeResponse) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[n]
-		if !ok {
-			return fmt.Errorf("Not found: %s", n)
-		}
-
-		if rs.Primary.ID == "" {
-			return fmt.Errorf("No VPC ID is set")
-		}
-
-		client := testAccProvider.Meta().(*connectivity.AliyunClient)
-		vpcService := VpcService{client}
-		instance, err := vpcService.DescribeVpc(rs.Primary.ID)
-
-		if err != nil {
-			return WrapError(err)
-		}
-
-		*vpc = instance
-		return nil
-	}
 }
 
 func testAccCheckVpcDestroy(s *terraform.State) error {
@@ -153,7 +130,7 @@ func testAccCheckVpcDestroy(s *terraform.State) error {
 }
 
 func TestAccAlicloudVpcBasic(t *testing.T) {
-	var v vpc.DescribeVpcAttributeResponse
+	var v vpc.Vpc
 	rand := acctest.RandInt()
 	resourceId := "alicloud_vpc.default"
 	ra := resourceAttrInit(resourceId, testAccCheckVpcCheckMap)
@@ -203,11 +180,24 @@ func TestAccAlicloudVpcBasic(t *testing.T) {
 				),
 			},
 			{
+				Config: testAccCheckVpcConfig_tags(rand),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "acceptance test",
+					}),
+				),
+			},
+			{
 				Config: testAccCheckVpcConfig_all(rand),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"name":        fmt.Sprintf("tf_testAccVpcConfigName%d_all", rand),
-						"description": fmt.Sprintf("tf_testAccVpcConfigName%d_decription_all", rand),
+						"name":         fmt.Sprintf("tf_testAccVpcConfigName%d_all", rand),
+						"description":  fmt.Sprintf("tf_testAccVpcConfigName%d_decription_all", rand),
+						"tags.%":       REMOVEKEY,
+						"tags.Created": REMOVEKEY,
+						"tags.For":     REMOVEKEY,
 					}),
 				),
 			},
@@ -217,7 +207,7 @@ func TestAccAlicloudVpcBasic(t *testing.T) {
 }
 
 func TestAccAlicloudVpcMulti(t *testing.T) {
-	var v vpc.DescribeVpcAttributeResponse
+	var v vpc.Vpc
 	rand := acctest.RandInt()
 	resourceId := "alicloud_vpc.default.9"
 	ra := resourceAttrInit(resourceId, testAccCheckVpcCheckMap)
@@ -289,6 +279,25 @@ resource "alicloud_vpc" "default" {
 	cidr_block = "172.16.0.0/12"
 	name = "${var.name}_change"
 	description = "${var.name}_decription"
+}
+`, rand)
+}
+
+func testAccCheckVpcConfig_tags(rand int) string {
+	return fmt.Sprintf(
+		`
+variable "name" {
+	default = "tf_testAccVpcConfigName%d"
+}
+
+resource "alicloud_vpc" "default" {
+	cidr_block = "172.16.0.0/12"
+	name = "${var.name}_change"
+	description = "${var.name}_decription"
+	tags 		= {
+		Created = "TF"
+		For 	= "acceptance test"
+	}
 }
 `, rand)
 }

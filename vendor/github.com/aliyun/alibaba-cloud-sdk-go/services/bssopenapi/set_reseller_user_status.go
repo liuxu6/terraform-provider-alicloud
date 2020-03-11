@@ -77,8 +77,8 @@ func (client *Client) SetResellerUserStatusWithCallback(request *SetResellerUser
 type SetResellerUserStatusRequest struct {
 	*requests.RpcRequest
 	OwnerId      string `position:"Query" name:"OwnerId"`
-	Status       string `position:"Query" name:"Status"`
 	BusinessType string `position:"Query" name:"BusinessType"`
+	Status       string `position:"Query" name:"Status"`
 }
 
 // SetResellerUserStatusResponse is the response struct for api SetResellerUserStatus

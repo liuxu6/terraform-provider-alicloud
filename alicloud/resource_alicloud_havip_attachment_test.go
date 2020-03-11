@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -84,7 +84,7 @@ import (
 //}
 
 // At present, only white list users can operate HaVip Resource.
-func SkipTestAccAlicloudHaVipAttachment_basic(t *testing.T) {
+func SkipTestAccAlicloudHaVipAttachmentBasic(t *testing.T) {
 	resourceId := "alicloud_havip_attachment.foo"
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -174,7 +174,7 @@ data "alicloud_instance_types" "default" {
 }
 
 data "alicloud_images" "default" {
-	name_regex = "^ubuntu_14.*_64"
+	name_regex = "^ubuntu_18.*64"
 	most_recent = true
 	owners = "system"
 }

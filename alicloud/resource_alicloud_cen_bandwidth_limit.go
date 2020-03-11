@@ -5,8 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -42,16 +44,9 @@ func resourceAlicloudCenBandwidthLimit() *schema.Resource {
 				MinItems: 2,
 			},
 			"bandwidth_limit": {
-				Type:     schema.TypeInt,
-				Required: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(int)
-					if value < 1 {
-						errors = append(errors, fmt.Errorf("%s should be at least than 1 Mbps", k))
-					}
-
-					return
-				},
+				Type:         schema.TypeInt,
+				Required:     true,
+				ValidateFunc: validation.IntAtLeast(1),
 			},
 		},
 	}
@@ -121,7 +116,7 @@ func resourceAlicloudCenBandwidthLimitUpdate(d *schema.ResourceData, meta interf
 		err := resource.Retry(5*time.Minute, func() *resource.RetryError {
 			err := cenService.SetCenInterRegionBandwidthLimit(cenId, localRegionId, oppositeRegionId, bandwidthLimit)
 			if err != nil {
-				if IsExceptedError(err, InvalidCenInstanceStatus) {
+				if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus"}) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -137,7 +132,7 @@ func resourceAlicloudCenBandwidthLimitUpdate(d *schema.ResourceData, meta interf
 			stateConf := BuildStateConf([]string{"Modifying"}, []string{"Active"}, d.Timeout(schema.TimeoutUpdate), 3*time.Second, cenService.CenBandwidthLimitStateRefreshFunc(d.Id(), []string{}))
 
 			if _, err = stateConf.WaitForState(); err != nil {
-				if IsExceptedError(err, CenThrottlingUser) {
+				if IsExpectedErrors(err, []string{ThrottlingUser}) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -167,7 +162,7 @@ func resourceAlicloudCenBandwidthLimitDelete(d *schema.ResourceData, meta interf
 	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
 		err := cenService.SetCenInterRegionBandwidthLimit(cenId, localRegionId, oppositeRegionId, 0)
 		if err != nil {
-			if IsExceptedError(err, InvalidCenInstanceStatus) {
+			if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -182,7 +177,7 @@ func resourceAlicloudCenBandwidthLimitDelete(d *schema.ResourceData, meta interf
 		stateConf := BuildStateConf([]string{"Active", "Modifying"}, []string{}, d.Timeout(schema.TimeoutDelete), 3*time.Second, cenService.CenBandwidthLimitStateRefreshFunc(d.Id(), []string{}))
 
 		_, err = stateConf.WaitForState()
-		if IsExceptedError(err, CenThrottlingUser) {
+		if IsExpectedErrors(err, []string{ThrottlingUser}) {
 			return resource.RetryableError(err)
 		}
 		return resource.NonRetryableError(err)

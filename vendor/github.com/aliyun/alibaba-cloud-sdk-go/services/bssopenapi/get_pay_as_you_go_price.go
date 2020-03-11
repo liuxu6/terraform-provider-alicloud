@@ -80,8 +80,8 @@ type GetPayAsYouGoPriceRequest struct {
 	SubscriptionType string                          `position:"Query" name:"SubscriptionType"`
 	ModuleList       *[]GetPayAsYouGoPriceModuleList `position:"Query" name:"ModuleList"  type:"Repeated"`
 	OwnerId          requests.Integer                `position:"Query" name:"OwnerId"`
-	Region           string                          `position:"Query" name:"Region"`
 	ProductType      string                          `position:"Query" name:"ProductType"`
+	Region           string                          `position:"Query" name:"Region"`
 }
 
 // GetPayAsYouGoPriceModuleList is a repeated param struct in GetPayAsYouGoPriceRequest

@@ -11,7 +11,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/elasticsearch"
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -45,6 +45,7 @@ func testSweepElasticsearch(region string) error {
 
 	client := rawClient.(*connectivity.AliyunClient)
 	prefixes := []string{
+		"",
 		fmt.Sprintf("tf-testAcc%s", region),
 		fmt.Sprintf("tf_testAcc%s", region),
 	}
@@ -76,11 +77,11 @@ func testSweepElasticsearch(region string) error {
 			break
 		}
 
-		if page, err := getNextpageNumber(req.Page); err != nil {
+		page, err := getNextpageNumber(req.Page)
+		if err != nil {
 			return err
-		} else {
-			req.Page = page
 		}
+		req.Page = page
 	}
 
 	sweeped := false
@@ -142,8 +143,11 @@ func TestAccAlicloudElasticsearchInstance_basic(t *testing.T) {
 	rac := resourceAttrCheckInit(rc, ra)
 
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-	rand := acctest.RandIntRange(1000, 9999)
-	name := fmt.Sprintf("tf-testAcc%s%d", defaultRegionToTest, rand)
+	rand := acctest.RandInt()
+	name := fmt.Sprintf("tf-testAccES%s%d", defaultRegionToTest, rand)
+	if len(name) > 30 {
+		name = name[:30]
+	}
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceElasticsearchInstanceConfigDependence)
 
 	resource.Test(t, resource.TestCase{
@@ -159,7 +163,7 @@ func TestAccAlicloudElasticsearchInstance_basic(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"description":          name,
 					"vswitch_id":           "${alicloud_vswitch.default.id}",
-					"version":              string(ESVersion553WithXPack),
+					"version":              "5.5.3_with_X-Pack",
 					"password":             "Yourpassword1234",
 					"data_node_spec":       DataNodeSpec,
 					"data_node_amount":     DataNodeAmount,
@@ -170,7 +174,7 @@ func TestAccAlicloudElasticsearchInstance_basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"description": name,
-						"version":     string(ESVersion553WithXPack),
+						"version":     "5.5.3_with_X-Pack",
 					}),
 				),
 			},
@@ -192,11 +196,11 @@ func TestAccAlicloudElasticsearchInstance_basic(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"description": fmt.Sprintf("tf_testAcc%s%d", defaultRegionToTest, rand),
+					"description": name[:len(name)-1],
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"description": fmt.Sprintf("tf_testAcc%s%d", defaultRegionToTest, rand),
+						"description": name[:len(name)-1],
 					}),
 				),
 			},
@@ -282,8 +286,11 @@ func TestAccAlicloudElasticsearchInstance_multizone(t *testing.T) {
 	rac := resourceAttrCheckInit(rc, ra)
 
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-	rand := acctest.RandIntRange(1000, 9999)
-	name := fmt.Sprintf("tf-testAcc%s%d", defaultRegionToTest, rand)
+	rand := acctest.RandInt()
+	name := fmt.Sprintf("tf-testAccES%s%d", defaultRegionToTest, rand)
+	if len(name) > 30 {
+		name = name[:30]
+	}
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceElasticsearchInstanceConfigDependence)
 
 	resource.Test(t, resource.TestCase{
@@ -299,7 +306,7 @@ func TestAccAlicloudElasticsearchInstance_multizone(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"description":          name,
 					"vswitch_id":           "${alicloud_vswitch.default.id}",
-					"version":              string(ESVersion553WithXPack),
+					"version":              "5.5.3_with_X-Pack",
 					"password":             "Yourpassword1234",
 					"data_node_spec":       DataNodeSpec,
 					"data_node_amount":     DataNodeAmountForMultiZone,
@@ -312,7 +319,7 @@ func TestAccAlicloudElasticsearchInstance_multizone(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"description":      name,
-						"version":          string(ESVersion553WithXPack),
+						"version":          "5.5.3_with_X-Pack",
 						"data_node_amount": DataNodeAmountForMultiZone,
 						"master_node_spec": MasterNodeSpec,
 						"zone_count":       DefaultZoneAmount,
@@ -337,8 +344,11 @@ func TestAccAlicloudElasticsearchInstance_version(t *testing.T) {
 	rac := resourceAttrCheckInit(rc, ra)
 
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-	rand := acctest.RandIntRange(1000, 9999)
-	name := fmt.Sprintf("tf-testAcc%s%d", defaultRegionToTest, rand)
+	rand := acctest.RandInt()
+	name := fmt.Sprintf("tf-testAccES%s%d", defaultRegionToTest, rand)
+	if len(name) > 30 {
+		name = name[:30]
+	}
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceElasticsearchInstanceConfigDependence)
 
 	resource.Test(t, resource.TestCase{
@@ -354,7 +364,7 @@ func TestAccAlicloudElasticsearchInstance_version(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"description":          name,
 					"vswitch_id":           "${alicloud_vswitch.default.id}",
-					"version":              string(ESVersion632WithXPack),
+					"version":              "6.3_with_X-Pack",
 					"password":             "Yourpassword1234",
 					"data_node_spec":       DataNodeSpec,
 					"data_node_amount":     DataNodeAmount,
@@ -371,7 +381,7 @@ func TestAccAlicloudElasticsearchInstance_version(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"version": string(ESVersion670WithXPack),
+					"version": "6.7_with_X-Pack",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -386,7 +396,7 @@ func TestAccAlicloudElasticsearchInstance_version(t *testing.T) {
 func TestAccAlicloudElasticsearchInstance_multi(t *testing.T) {
 	var instance *elasticsearch.DescribeInstanceResponse
 
-	resourceId := "alicloud_elasticsearch_instance.default.9"
+	resourceId := "alicloud_elasticsearch_instance.default.1"
 	ra := resourceAttrInit(resourceId, elasticsearchMap)
 
 	serviceFunc := func() interface{} {
@@ -397,8 +407,11 @@ func TestAccAlicloudElasticsearchInstance_multi(t *testing.T) {
 	rac := resourceAttrCheckInit(rc, ra)
 
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-	rand := acctest.RandIntRange(1000, 9999)
-	name := fmt.Sprintf("tf-testAcc%s%d", defaultRegionToTest, rand)
+	rand := acctest.RandInt()
+	name := fmt.Sprintf("tf-testAccES%s%d", defaultRegionToTest, rand)
+	if len(name) > 30 {
+		name = name[:30]
+	}
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceElasticsearchInstanceConfigDependence_multi)
 
 	resource.Test(t, resource.TestCase{
@@ -414,14 +427,14 @@ func TestAccAlicloudElasticsearchInstance_multi(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"description":          name,
 					"vswitch_id":           "${alicloud_vswitch.default.id}",
-					"version":              string(ESVersion553WithXPack),
+					"version":              "5.5.3_with_X-Pack",
 					"password":             "Yourpassword1234",
 					"data_node_spec":       DataNodeSpec,
 					"data_node_amount":     DataNodeAmount,
 					"data_node_disk_size":  DataNodeDisk,
 					"data_node_disk_type":  DataNodeDiskType,
 					"instance_charge_type": string(PostPaid),
-					"count":                "10",
+					"count":                "2",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(nil),
@@ -438,7 +451,7 @@ var elasticsearchMap = map[string]string{
 	"data_node_disk_size":  DataNodeDisk,
 	"data_node_disk_type":  DataNodeDiskType,
 	"instance_charge_type": string(PostPaid),
-	"status":               string(ElasticsearchStatusActive),
+	"status":               "active",
 	"kibana_whitelist.#":   "0",
 	"private_whitelist.#":  "0",
 	"public_whitelist.#":   "0",

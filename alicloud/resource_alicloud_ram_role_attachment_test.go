@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -126,10 +126,10 @@ func testAccCheckRamRoleAttachmentDestroy(s *terraform.State) error {
 			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 				return ecsClient.DescribeInstanceRamRole(request)
 			})
-			if IsExceptedError(err, RoleAttachmentUnExpectedJson) {
+			if IsExpectedErrors(err, []string{"unexpected end of JSON input"}) {
 				continue
 			}
-			if IsExceptedError(err, InvalidInstanceIdNotFound) {
+			if IsExpectedErrors(err, []string{"InvalidInstanceId.NotFound"}) {
 				break
 			}
 			if err == nil {

@@ -2,13 +2,16 @@ package alicloud
 
 import (
 	"fmt"
+	"regexp"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 
 	"github.com/denverdino/aliyungo/common"
 	"github.com/denverdino/aliyungo/cs"
 	"github.com/denverdino/aliyungo/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -28,19 +31,25 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 			State: schema.ImportStatePassthrough,
 		},
 
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(90 * time.Minute),
+			Update: schema.DefaultTimeout(60 * time.Minute),
+			Delete: schema.DefaultTimeout(60 * time.Minute),
+		},
+
 		Schema: map[string]*schema.Schema{
 			"name": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validateContainerName,
+				ValidateFunc:  validation.StringLenBetween(1, 63),
 				ConflictsWith: []string{"name_prefix"},
 			},
 			"name_prefix": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Default:       "Terraform-Creation",
-				ValidateFunc:  validateContainerNamePrefix,
+				ValidateFunc:  validation.StringLenBetween(0, 37),
 				ConflictsWith: []string{"name"},
 			},
 			"availability_zone": {
@@ -55,7 +64,7 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 				ForceNew: true,
 				Elem: &schema.Schema{
 					Type:         schema.TypeString,
-					ValidateFunc: validateContainerVswitchId,
+					ValidateFunc: validation.StringMatch(regexp.MustCompile(`^vsw-[a-z0-9]*$`), "should start with 'vsw-'."),
 				},
 				MinItems:         1,
 				MaxItems:         5,
@@ -98,13 +107,27 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 				Optional:      true,
 				ForceNew:      true,
 				Sensitive:     true,
-				ConflictsWith: []string{"key_name"},
+				ConflictsWith: []string{"key_name", "kms_encrypted_password"},
 			},
 			"key_name": {
 				Type:          schema.TypeString,
 				ForceNew:      true,
 				Optional:      true,
-				ConflictsWith: []string{"password"},
+				ConflictsWith: []string{"password", "kms_encrypted_password"},
+			},
+			"kms_encrypted_password": {
+				Type:          schema.TypeString,
+				ForceNew:      true,
+				Optional:      true,
+				ConflictsWith: []string{"password", "key_name"},
+			},
+			"kms_encryption_context": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("kms_encrypted_password").(string) == ""
+				},
+				Elem: schema.TypeString,
 			},
 			"pod_cidr": {
 				Type:     schema.TypeString,
@@ -120,7 +143,7 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateAllowedStringValue([]string{ManagedKubernetesClusterNetworkTypeFlannel, ManagedKubernetesClusterNetworkTypeTerway}),
+				ValidateFunc: validation.StringInSlice([]string{ManagedKubernetesClusterNetworkTypeFlannel, ManagedKubernetesClusterNetworkTypeTerway}, false),
 			},
 			"image_id": {
 				Type:             schema.TypeString,
@@ -133,50 +156,50 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 				Optional:     true,
 				Default:      40,
 				ForceNew:     true,
-				ValidateFunc: validateIntegerInRange(20, 32768),
+				ValidateFunc: validation.IntBetween(20, 32768),
 			},
 			"worker_disk_category": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 				Default:  DiskCloudEfficiency,
-				ValidateFunc: validateAllowedStringValue([]string{
-					string(DiskCloudEfficiency), string(DiskCloudSSD)}),
+				ValidateFunc: validation.StringInSlice([]string{
+					string(DiskCloudEfficiency), string(DiskCloudSSD)}, false),
 			},
 			"worker_data_disk_size": {
 				Type:             schema.TypeInt,
 				Optional:         true,
 				ForceNew:         true,
 				Default:          40,
-				ValidateFunc:     validateIntegerInRange(20, 32768),
+				ValidateFunc:     validation.IntBetween(20, 32768),
 				DiffSuppressFunc: workerDataDiskSizeSuppressFunc,
 			},
 			"worker_data_disk_category": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
-					string(DiskCloudEfficiency), string(DiskCloudSSD)}),
+				ValidateFunc: validation.StringInSlice([]string{
+					string(DiskCloudEfficiency), string(DiskCloudSSD)}, false),
 			},
 			"worker_instance_charge_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateInstanceChargeType,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 				Default:      PostPaid,
 			},
 			"worker_period_unit": {
 				Type:             schema.TypeString,
 				Optional:         true,
 				Default:          Month,
-				ValidateFunc:     validateInstanceChargeTypePeriodUnit,
+				ValidateFunc:     validation.StringInSlice([]string{"Week", "Month"}, false),
 				DiffSuppressFunc: csKubernetesWorkerPostPaidDiffSuppressFunc,
 			},
 			"worker_period": {
 				Type:             schema.TypeInt,
 				Optional:         true,
 				Default:          1,
-				ValidateFunc:     validateInstanceChargeTypePeriod,
+				ValidateFunc:     validation.IntBetween(1, 9),
 				DiffSuppressFunc: csKubernetesWorkerPostPaidDiffSuppressFunc,
 			},
 			"worker_auto_renew": {
@@ -189,7 +212,7 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 				Type:             schema.TypeInt,
 				Optional:         true,
 				Default:          1,
-				ValidateFunc:     validateAllowedIntValue([]int{1, 2, 3, 6, 12}),
+				ValidateFunc:     validation.IntInSlice([]int{1, 2, 3, 6, 12}),
 				DiffSuppressFunc: csKubernetesWorkerPostPaidDiffSuppressFunc,
 			},
 			"slb_internet_enabled": {
@@ -202,6 +225,7 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 				Default:  false,
+				ForceNew: true,
 			},
 			"force_update": {
 				Type:     schema.TypeBool,
@@ -228,6 +252,27 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 			"version": {
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
+			},
+			"log_config": {
+				Type:     schema.TypeList,
+				Optional: true,
+				ForceNew: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"type": {
+							Type:         schema.TypeString,
+							ValidateFunc: validation.StringInSlice([]string{KubernetesClusterLoggingTypeSLS}, false),
+							Required:     true,
+						},
+						"project": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+					},
+				},
+				DiffSuppressFunc: csForceUpdateSuppressFunc,
 			},
 			"worker_nodes": {
 				Type:     schema.TypeList,
@@ -264,7 +309,7 @@ func resourceAlicloudCSManagedKubernetes() *schema.Resource {
 func resourceAlicloudCSManagedKubernetesCreate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	invoker := NewInvoker()
-
+	csService := CsService{client}
 	args, err := buildManagedKubernetesArgs(d, meta)
 	if err != nil {
 		return WrapError(err)
@@ -287,25 +332,13 @@ func resourceAlicloudCSManagedKubernetesCreate(d *schema.ResourceData, meta inte
 		requestMap["Args"] = args
 		addDebug("CreateKubernetesCluster", response, requestInfo, requestMap)
 	}
-	cluster, _ := response.(cs.ClusterCreationResponse)
+	cluster, _ := response.(cs.ClusterCommonResponse)
 	d.SetId(cluster.ClusterID)
 
-	if err := invoker.Run(func() error {
-		raw, err := client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
-			requestInfo = csClient
-			return nil, csClient.WaitForClusterAsyn(d.Id(), cs.Running, 3600)
-		})
-		response = raw
-		return err
-	}); err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "WaitForClusterAsyn", DenverdinoAliyungo)
-	}
-	if debugOn() {
-		waitRequestMap := make(map[string]interface{})
-		waitRequestMap["ClusterId"] = d.Id()
-		waitRequestMap["Status"] = cs.Running
-		waitRequestMap["TimeOut"] = 3600
-		addDebug("WaitForClusterAsyn", response, requestInfo, waitRequestMap)
+	stateConf := BuildStateConf([]string{"initial"}, []string{"running"}, d.Timeout(schema.TimeoutCreate), 5*time.Minute, csService.CsManagedKubernetesInstanceStateRefreshFunc(d.Id(), []string{"deleting", "failed"}))
+
+	if _, err := stateConf.WaitForState(); err != nil {
+		return WrapErrorf(err, IdMsg, d.Id())
 	}
 
 	return resourceAlicloudCSManagedKubernetesRead(d, meta)
@@ -313,6 +346,7 @@ func resourceAlicloudCSManagedKubernetesCreate(d *schema.ResourceData, meta inte
 
 func resourceAlicloudCSManagedKubernetesUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	csService := CsService{client}
 	d.Partial(true)
 	invoker := NewInvoker()
 	if d.HasChange("worker_number") || d.HasChange("worker_numbers") {
@@ -343,16 +377,31 @@ func resourceAlicloudCSManagedKubernetesUpdate(d *schema.ResourceData, meta inte
 
 		// When cluster was created using keypair, LoginPassword will be ignored.
 		// When cluster was created using password, LoginPassword is required to resize.
+
+		password := d.Get("password").(string)
+		if password == "" {
+			if v := d.Get("kms_encrypted_password").(string); v != "" {
+				kmsService := KmsService{client}
+				decryptResp, err := kmsService.Decrypt(v, d.Get("kms_encryption_context").(map[string]interface{}))
+				if err != nil {
+					return WrapError(err)
+				}
+				password = decryptResp.Plaintext
+			}
+		}
+
 		args := &cs.KubernetesClusterScaleArgs{
-			LoginPassword:            d.Get("password").(string),
+			LoginPassword:            password,
 			KeyPair:                  d.Get("key_name").(string),
 			WorkerInstanceTypes:      workerInstanceTypes,
 			WorkerSystemDiskCategory: ecs.DiskCategory(d.Get("worker_disk_category").(string)),
 			WorkerSystemDiskSize:     int64(d.Get("worker_disk_size").(int)),
 			Count:                    scaleSize,
 		}
-		if _, ok := d.GetOk("worker_data_disk_category"); ok {
+		if v, ok := d.GetOk("worker_data_disk_category"); ok {
 			args.WorkerDataDisk = true
+			args.WorkerDataDiskCategory = v.(string)
+			args.WorkerDataDiskSize = int64(d.Get("worker_data_disk_size").(int))
 		}
 
 		var requestInfo *cs.Client
@@ -374,22 +423,10 @@ func resourceAlicloudCSManagedKubernetesUpdate(d *schema.ResourceData, meta inte
 			addDebug("ScaleKubernetesCluster", response, requestInfo, requestMap)
 		}
 
-		if err := invoker.Run(func() error {
-			raw, err := client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
-				requestInfo = csClient
-				return nil, csClient.WaitForClusterAsyn(d.Id(), cs.Running, 3600)
-			})
-			response = raw
-			return err
-		}); err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, d.Id(), "WaitForClusterAsyn", DenverdinoAliyungo)
-		}
-		if debugOn() {
-			waitRequestMap := make(map[string]interface{})
-			waitRequestMap["ClusterId"] = d.Id()
-			waitRequestMap["Status"] = cs.Running
-			waitRequestMap["TimeOut"] = 3600
-			addDebug("WaitForClusterAsyn", response, requestInfo, waitRequestMap)
+		stateConf := BuildStateConf([]string{"scaling"}, []string{"running"}, d.Timeout(schema.TimeoutUpdate), 3*time.Minute, csService.CsManagedKubernetesInstanceStateRefreshFunc(d.Id(), []string{"deleting", "failed"}))
+
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
 		}
 		d.SetPartial("worker_number")
 	}
@@ -410,7 +447,7 @@ func resourceAlicloudCSManagedKubernetesUpdate(d *schema.ResourceData, meta inte
 			})
 			response = raw
 			return err
-		}); err != nil && !IsExceptedError(err, ErrorClusterNameAlreadyExist) {
+		}); err != nil && !IsExpectedErrors(err, []string{"ErrorClusterNameAlreadyExist"}) {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), "ModifyClusterName", DenverdinoAliyungo)
 		}
 
@@ -423,6 +460,7 @@ func resourceAlicloudCSManagedKubernetesUpdate(d *schema.ResourceData, meta inte
 		d.SetPartial("name")
 		d.SetPartial("name_prefix")
 	}
+	UpgradeAlicloudKubernetesCluster(d, meta)
 	d.Partial(false)
 
 	return resourceAlicloudCSManagedKubernetesRead(d, meta)
@@ -444,6 +482,7 @@ func resourceAlicloudCSManagedKubernetesRead(d *schema.ResourceData, meta interf
 	d.Set("vpc_id", object.VPCID)
 	d.Set("security_group_id", object.SecurityGroupID)
 	d.Set("availability_zone", object.ZoneId)
+	d.Set("version", object.CurrentVersion)
 
 	var workerNodes []map[string]interface{}
 	var response interface{}
@@ -618,12 +657,17 @@ func resourceAlicloudCSManagedKubernetesDelete(d *schema.ResourceData, meta inte
 		return nil
 	})
 	if err != nil {
-		if NotFoundError(err) || IsExceptedError(err, ErrorClusterNotFound) {
+		if IsExpectedErrors(err, []string{"ErrorClusterNotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "DeleteCluster", DenverdinoAliyungo)
 	}
-	return WrapError(csService.WaitForCSManagedKubernetes(d.Id(), Deleted, DefaultLongTimeout))
+	stateConf := BuildStateConf([]string{"running", "deleting"}, []string{}, d.Timeout(schema.TimeoutDelete), 3*time.Minute, csService.CsManagedKubernetesInstanceStateRefreshFunc(d.Id(), []string{}))
+
+	if _, err := stateConf.WaitForState(); err != nil {
+		return WrapErrorf(err, IdMsg, d.Id())
+	}
+	return nil
 }
 
 func buildManagedKubernetesArgs(d *schema.ResourceData, meta interface{}) (*cs.KubernetesCreationArgs, error) {
@@ -661,6 +705,23 @@ func buildManagedKubernetesArgs(d *schema.ResourceData, meta interface{}) (*cs.K
 		}
 	}
 
+	loggingType, slsProjectName, err := parseKubernetesClusterLogConfig(d)
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	password := d.Get("password").(string)
+	if password == "" {
+		if v := d.Get("kms_encrypted_password").(string); v != "" {
+			kmsService := KmsService{client}
+			decryptResp, err := kmsService.Decrypt(v, d.Get("kms_encryption_context").(map[string]interface{}))
+			if err != nil {
+				return nil, WrapError(err)
+			}
+			password = decryptResp.Plaintext
+		}
+	}
+
 	creationArgs := &cs.KubernetesCreationArgs{
 		Name:                     clusterName,
 		ClusterType:              "ManagedKubernetes",
@@ -670,7 +731,7 @@ func buildManagedKubernetesArgs(d *schema.ResourceData, meta interface{}) (*cs.K
 		WorkerInstanceTypes:      workerInstanceTypes,
 		VPCID:                    vpcId,
 		VSwitchIds:               vswitchIds,
-		LoginPassword:            d.Get("password").(string),
+		LoginPassword:            password,
 		KeyPair:                  d.Get("key_name").(string),
 		ImageId:                  d.Get("image_id").(string),
 		Network:                  d.Get("cluster_network_type").(string),
@@ -684,6 +745,8 @@ func buildManagedKubernetesArgs(d *schema.ResourceData, meta interface{}) (*cs.K
 		CloudMonitorFlags:        d.Get("install_cloud_monitor").(bool),
 		PublicSLB:                d.Get("slb_internet_enabled").(bool),
 		ZoneId:                   zoneId,
+		LoggingType:              loggingType,
+		SLSProjectName:           slsProjectName,
 	}
 
 	if v, ok := d.GetOk("worker_data_disk_category"); ok {
@@ -715,4 +778,24 @@ func deduplicateInstanceTypes(instanceTypes []string) []string {
 		ret = append(ret, k)
 	}
 	return ret
+}
+
+func UpgradeAlicloudKubernetesCluster(d *schema.ResourceData, meta interface{}) error {
+	client := meta.(*connectivity.AliyunClient)
+	if d.HasChange("version") {
+		nextVersion := d.Get("version").(string)
+		args := &cs.UpgradeClusterArgs{
+			Version: nextVersion,
+		}
+
+		csService := CsService{client}
+		err := csService.UpgradeCluster(d.Id(), args)
+
+		if err != nil {
+			return WrapError(err)
+		}
+
+		d.SetPartial("version")
+	}
+	return nil
 }

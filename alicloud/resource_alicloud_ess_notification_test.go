@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -81,7 +81,7 @@ func testAccCheckEssNotificationDestroy(s *terraform.State) error {
 			continue
 		}
 		if _, err := essService.DescribeEssNotification(rs.Primary.ID); err != nil {
-			if IsExceptedErrors(err, []string{InvalidNotificationNotFound, InvalidScalingGroupIdNotFound}) {
+			if IsExpectedErrors(err, []string{"NotificationConfigurationNotExist", "InvalidScalingGroupId.NotFound"}) {
 				return nil
 			}
 			if NotFoundError(err) {

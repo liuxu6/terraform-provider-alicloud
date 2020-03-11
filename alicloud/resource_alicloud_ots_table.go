@@ -5,11 +5,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"strconv"
 
 	"github.com/aliyun/aliyun-tablestore-go-sdk/tablestore"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -43,12 +45,14 @@ func resourceAlicloudOtsTable() *schema.Resource {
 						"name": {
 							Type:     schema.TypeString,
 							Required: true,
+							ForceNew: true,
 						},
 						"type": {
 							Type:     schema.TypeString,
 							Required: true,
-							ValidateFunc: validateAllowedStringValue([]string{
-								string(IntegerType), string(BinaryType), string(StringType)}),
+							ForceNew: true,
+							ValidateFunc: validation.StringInSlice([]string{
+								string(IntegerType), string(BinaryType), string(StringType)}, false),
 						},
 					},
 				},
@@ -58,12 +62,12 @@ func resourceAlicloudOtsTable() *schema.Resource {
 			"time_to_live": {
 				Type:         schema.TypeInt,
 				Required:     true,
-				ValidateFunc: validateIntegerInRange(-1, INT_MAX),
+				ValidateFunc: validation.IntBetween(-1, INT_MAX),
 			},
 			"max_version": {
 				Type:         schema.TypeInt,
 				Required:     true,
-				ValidateFunc: validateIntegerInRange(1, INT_MAX),
+				ValidateFunc: validation.IntBetween(1, INT_MAX),
 			},
 			"deviation_cell_version_in_sec": {
 				Type:         schema.TypeString,
@@ -118,7 +122,7 @@ func resourceAliyunOtsTableCreate(d *schema.ResourceData, meta interface{}) erro
 			return tableStoreClient.CreateTable(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, OtsTableIsTemporarilyUnavailable) {
+			if IsExpectedErrors(err, OtsTableIsTemporarilyUnavailable) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -198,7 +202,7 @@ func resourceAliyunOtsTableUpdate(d *schema.ResourceData, meta interface{}) erro
 				return tableStoreClient.UpdateTable(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, OtsTableIsTemporarilyUnavailable) {
+				if IsExpectedErrors(err, OtsTableIsTemporarilyUnavailable) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -229,7 +233,7 @@ func resourceAliyunOtsTableDelete(d *schema.ResourceData, meta interface{}) erro
 			return tableStoreClient.DeleteTable(req)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, OtsTableIsTemporarilyUnavailable) {
+			if IsExpectedErrors(err, OtsTableIsTemporarilyUnavailable) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -238,7 +242,7 @@ func resourceAliyunOtsTableDelete(d *schema.ResourceData, meta interface{}) erro
 		return nil
 	})
 	if err != nil {
-		if strings.HasPrefix(err.Error(), OTSObjectNotExist) {
+		if strings.HasPrefix(err.Error(), "OTSObjectNotExist") {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "DeleteTable", AliyunTablestoreGoSdk)

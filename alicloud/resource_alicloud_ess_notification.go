@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -131,7 +131,7 @@ func resourceAlicloudEssNotificationDelete(d *schema.ResourceData, meta interfac
 		return essClient.DeleteNotificationConfiguration(request)
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidNotificationNotFound, InvalidScalingGroupIdNotFound}) {
+		if IsExpectedErrors(err, []string{"NotificationConfigurationNotExist", "InvalidScalingGroupId.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

@@ -1,4 +1,5 @@
 ---
+subcategory: "ECS"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_disk_attachment"
 sidebar_current: "docs-alicloud-resource-disk-attachment"
@@ -32,7 +33,7 @@ resource "alicloud_disk" "ecs_disk" {
 }
 
 resource "alicloud_instance" "ecs_instance" {
-  image_id              = "ubuntu_140405_64_40G_cloudinit_20161115.vhd"
+  image_id              = "ubuntu_18_04_64_20G_alibase_20190624.vhd"
   instance_type         = "ecs.n4.small"
   availability_zone     = "cn-beijing-a"
   security_groups       = ["${alicloud_security_group.ecs_sg.id}"]

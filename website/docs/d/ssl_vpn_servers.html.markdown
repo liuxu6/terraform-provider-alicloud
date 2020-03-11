@@ -1,4 +1,5 @@
 ---
+subcategory: "VPN"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ssl_vpn_servers"
 sidebar_current: "docs-alicloud-datasource-ssl-vpn-servers"
@@ -36,7 +37,7 @@ The following attributes are exported:
 
 * `ids` - A list of SSL-VPN server IDs.
 * `names` - A list of SSL-VPN server names.
-* `ssl_vpn_servers` - A list of SSL-VPN servers. Each element contains the following attributes:
+* `servers` - A list of SSL-VPN servers. Each element contains the following attributes:
   * `vpn_gateway_id` - The ID of the VPN gateway instance.
   * `id` - The ID of the SSL-VPN server.
   * `name` - The name of the SSL-VPN server.
@@ -44,6 +45,7 @@ The following attributes are exported:
   * `compress` - Whether to compress.
   * `cipher` - The encryption algorithm used.
   * `proto` - The protocol used by the SSL-VPN server.
+  * `port` - The port used by the SSL-VPN server.
   * `client_ip_pool` - The IP address pool of the client.
   * `local_subnet` - The local subnet of the VPN connection.
   * `internet_ip` - The public IP.

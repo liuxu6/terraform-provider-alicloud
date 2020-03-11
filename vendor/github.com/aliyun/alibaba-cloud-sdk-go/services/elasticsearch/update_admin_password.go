@@ -76,7 +76,8 @@ func (client *Client) UpdateAdminPasswordWithCallback(request *UpdateAdminPasswo
 // UpdateAdminPasswordRequest is the request struct for api UpdateAdminPassword
 type UpdateAdminPasswordRequest struct {
 	*requests.RoaRequest
-	InstanceId string `position:"Path" name:"InstanceId"`
+	InstanceId  string `position:"Path" name:"InstanceId"`
+	ClientToken string `position:"Query" name:"clientToken"`
 }
 
 // UpdateAdminPasswordResponse is the response struct for api UpdateAdminPassword
@@ -91,7 +92,7 @@ func CreateUpdateAdminPasswordRequest() (request *UpdateAdminPasswordRequest) {
 		RoaRequest: &requests.RoaRequest{},
 	}
 	request.InitWithApiInfo("elasticsearch", "2017-06-13", "UpdateAdminPassword", "/openapi/instances/[InstanceId]/admin-pwd", "elasticsearch", "openAPI")
-	request.Method = requests.POST
+	request.Method = requests.PATCH
 	return
 }
 

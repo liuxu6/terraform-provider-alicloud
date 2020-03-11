@@ -78,11 +78,11 @@ type GrantOperatorPermissionRequest struct {
 	*requests.RpcRequest
 	Privileges           string           `position:"Query" name:"Privileges"`
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	ExpiredTime          string           `position:"Query" name:"ExpiredTime"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	ExpiredTime          string           `position:"Query" name:"ExpiredTime"`
 }
 
 // GrantOperatorPermissionResponse is the response struct for api GrantOperatorPermission

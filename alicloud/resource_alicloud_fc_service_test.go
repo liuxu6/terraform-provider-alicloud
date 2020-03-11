@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/aliyun/fc-go-sdk"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -26,7 +26,7 @@ func init() {
 
 func testSweepFCServices(region string) error {
 	if testSweepPreCheckWithRegions(region, false, connectivity.FcNoSupportedRegions) {
-		log.Printf("[INFO] Skipping Funtion Compute unsupported region: %s", region)
+		log.Printf("[INFO] Skipping Function Compute unsupported region: %s", region)
 		return nil
 	}
 	rawClient, err := sharedClientForRegion(region)

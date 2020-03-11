@@ -1,4 +1,5 @@
 ---
+subcategory: "API Gateway"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_api_gateway_apps"
 sidebar_current: "docs-alicloud-datasource-api-gateway-apps"
@@ -28,6 +29,7 @@ The following arguments are supported:
 
 * `name_regex` - (Optional) A regex string to filter apps by name.
 * `ids` - (Optional, Available in 1.52.2+) A list of app IDs. 
+* `tags` - (Optional, Available in v1.55.3+) A mapping of tags to assign to the resource.
 * `output_file` - (Optional) File name where to save data source results (after running `terraform plan`).
 
 ## Attributes Reference
@@ -42,3 +44,4 @@ The following attributes are exported in addition to the arguments listed above:
   * `description` - App description.
   * `created_time` - Creation time (Greenwich mean time).
   * `modified_time` - Last modification time (Greenwich mean time).
+  * `app_code` - App code.

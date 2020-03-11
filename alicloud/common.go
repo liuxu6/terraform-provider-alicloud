@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -23,9 +24,11 @@ import (
 	"github.com/aliyun/aliyun-tablestore-go-sdk/tablestore"
 	"github.com/aliyun/fc-go-sdk"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"gopkg.in/yaml.v2"
+
+	"math"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/denverdino/aliyungo/common"
@@ -47,6 +50,25 @@ const (
 	PostPaid = PayType("PostPaid")
 	Prepaid  = PayType("Prepaid")
 	Postpaid = PayType("Postpaid")
+)
+
+const (
+	NormalMode = "normal"
+	SafetyMode = "safety"
+)
+
+type DdosbgpInsatnceType string
+
+const (
+	Enterprise   = DdosbgpInsatnceType("Enterprise")
+	Professional = DdosbgpInsatnceType("Professional")
+)
+
+type DdosbgpInstanceIpType string
+
+const (
+	IPv4 = DdosbgpInstanceIpType("IPv4")
+	IPv6 = DdosbgpInstanceIpType("IPv6")
 )
 
 type NetType string
@@ -145,6 +167,7 @@ const (
 	ResourceTypeDisk          = ResourceType("Disk")
 	ResourceTypeVSwitch       = ResourceType("VSwitch")
 	ResourceTypeRds           = ResourceType("Rds")
+	ResourceTypePolarDB       = ResourceType("PolarDB")
 	IoOptimized               = ResourceType("IoOptimized")
 	ResourceTypeRkv           = ResourceType("KVStore")
 	ResourceTypeFC            = ResourceType("FunctionCompute")
@@ -152,6 +175,8 @@ const (
 	ResourceTypeSlb           = ResourceType("Slb")
 	ResourceTypeMongoDB       = ResourceType("MongoDB")
 	ResourceTypeGpdb          = ResourceType("Gpdb")
+	ResourceTypeHBase         = ResourceType("HBase")
+	ResourceTypeAdb           = ResourceType("ADB")
 )
 
 type InternetChargeType string
@@ -160,15 +185,6 @@ const (
 	PayByBandwidth = InternetChargeType("PayByBandwidth")
 	PayByTraffic   = InternetChargeType("PayByTraffic")
 	PayBy95        = InternetChargeType("PayBy95")
-)
-
-type InstanceSeries string
-
-const (
-	drds4c8g   = InstanceSeries("drds.sn1.4c8g")
-	drds8c16g  = InstanceSeries("drds.sn1.8c16g")
-	drds16c32g = InstanceSeries("drds.sn1.16c32g")
-	drds32c64g = InstanceSeries("drds.sn1.32c64g")
 )
 
 type AccountSite string
@@ -184,7 +200,7 @@ const (
 	SnapshotCreatingFailed       = Status("failed")
 
 	SnapshotPolicyCreating  = Status("Creating")
-	SnapshotPolicyAvaliable = Status("avaliable")
+	SnapshotPolicyAvailable = Status("available")
 	SnapshotPolicyNormal    = Status("Normal")
 )
 
@@ -247,9 +263,6 @@ const INT_MAX = 2147483647
 // symbol of multiIZ
 const MULTI_IZ_SYMBOL = "MAZ"
 
-// default connect port of db
-const DB_DEFAULT_CONNECT_PORT = "3306"
-
 const COMMA_SEPARATED = ","
 
 const COLON_SEPARATED = ":"
@@ -270,7 +283,7 @@ func expandStringList(configured []interface{}) []string {
 
 // Takes list of string to strings. Expand to an array
 // of raw strings and returns a []interface{}
-func flattenStringList(list []string) []interface{} {
+func convertListStringToListInterface(list []string) []interface{} {
 	vs := make([]interface{}, 0, len(list))
 	for _, v := range list {
 		vs = append(vs, v)
@@ -311,6 +324,19 @@ func convertJsonStringToList(configured string) ([]interface{}, error) {
 	return result, nil
 }
 
+func convertMaptoJsonString(m map[string]interface{}) (string, error) {
+	sm := make(map[string]string, len(m))
+	for k, v := range m {
+		sm[k] = v.(string)
+	}
+
+	if result, err := json.Marshal(sm); err != nil {
+		return "", err
+	} else {
+		return string(result), nil
+	}
+}
+
 func StringPointer(s string) *string {
 	return &s
 }
@@ -321,6 +347,13 @@ func BoolPointer(b bool) *bool {
 
 func Int32Pointer(i int32) *int32 {
 	return &i
+}
+
+func IntMin(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
 }
 
 const ServerSideEncryptionAes256 = "AES256"
@@ -338,11 +371,23 @@ type TagResourceType string
 const (
 	TagResourceImage         = TagResourceType("image")
 	TagResourceInstance      = TagResourceType("instance")
+	TagResourceAcl           = TagResourceType("acl")
+	TagResourceCertificate   = TagResourceType("certificate")
 	TagResourceSnapshot      = TagResourceType("snapshot")
+	TagResourceKeypair       = TagResourceType("keypair")
 	TagResourceDisk          = TagResourceType("disk")
 	TagResourceSecurityGroup = TagResourceType("securitygroup")
 	TagResourceEni           = TagResourceType("eni")
 	TagResourceCdn           = TagResourceType("DOMAIN")
+	TagResourceVpc           = TagResourceType("VPC")
+	TagResourceVSwitch       = TagResourceType("VSWITCH")
+	TagResourceRouteTable    = TagResourceType("ROUTETABLE")
+	TagResourceEip           = TagResourceType("EIP")
+	TagResourcePlugin        = TagResourceType("plugin")
+	TagResourceApiGroup      = TagResourceType("apiGroup")
+	TagResourceApp           = TagResourceType("app")
+	TagResourceTopic         = TagResourceType("topic")
+	TagResourceConsumerGroup = TagResourceType("consumergroup")
 )
 
 type KubernetesNodeType string
@@ -442,7 +487,7 @@ type Catcher struct {
 
 var ClientErrorCatcher = Catcher{AliyunGoClientFailure, 10, 5}
 var ServiceBusyCatcher = Catcher{"ServiceUnavailable", 10, 5}
-var ThrottlingCatcher = Catcher{Throttling, 10, 10}
+var ThrottlingCatcher = Catcher{Throttling, 50, 2}
 
 func NewInvoker() Invoker {
 	i := Invoker{}
@@ -464,7 +509,7 @@ func (a *Invoker) Run(f func() error) error {
 	}
 
 	for _, catcher := range a.catchers {
-		if IsExceptedErrors(err, []string{catcher.Reason}) {
+		if IsExpectedErrors(err, []string{catcher.Reason}) {
 			catcher.RetryCount--
 
 			if catcher.RetryCount <= 0 {
@@ -653,7 +698,7 @@ func addDebug(action, content interface{}, requestInfo ...interface{}) {
 				request.Method, request.Product, request.Region, request.ActionName, requestContent)
 		}
 
-		fmt.Printf(DefaultDebugMsg, action, content, trace)
+		//fmt.Printf(DefaultDebugMsg, action, content, trace)
 		log.Printf(DefaultDebugMsg, action, content, trace)
 	}
 }
@@ -673,6 +718,14 @@ func ParseResourceId(id string, length int) (parts []string, err error) {
 
 	if len(parts) != length {
 		err = WrapError(fmt.Errorf("Invalid Resource Id %s. Expected parts' length %d, got %d", id, length, len(parts)))
+	}
+	return parts, err
+}
+
+func ParseSlbListenerId(id string) (parts []string, err error) {
+	parts = strings.Split(id, ":")
+	if len(parts) != 2 && len(parts) != 3 {
+		err = WrapError(fmt.Errorf("Invalid alicloud_slb_listener Id %s. Expected Id format is <slb id>:<protocol>:< frontend>.", id))
 	}
 	return parts, err
 }
@@ -698,14 +751,6 @@ func BuildStateConf(pending, target []string, timeout, delay time.Duration, f re
 	}
 }
 
-type EventRwType string
-
-const (
-	EventRead  = EventRwType("Read")
-	EventWrite = EventRwType("Write")
-	EventAll   = EventRwType("All")
-)
-
 func incrementalWait(firstDuration time.Duration, increaseDuration time.Duration) func() {
 	retryCount := 1
 	return func() {
@@ -713,9 +758,87 @@ func incrementalWait(firstDuration time.Duration, increaseDuration time.Duration
 		if retryCount == 1 {
 			waitTime = firstDuration
 		} else if retryCount > 1 {
-			waitTime = time.Duration(retryCount-1) * increaseDuration
+			waitTime += increaseDuration
 		}
 		time.Sleep(waitTime)
 		retryCount++
 	}
+}
+
+// If auto renew, the period computed from computePeriodByUnit will be changed
+// This method used to compute a period accourding to current period and unit
+func computePeriodByUnit(createTime, endTime interface{}, currentPeriod int, periodUnit string) (int, error) {
+	var createTimeStr, endTimeStr string
+	switch value := createTime.(type) {
+	case int64:
+		createTimeStr = time.Unix(createTime.(int64), 0).Format(time.RFC3339)
+		endTimeStr = time.Unix(endTime.(int64), 0).Format(time.RFC3339)
+	case string:
+		createTimeStr = createTime.(string)
+		endTimeStr = endTime.(string)
+	default:
+		return 0, WrapError(fmt.Errorf("Unsupported time type: %#v", value))
+	}
+	// currently, there is time value does not format as standard RFC3339
+	UnStandardRFC3339 := "2006-01-02T15:04Z07:00"
+	create, err := time.Parse(time.RFC3339, createTimeStr)
+	if err != nil {
+		log.Printf("Parase the CreateTime %#v failed and error is: %#v.", createTime, err)
+		create, err = time.Parse(UnStandardRFC3339, createTimeStr)
+		if err != nil {
+			return 0, WrapError(err)
+		}
+	}
+	end, err := time.Parse(time.RFC3339, endTimeStr)
+	if err != nil {
+		log.Printf("Parase the EndTime %#v failed and error is: %#v.", endTime, err)
+		end, err = time.Parse(UnStandardRFC3339, endTimeStr)
+		if err != nil {
+			return 0, WrapError(err)
+		}
+	}
+	var period int
+	switch periodUnit {
+	case "Month":
+		period = int(math.Floor(end.Sub(create).Hours() / 24 / 30))
+	case "Week":
+		period = int(math.Floor(end.Sub(create).Hours() / 24 / 7))
+	case "Year":
+		period = int(math.Floor(end.Sub(create).Hours() / 24 / 365))
+	default:
+		err = fmt.Errorf("Unexpected period unit %s", periodUnit)
+	}
+	// The period at least is 1
+	if period < 1 {
+		period = 1
+	}
+	if period > 12 {
+		period = 12
+	}
+	// period can not be modified and if the new period is changed, using the previous one.
+	if currentPeriod > 0 && currentPeriod != period {
+		period = currentPeriod
+	}
+	return period, WrapError(err)
+}
+
+func checkWaitForReady(object interface{}, conditions map[string]interface{}) (bool, map[string]interface{}, error) {
+	if conditions == nil {
+		return false, nil, nil
+	}
+	objectType := reflect.TypeOf(object)
+	objectValue := reflect.ValueOf(object)
+	values := make(map[string]interface{})
+	for key, value := range conditions {
+		if _, ok := objectType.FieldByName(key); ok {
+			current := objectValue.FieldByName(key)
+			values[key] = current
+			if fmt.Sprintf("%v", current) != fmt.Sprintf("%v", value) {
+				return false, values, nil
+			}
+		} else {
+			return false, values, WrapError(fmt.Errorf("There is missing attribute %s in the object.", key))
+		}
+	}
+	return true, values, nil
 }

@@ -5,19 +5,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"os"
 
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
 
 func resourceAlicloudKeyPair() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceAlicloudKeyPairCreate,
 		Read:   resourceAlicloudKeyPairRead,
+		Update: resourceAlicloudKeyPairUpdate,
 		Delete: resourceAlicloudKeyPairDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -29,14 +32,22 @@ func resourceAlicloudKeyPair() *schema.Resource {
 				Optional:      true,
 				Computed:      true,
 				ForceNew:      true,
-				ValidateFunc:  validateKeyPairName,
+				ValidateFunc:  validation.StringLenBetween(2, 128),
 				ConflictsWith: []string{"key_name_prefix"},
 			},
 			"key_name_prefix": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateKeyPairPrefix,
+				ValidateFunc: validation.StringLenBetween(0, 100),
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("public_key").(string) != ""
+				},
 			},
 			"public_key": {
 				Type:     schema.TypeString,
@@ -60,6 +71,7 @@ func resourceAlicloudKeyPair() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
+			"tags": tagsSchema(),
 		},
 	}
 }
@@ -94,6 +106,9 @@ func resourceAlicloudKeyPairCreate(d *schema.ResourceData, meta interface{}) err
 		request := ecs.CreateCreateKeyPairRequest()
 		request.RegionId = client.RegionId
 		request.KeyPairName = keyName
+		if v, ok := d.GetOk("resource_group_id"); ok && v.(string) != "" {
+			request.ResourceGroupId = v.(string)
+		}
 		raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 			return ecsClient.CreateKeyPair(request)
 		})
@@ -109,6 +124,14 @@ func resourceAlicloudKeyPairCreate(d *schema.ResourceData, meta interface{}) err
 		}
 	}
 
+	return resourceAlicloudKeyPairUpdate(d, meta)
+}
+func resourceAlicloudKeyPairUpdate(d *schema.ResourceData, meta interface{}) error {
+	client := meta.(*connectivity.AliyunClient)
+	err := setTags(client, TagResourceKeypair, d)
+	if err != nil {
+		return WrapError(err)
+	}
 	return resourceAlicloudKeyPairRead(d, meta)
 }
 
@@ -118,14 +141,19 @@ func resourceAlicloudKeyPairRead(d *schema.ResourceData, meta interface{}) error
 
 	keyPair, err := ecsService.DescribeKeyPair(d.Id())
 	if err != nil {
-		if NotFoundError(err) || IsExceptedError(err, KeyPairNotFound) {
+		if NotFoundError(err) || IsExpectedErrors(err, []string{"InvalidKeyPair.NotFound"}) {
 			d.SetId("")
 			return nil
 		}
 		return WrapError(err)
 	}
 	d.Set("key_name", keyPair.KeyPairName)
+	d.Set("resource_group_id", keyPair.ResourceGroupId)
 	d.Set("finger_print", keyPair.KeyPairFingerPrint)
+	tags := keyPair.Tags.Tag
+	if len(tags) > 0 {
+		err = d.Set("tags", tagsToMap(tags))
+	}
 	return nil
 }
 
@@ -142,7 +170,7 @@ func resourceAlicloudKeyPairDelete(d *schema.ResourceData, meta interface{}) err
 			return ecsClient.DeleteKeyPairs(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, KeyPairNotFound) {
+			if IsExpectedErrors(err, []string{"InvalidKeyPair.NotFound"}) {
 				return nil
 			}
 			return resource.RetryableError(err)

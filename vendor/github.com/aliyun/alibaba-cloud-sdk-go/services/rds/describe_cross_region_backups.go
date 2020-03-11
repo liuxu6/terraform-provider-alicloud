@@ -77,14 +77,14 @@ func (client *Client) DescribeCrossRegionBackupsWithCallback(request *DescribeCr
 type DescribeCrossRegionBackupsRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	EndTime              string           `position:"Query" name:"EndTime"`
 	StartTime            string           `position:"Query" name:"StartTime"`
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	CrossBackupRegion    string           `position:"Query" name:"CrossBackupRegion"`
 	PageNumber           requests.Integer `position:"Query" name:"PageNumber"`
 	PageSize             requests.Integer `position:"Query" name:"PageSize"`
 	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
+	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
+	EndTime              string           `position:"Query" name:"EndTime"`
+	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	CrossBackupRegion    string           `position:"Query" name:"CrossBackupRegion"`
 	CrossBackupId        requests.Integer `position:"Query" name:"CrossBackupId"`
 }
 

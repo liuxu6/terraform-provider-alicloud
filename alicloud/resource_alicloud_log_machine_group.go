@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	sls "github.com/aliyun/aliyun-log-go-sdk"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -32,13 +34,10 @@ func resourceAlicloudLogMachineGroup() *schema.Resource {
 				ForceNew: true,
 			},
 			"identify_type": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  sls.MachineIDTypeIP,
-				ValidateFunc: validateAllowedStringValue([]string{
-					string(sls.MachineIDTypeIP),
-					string(sls.MachineIDTypeUserDefined),
-				}),
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      sls.MachineIDTypeIP,
+				ValidateFunc: validation.StringInSlice([]string{sls.MachineIDTypeIP, sls.MachineIDTypeUserDefined}, false),
 			},
 			"topic": {
 				Type:     schema.TypeString,
@@ -71,7 +70,7 @@ func resourceAlicloudLogMachineGroupCreate(d *schema.ResourceData, meta interfac
 			return nil, slsClient.CreateMachineGroup(d.Get("project").(string), params)
 		})
 		if err != nil {
-			if IsExceptedError(err, LogClientTimeout) {
+			if IsExpectedErrors(err, []string{LogClientTimeout}) {
 				time.Sleep(5 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -141,7 +140,7 @@ func resourceAlicloudLogMachineGroupUpdate(d *schema.ResourceData, meta interfac
 				return nil, slsClient.UpdateMachineGroup(parts[0], params)
 			})
 			if err != nil {
-				if IsExceptedError(err, LogClientTimeout) {
+				if IsExpectedErrors(err, []string{LogClientTimeout}) {
 					time.Sleep(5 * time.Second)
 					return resource.RetryableError(err)
 				}
@@ -176,7 +175,7 @@ func resourceAlicloudLogMachineGroupDelete(d *schema.ResourceData, meta interfac
 			return nil, slsClient.DeleteMachineGroup(parts[0], parts[1])
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{LogClientTimeout}) {
+			if IsExpectedErrors(err, []string{LogClientTimeout}) {
 				time.Sleep(5 * time.Second)
 				return resource.RetryableError(err)
 			}

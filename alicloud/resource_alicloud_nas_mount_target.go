@@ -3,8 +3,10 @@ package alicloud
 import (
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/nas"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -19,25 +21,25 @@ func resourceAlicloudNasMountTarget() *schema.Resource {
 		},
 
 		Schema: map[string]*schema.Schema{
-			"file_system_id": &schema.Schema{
+			"file_system_id": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"vswitch_id": &schema.Schema{
+			"vswitch_id": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 			},
-			"access_group_name": &schema.Schema{
+			"access_group_name": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
-			"status": &schema.Schema{
+			"status": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Computed:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"Active", "Inactive"}),
+				ValidateFunc: validation.StringInSlice([]string{"Active", "Inactive"}, false),
 			},
 		},
 	}
@@ -137,7 +139,7 @@ func resourceAlicloudNasMountTargetDelete(d *schema.ResourceData, meta interface
 	})
 
 	if err != nil {
-		if IsExceptedError(err, ForbiddenNasNotFound) {
+		if IsExpectedErrors(err, []string{"Forbidden.NasNotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

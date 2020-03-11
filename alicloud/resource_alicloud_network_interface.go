@@ -3,11 +3,13 @@ package alicloud
 import (
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -40,6 +42,11 @@ func resourceAliyunNetworkInterface() *schema.Resource {
 				Set:      schema.HashString,
 				MinItems: 1,
 			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
 			"private_ip": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -59,7 +66,7 @@ func resourceAliyunNetworkInterface() *schema.Resource {
 				Type:          schema.TypeInt,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validateIntegerInRange(0, 10),
+				ValidateFunc:  validation.IntBetween(0, 10),
 				ConflictsWith: []string{"private_ips"},
 			},
 			"mac": {
@@ -88,6 +95,10 @@ func resourceAliyunNetworkInterfaceCreate(d *schema.ResourceData, meta interface
 
 	if primaryIpAddress, ok := d.GetOk("private_ip"); ok {
 		request.PrimaryIpAddress = primaryIpAddress.(string)
+	}
+
+	if v, ok := d.GetOk("resource_group_id"); ok {
+		request.ResourceGroupId = v.(string)
 	}
 
 	if name, ok := d.GetOk("name"); ok {
@@ -139,6 +150,7 @@ func resourceAliyunNetworkInterfaceRead(d *schema.ResourceData, meta interface{}
 			privateIps = append(privateIps, object.PrivateIpSets.PrivateIpSet[i].PrivateIpAddress)
 		}
 	}
+	d.Set("resource_group_id", object.ResourceGroupId)
 	d.Set("private_ips", privateIps)
 	d.Set("private_ips_count", len(privateIps))
 	d.Set("mac", object.MacAddress)
@@ -213,7 +225,7 @@ func resourceAliyunNetworkInterfaceUpdate(d *schema.ResourceData, meta interface
 					return ecsClient.UnassignPrivateIpAddresses(unAssignPrivateIpAddressesRequest)
 				})
 				if err != nil {
-					if IsExceptedErrors(err, NetworkInterfaceInvalidOperations) {
+					if IsExpectedErrors(err, NetworkInterfaceInvalidOperations) {
 						return resource.RetryableError(err)
 					}
 					return resource.NonRetryableError(err)
@@ -238,7 +250,7 @@ func resourceAliyunNetworkInterfaceUpdate(d *schema.ResourceData, meta interface
 					return ecsClient.AssignPrivateIpAddresses(assignPrivateIpAddressesRequest)
 				})
 				if err != nil {
-					if IsExceptedErrors(err, NetworkInterfaceInvalidOperations) {
+					if IsExpectedErrors(err, NetworkInterfaceInvalidOperations) {
 						return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR))
 					}
 					return resource.NonRetryableError(WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR))
@@ -274,7 +286,7 @@ func resourceAliyunNetworkInterfaceUpdate(d *schema.ResourceData, meta interface
 					})
 
 					if err != nil {
-						if IsExceptedErrors(err, NetworkInterfaceInvalidOperations) {
+						if IsExpectedErrors(err, NetworkInterfaceInvalidOperations) {
 							return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, d.Id(), assignPrivateIpAddressesRequest.GetActionName(), AlibabaCloudSdkGoERROR))
 						}
 						return resource.NonRetryableError(WrapErrorf(err, DefaultErrorMsg, d.Id(), assignPrivateIpAddressesRequest.GetActionName(), AlibabaCloudSdkGoERROR))
@@ -299,7 +311,7 @@ func resourceAliyunNetworkInterfaceUpdate(d *schema.ResourceData, meta interface
 						return ecsClient.UnassignPrivateIpAddresses(unAssignPrivateIpAddressesRequest)
 					})
 					if err != nil {
-						if IsExceptedErrors(err, NetworkInterfaceInvalidOperations) {
+						if IsExpectedErrors(err, NetworkInterfaceInvalidOperations) {
 							return resource.RetryableError(err)
 						}
 						return resource.RetryableError(err)
@@ -312,7 +324,8 @@ func resourceAliyunNetworkInterfaceUpdate(d *schema.ResourceData, meta interface
 				}
 			}
 
-			if err := ecsService.WaitForPrivateIpsCountChanged(d.Id(), newIpsCount.(int)); err != nil {
+			err := ecsService.WaitForPrivateIpsCountChanged(d.Id(), newIpsCount.(int))
+			if err != nil {
 				return WrapError(err)
 			}
 
@@ -344,7 +357,7 @@ func resourceAliyunNetworkInterfaceDelete(d *schema.ResourceData, meta interface
 			return ecsClient.DeleteNetworkInterface(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, NetworkInterfaceInvalidOperations) {
+			if IsExpectedErrors(err, NetworkInterfaceInvalidOperations) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)

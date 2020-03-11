@@ -1,11 +1,13 @@
 package alicloud
 
 import (
+	"encoding/json"
 	"regexp"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,22 +19,23 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"ids": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"engine": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(MySQL),
 					string(SQLServer),
 					string(PPAS),
 					string(PostgreSQL),
-				}),
+				}, false),
 			},
 			"status": {
 				Type:     schema.TypeString,
@@ -43,12 +46,12 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 			"db_type": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					"Primary",
 					"Readonly",
 					"Guard",
 					"Temp",
-				}),
+				}, false),
 			},
 			"vpc_id": {
 				Type:     schema.TypeString,
@@ -61,16 +64,12 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 			"connection_mode": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					"Standard",
 					"Safe",
-				}),
+				}, false),
 			},
-			"tags": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ValidateFunc: validateJsonString,
-			},
+			"tags": tagsSchema(),
 			"output_file": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -168,6 +167,22 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"connection_string": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"port": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"db_instance_storage_type": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"instance_storage": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
 					},
 				},
 			},
@@ -187,7 +202,14 @@ func dataSourceAlicloudDBInstancesRead(d *schema.ResourceData, meta interface{})
 	request.VpcId = d.Get("vpc_id").(string)
 	request.VSwitchId = d.Get("vswitch_id").(string)
 	request.ConnectionMode = d.Get("connection_mode").(string)
-	request.Tags = d.Get("tags").(string)
+	if v, ok := d.GetOk("tags"); ok {
+		tagsMap := v.(map[string]interface{})
+		bs, err := json.Marshal(tagsMap)
+		if err != nil {
+			return WrapError(err)
+		}
+		request.Tags = string(bs)
+	}
 	request.PageSize = requests.NewInteger(PageSizeLarge)
 	request.PageNumber = requests.NewInteger(1)
 
@@ -243,16 +265,19 @@ func dataSourceAlicloudDBInstancesRead(d *schema.ResourceData, meta interface{})
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
-	return rdsInstancesDescription(d, dbi)
+	return rdsInstancesDescription(d, meta, dbi)
 }
 
-func rdsInstancesDescription(d *schema.ResourceData, dbi []rds.DBInstance) error {
+func rdsInstancesDescription(d *schema.ResourceData, meta interface{}, dbi []rds.DBInstance) error {
+	client := meta.(*connectivity.AliyunClient)
+	rdsService := RdsService{client}
+
 	var ids []string
 	var names []string
 	var s []map[string]interface{}
@@ -262,27 +287,36 @@ func rdsInstancesDescription(d *schema.ResourceData, dbi []rds.DBInstance) error
 		for _, id := range item.ReadOnlyDBInstanceIds.ReadOnlyDBInstanceId {
 			readOnlyInstanceIDs = append(readOnlyInstanceIDs, id.DBInstanceId)
 		}
+		instance, err := rdsService.DescribeDBInstance(item.DBInstanceId)
+		if err != nil {
+			return WrapError(err)
+		}
+
 		mapping := map[string]interface{}{
-			"id":                    item.DBInstanceId,
-			"name":                  item.DBInstanceDescription,
-			"charge_type":           item.PayType,
-			"db_type":               item.DBInstanceType,
-			"region_id":             item.RegionId,
-			"create_time":           item.CreateTime,
-			"expire_time":           item.ExpireTime,
-			"status":                item.DBInstanceStatus,
-			"engine":                item.Engine,
-			"engine_version":        item.EngineVersion,
-			"net_type":              item.DBInstanceNetType,
-			"connection_mode":       item.ConnectionMode,
-			"instance_type":         item.DBInstanceClass,
-			"availability_zone":     item.ZoneId,
-			"master_instance_id":    item.MasterInstanceId,
-			"guard_instance_id":     item.GuardDBInstanceId,
-			"temp_instance_id":      item.TempDBInstanceId,
-			"readonly_instance_ids": readOnlyInstanceIDs,
-			"vpc_id":                item.VpcId,
-			"vswitch_id":            item.VSwitchId,
+			"id":                       item.DBInstanceId,
+			"name":                     item.DBInstanceDescription,
+			"charge_type":              item.PayType,
+			"db_type":                  item.DBInstanceType,
+			"region_id":                item.RegionId,
+			"create_time":              item.CreateTime,
+			"expire_time":              item.ExpireTime,
+			"status":                   item.DBInstanceStatus,
+			"engine":                   item.Engine,
+			"engine_version":           item.EngineVersion,
+			"net_type":                 item.DBInstanceNetType,
+			"connection_mode":          item.ConnectionMode,
+			"instance_type":            item.DBInstanceClass,
+			"availability_zone":        item.ZoneId,
+			"master_instance_id":       item.MasterInstanceId,
+			"guard_instance_id":        item.GuardDBInstanceId,
+			"temp_instance_id":         item.TempDBInstanceId,
+			"readonly_instance_ids":    readOnlyInstanceIDs,
+			"vpc_id":                   item.VpcId,
+			"vswitch_id":               item.VSwitchId,
+			"connection_string":        instance.ConnectionString,
+			"port":                     instance.Port,
+			"db_instance_storage_type": instance.DBInstanceStorageType,
+			"instance_storage":         instance.DBInstanceStorage,
 		}
 
 		ids = append(ids, item.DBInstanceId)

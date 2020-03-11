@@ -5,7 +5,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/bssopenapi"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ddoscoo"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -25,7 +25,7 @@ func (s *DdoscooService) DescribeDdoscooInstance(id string) (v ddoscoo.Instance,
 	})
 
 	if err != nil {
-		if IsExceptedErrors(err, []string{DdoscooInstanceNotFound}) {
+		if IsExpectedErrors(err, []string{"InstanceNotFound"}) {
 			return v, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 
@@ -51,7 +51,7 @@ func (s *DdoscooService) DescribeDdoscooInstanceSpec(id string) (v ddoscoo.Insta
 	})
 
 	if err != nil {
-		if IsExceptedErrors(err, []string{DdoscooInstanceNotFound, InvalidDdoscooInstance}) {
+		if IsExpectedErrors(err, []string{"InstanceNotFound", "ddos_coop3301"}) {
 			return v, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 
@@ -60,7 +60,7 @@ func (s *DdoscooService) DescribeDdoscooInstanceSpec(id string) (v ddoscoo.Insta
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	resp, _ := raw.(*ddoscoo.DescribeInstanceSpecsResponse)
 	if len(resp.InstanceSpecs) == 0 || resp.InstanceSpecs[0].InstanceId != id {
-		return v, WrapErrorf(Error(GetNotFoundMessage("Ddoscoo Instance", id)), NotFoundMsg, ProviderERROR)
+		return v, WrapErrorf(Error(GetNotFoundMessage("DdoscooInstanceSpec", id)), NotFoundMsg, ProviderERROR)
 	}
 
 	v = resp.InstanceSpecs[0]

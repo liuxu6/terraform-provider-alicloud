@@ -77,15 +77,15 @@ func (client *Client) DescribeDBInstancesByExpireTimeWithCallback(request *Descr
 type DescribeDBInstancesByExpireTimeRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	PageNumber           requests.Integer `position:"Query" name:"PageNumber"`
-	Tags                 string           `position:"Query" name:"Tags"`
 	Expired              requests.Boolean `position:"Query" name:"Expired"`
 	PageSize             requests.Integer `position:"Query" name:"PageSize"`
 	ExpirePeriod         requests.Integer `position:"Query" name:"ExpirePeriod"`
 	ProxyId              string           `position:"Query" name:"proxyId"`
+	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
+	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	Tags                 string           `position:"Query" name:"Tags"`
 }
 
 // DescribeDBInstancesByExpireTimeResponse is the response struct for api DescribeDBInstancesByExpireTime

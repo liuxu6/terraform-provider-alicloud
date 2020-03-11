@@ -8,6 +8,9 @@ description: |-
 
 # Alibaba Cloud Provider
 
+~> **News:** Currently, Alibaba Cloud has published [Terraform Module Web GUI](https://api.aliyun.com/#/cli?tool=Terraform) to
+ help developers to use Terraform Module more simply and conveniently. Welcome to access it and let us know your more requirements!
+
 The Alibaba Cloud provider is used to interact with the
 many resources supported by [Alibaba Cloud](https://www.alibabacloud.com). The provider needs to be configured
 with the proper credentials before it can be used.
@@ -15,9 +18,6 @@ with the proper credentials before it can be used.
 Use the navigation on the left to read about the available resources.
 
 -> **Note:** From version 1.50.0, the provider start to support Terraform 0.12.x.
-
--> **Note:** When you use terraform on a `Windows` computer, please install [golang](https://golang.org/dl/) first.
-Otherwise, you may encounter an issue that occurs from the version 1.8.1 to 1.10.0. For more information, please read the [Crash Error](https://github.com/alibaba/terraform-provider/issues/469).
 
 
 ## Example Usage
@@ -32,7 +32,7 @@ provider "alicloud" {
 
 data "alicloud_instance_types" "c2g4" {
   cpu_core_count = 2
-  memory_size = 4
+  memory_size    = 4
 }
 
 data "alicloud_images" "default" {
@@ -43,21 +43,21 @@ data "alicloud_images" "default" {
 
 # Create a web server
 resource "alicloud_instance" "web" {
-  image_id          = "${data.alicloud_images.default.images.0.id}"
+  image_id              = "${data.alicloud_images.default.images.0.id}"
   internet_charge_type  = "PayByBandwidth"
 
   instance_type        = "${data.alicloud_instance_types.c2g4.instance_types.0.id}"
   system_disk_category = "cloud_efficiency"
   security_groups      = ["${alicloud_security_group.default.id}"]
   instance_name        = "web"
-  vswitch_id = "vsw-abc12345"
+  vswitch_id           = "vsw-abc12345"
 }
 
 # Create security group
 resource "alicloud_security_group" "default" {
   name        = "default"
   description = "default"
-  vpc_id = "vpc-abc12345"
+  vpc_id      = "vpc-abc12345"
 }
 ```
 
@@ -175,7 +175,7 @@ In addition to [generic `provider` arguments](https://www.terraform.io/docs/conf
   If not provided, the provider will attempt to retrieve it automatically with [STS GetCallerIdentity](https://www.alibabacloud.com/help/doc-detail/43767.htm).
   It can be sourced from the `ALICLOUD_ACCOUNT_ID` environment variable.
 
-* `shared_credentials_file` - (Optional, Available in 1.49.0+) This is the path to the shared credentials file. If this is not set and a profile is specified, ~/.aliyun/config.json will be used.
+* `shared_credentials_file` - (Optional, Available in 1.49.0+) This is the path to the shared credentials file. It can also be sourced from the `ALICLOUD_SHARED_CREDENTIALS_FILE` environment variable. If this is not set and a profile is specified, ~/.aliyun/config.json will be used.
 
 * `profile` - (Optional, Available in 1.49.0+) This is the Alicloud profile name as set in the shared credentials file. It can also be sourced from the `ALICLOUD_PROFILE` environment variable.
 
@@ -184,6 +184,11 @@ In addition to [generic `provider` arguments](https://www.terraform.io/docs/conf
 * `endpoints` - (Optional) An `endpoints` block (documented below) to support custom endpoints.
 
 * `skip_region_validation` - (Optional, Available in 1.52.0+) Skip static validation of region ID. Used by users of alternative AlibabaCloud-like APIs or users w/ access to regions that are not public (yet).
+
+* `configuration_source` - (Optional, Available in 1.56.0+) Use a string to mark a configuration file source, like `terraform-alicloud-modules/terraform-alicloud-ecs-instance` or `terraform-provider-alicloud/examples/vpc`.
+The length should not more than 64.
+
+* `protocol` - (Optional, Available in 1.72.0+) The Protocol of used by API request. Valid values: `HTTP` and `HTTPS`. Default to `HTTPS`.
 
 The nested `assume_role` block supports the following:
 
@@ -262,6 +267,8 @@ Nested `endpoints` block supports the following:
 * `bssopenapi` - (Optional) Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom BSSOPENAPI endpoints.
 
 * `ddoscoo` - (Optional) Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom BGP-Line Anti-DDoS Pro endpoints.
+
+* `market` - (Optional) Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom Market endpoints.
 
 ## Testing
 

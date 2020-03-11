@@ -78,20 +78,21 @@ type CreateReadOnlyDBInstanceRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId       requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	DBInstanceStorage     requests.Integer `position:"Query" name:"DBInstanceStorage"`
-	ResourceOwnerAccount  string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken           string           `position:"Query" name:"ClientToken"`
-	OwnerAccount          string           `position:"Query" name:"OwnerAccount"`
 	EngineVersion         string           `position:"Query" name:"EngineVersion"`
+	ResourceGroupId       string           `position:"Query" name:"ResourceGroupId"`
+	DBInstanceId          string           `position:"Query" name:"DBInstanceId"`
+	DBInstanceDescription string           `position:"Query" name:"DBInstanceDescription"`
+	DBInstanceStorageType string           `position:"Query" name:"DBInstanceStorageType"`
+	DedicatedHostGroupId  string           `position:"Query" name:"DedicatedHostGroupId"`
+	ResourceOwnerAccount  string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount          string           `position:"Query" name:"OwnerAccount"`
 	OwnerId               requests.Integer `position:"Query" name:"OwnerId"`
 	DBInstanceClass       string           `position:"Query" name:"DBInstanceClass"`
 	VSwitchId             string           `position:"Query" name:"VSwitchId"`
 	PrivateIpAddress      string           `position:"Query" name:"PrivateIpAddress"`
-	ResourceGroupId       string           `position:"Query" name:"ResourceGroupId"`
 	VPCId                 string           `position:"Query" name:"VPCId"`
 	ZoneId                string           `position:"Query" name:"ZoneId"`
-	DBInstanceId          string           `position:"Query" name:"DBInstanceId"`
-	DBInstanceDescription string           `position:"Query" name:"DBInstanceDescription"`
-	DBInstanceStorageType string           `position:"Query" name:"DBInstanceStorageType"`
 	Category              string           `position:"Query" name:"Category"`
 	PayType               string           `position:"Query" name:"PayType"`
 	InstanceNetworkType   string           `position:"Query" name:"InstanceNetworkType"`

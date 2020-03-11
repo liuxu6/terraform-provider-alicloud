@@ -10,7 +10,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ots"
 	"github.com/aliyun/aliyun-tablestore-go-sdk/tablestore"
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -44,7 +44,7 @@ func (s *OtsService) ListOtsTable(instanceName string) (table *tablestore.ListTa
 			return tableStoreClient.ListTable()
 		})
 		if err != nil {
-			if strings.HasSuffix(err.Error(), SuffixNoSuchHost) {
+			if strings.HasSuffix(err.Error(), "no such host") {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -53,7 +53,7 @@ func (s *OtsService) ListOtsTable(instanceName string) (table *tablestore.ListTa
 		return nil
 	})
 	if err != nil {
-		if strings.HasPrefix(err.Error(), OTSObjectNotExist) {
+		if strings.HasPrefix(err.Error(), "OTSObjectNotExist") {
 			return table, WrapErrorf(err, NotFoundMsg, AliyunTablestoreGoSdk)
 		}
 		return nil, WrapErrorf(err, DataDefaultErrorMsg, instanceName, "ListTable", AliyunTablestoreGoSdk)
@@ -65,17 +65,18 @@ func (s *OtsService) ListOtsTable(instanceName string) (table *tablestore.ListTa
 	return
 }
 
-func (s *OtsService) DescribeOtsTable(id string) (table *tablestore.DescribeTableResponse, err error) {
+func (s *OtsService) DescribeOtsTable(id string) (*tablestore.DescribeTableResponse, error) {
+	table := &tablestore.DescribeTableResponse{}
 	parts, err := ParseResourceId(id, 2)
 	if err != nil {
-		return nil, WrapError(err)
+		return table, WrapError(err)
 	}
 	instanceName, tableName := parts[0], parts[1]
 	request := new(tablestore.DescribeTableRequest)
 	request.TableName = tableName
 
 	if _, err := s.DescribeOtsInstance(instanceName); err != nil {
-		return nil, WrapError(err)
+		return table, WrapError(err)
 	}
 	var raw interface{}
 	var requestInfo *tablestore.TableStoreClient
@@ -85,7 +86,7 @@ func (s *OtsService) DescribeOtsTable(id string) (table *tablestore.DescribeTabl
 			return tableStoreClient.DescribeTable(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, OtsTableIsTemporarilyUnavailable) {
+			if IsExpectedErrors(err, OtsTableIsTemporarilyUnavailable) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -94,16 +95,16 @@ func (s *OtsService) DescribeOtsTable(id string) (table *tablestore.DescribeTabl
 		return nil
 	})
 	if err != nil {
-		if strings.HasPrefix(err.Error(), OTSObjectNotExist) {
+		if strings.HasPrefix(err.Error(), "OTSObjectNotExist") {
 			return table, WrapErrorf(err, NotFoundMsg, AliyunTablestoreGoSdk)
 		}
-		return nil, WrapErrorf(err, DefaultErrorMsg, id, "DescribeTable", AliyunTablestoreGoSdk)
+		return table, WrapErrorf(err, DefaultErrorMsg, id, "DescribeTable", AliyunTablestoreGoSdk)
 	}
 	table, _ = raw.(*tablestore.DescribeTableResponse)
 	if table == nil || table.TableMeta == nil || table.TableMeta.TableName != tableName {
 		return table, WrapErrorf(Error(GetNotFoundMessage("OtsTable", id)), NotFoundMsg, ProviderERROR)
 	}
-	return
+	return table, nil
 }
 
 func (s *OtsService) WaitForOtsTable(instanceName, tableName string, status Status, timeout int) error {

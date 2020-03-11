@@ -76,7 +76,8 @@ func (client *Client) UpdatePublicNetworkWithCallback(request *UpdatePublicNetwo
 // UpdatePublicNetworkRequest is the request struct for api UpdatePublicNetwork
 type UpdatePublicNetworkRequest struct {
 	*requests.RoaRequest
-	InstanceId string `position:"Path" name:"InstanceId"`
+	InstanceId  string `position:"Path" name:"InstanceId"`
+	ClientToken string `position:"Query" name:"clientToken"`
 }
 
 // UpdatePublicNetworkResponse is the response struct for api UpdatePublicNetwork
@@ -92,7 +93,7 @@ func CreateUpdatePublicNetworkRequest() (request *UpdatePublicNetworkRequest) {
 		RoaRequest: &requests.RoaRequest{},
 	}
 	request.InitWithApiInfo("elasticsearch", "2017-06-13", "UpdatePublicNetwork", "/openapi/instances/[InstanceId]/public-network", "elasticsearch", "openAPI")
-	request.Method = requests.POST
+	request.Method = requests.PATCH
 	return
 }
 

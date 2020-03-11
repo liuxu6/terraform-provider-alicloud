@@ -4,10 +4,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -28,56 +30,56 @@ func resourceAlicloudDBReadonlyInstance() *schema.Resource {
 		},
 
 		Schema: map[string]*schema.Schema{
-			"engine_version": &schema.Schema{
+			"engine_version": {
 				Type:     schema.TypeString,
 				ForceNew: true,
 				Required: true,
 			},
 
-			"master_db_instance_id": &schema.Schema{
+			"master_db_instance_id": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
 
-			"instance_name": &schema.Schema{
+			"instance_name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateDBInstanceName,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 				Computed:     true,
 			},
 
-			"instance_type": &schema.Schema{
+			"instance_type": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
 
-			"instance_storage": &schema.Schema{
+			"instance_storage": {
 				Type:     schema.TypeInt,
 				Required: true,
 			},
 
-			"zone_id": &schema.Schema{
+			"zone_id": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 				Computed: true,
 			},
 
-			"vswitch_id": &schema.Schema{
+			"vswitch_id": {
 				Type:     schema.TypeString,
 				ForceNew: true,
 				Optional: true,
 			},
 
-			"parameters": &schema.Schema{
+			"parameters": {
 				Type: schema.TypeSet,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"name": &schema.Schema{
+						"name": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
-						"value": &schema.Schema{
+						"value": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
@@ -88,19 +90,20 @@ func resourceAlicloudDBReadonlyInstance() *schema.Resource {
 				Computed: true,
 			},
 
-			"engine": &schema.Schema{
+			"engine": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"connection_string": &schema.Schema{
+			"connection_string": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
 
-			"port": &schema.Schema{
+			"port": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
+			"tags": tagsSchema(),
 		},
 	}
 }
@@ -145,6 +148,10 @@ func resourceAlicloudDBReadonlyInstanceUpdate(d *schema.ResourceData, meta inter
 		}
 	}
 
+	if err := rdsService.setInstanceTags(d); err != nil {
+		return WrapError(err)
+	}
+
 	if d.IsNewResource() {
 		d.Partial(false)
 		return resourceAlicloudDBInstanceRead(d, meta)
@@ -161,7 +168,7 @@ func resourceAlicloudDBReadonlyInstanceUpdate(d *schema.ResourceData, meta inter
 				return rdsClient.ModifyDBInstanceDescription(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{"OperationDenied.DBInstanceStatus", "OperationDenied.MasterDBInstanceState"}) {
+				if IsExpectedErrors(err, []string{"OperationDenied.DBInstanceStatus", "OperationDenied.MasterDBInstanceState"}) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -198,16 +205,17 @@ func resourceAlicloudDBReadonlyInstanceUpdate(d *schema.ResourceData, meta inter
 	if update {
 		// wait instance status is running before modifying
 		stateConf := BuildStateConf([]string{"DBInstanceClassChanging", "DBInstanceNetTypeChanging"}, []string{"Running"}, d.Timeout(schema.TimeoutUpdate), 10*time.Minute, rdsService.RdsDBInstanceStateRefreshFunc(d.Id(), []string{"Deleting"}))
-		if _, err := stateConf.WaitForState(); err != nil {
+		_, err := stateConf.WaitForState()
+		if err != nil {
 			return WrapErrorf(err, IdMsg, d.Id())
 		}
 
-		err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 			raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
 				return rdsClient.ModifyDBInstanceSpec(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{"InvalidOrderTask.NotSupport", "OperationDenied.DBInstanceStatus", "OperationDenied.MasterDBInstanceState"}) {
+				if IsExpectedErrors(err, []string{"InvalidOrderTask.NotSupport", "OperationDenied.DBInstanceStatus", "OperationDenied.MasterDBInstanceState"}) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
@@ -223,7 +231,8 @@ func resourceAlicloudDBReadonlyInstanceUpdate(d *schema.ResourceData, meta inter
 		}
 
 		// wait instance status is running after modifying
-		if _, err := stateConf.WaitForState(); err != nil {
+		_, err = stateConf.WaitForState()
+		if err != nil {
 			return WrapErrorf(err, IdMsg, d.Id())
 		}
 	}
@@ -238,7 +247,7 @@ func resourceAlicloudDBReadonlyInstanceRead(d *schema.ResourceData, meta interfa
 
 	instance, err := rdsService.DescribeDBInstance(d.Id())
 	if err != nil {
-		if rdsService.NotFoundDBInstance(err) {
+		if NotFoundError(err) {
 			d.SetId("")
 			return nil
 		}
@@ -260,6 +269,14 @@ func resourceAlicloudDBReadonlyInstanceRead(d *schema.ResourceData, meta interfa
 		return err
 	}
 
+	tags, err := rdsService.describeTags(d)
+	if err != nil {
+		return WrapError(err)
+	}
+	if len(tags) > 0 {
+		d.Set("tags", rdsService.tagsToMap(tags))
+	}
+
 	return nil
 }
 
@@ -269,7 +286,7 @@ func resourceAlicloudDBReadonlyInstanceDelete(d *schema.ResourceData, meta inter
 
 	instance, err := rdsService.DescribeDBInstance(d.Id())
 	if err != nil {
-		if rdsService.NotFoundDBInstance(err) {
+		if NotFoundError(err) {
 			return nil
 		}
 		return WrapError(err)
@@ -289,7 +306,7 @@ func resourceAlicloudDBReadonlyInstanceDelete(d *schema.ResourceData, meta inter
 		})
 
 		if err != nil {
-			if IsExceptedErrors(err, []string{"RwSplitNetType.Exist", "OperationDenied.DBInstanceStatus", "OperationDenied.MasterDBInstanceState"}) {
+			if IsExpectedErrors(err, []string{"RwSplitNetType.Exist", "OperationDenied.DBInstanceStatus", "OperationDenied.MasterDBInstanceState"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -301,7 +318,7 @@ func resourceAlicloudDBReadonlyInstanceDelete(d *schema.ResourceData, meta inter
 	})
 
 	if err != nil {
-		if rdsService.NotFoundDBInstance(err) {
+		if NotFoundError(err) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

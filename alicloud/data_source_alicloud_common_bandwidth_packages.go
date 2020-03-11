@@ -5,7 +5,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,7 +18,7 @@ func dataSourceAlicloudCommonBandwidthPackages() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 			"output_file": {
@@ -28,12 +29,18 @@ func dataSourceAlicloudCommonBandwidthPackages() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				ForceNew: true,
 			},
 			"names": {
 				Type:     schema.TypeList,
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
 			},
 
 			// Computed values
@@ -91,6 +98,11 @@ func dataSourceAlicloudCommonBandwidthPackages() *schema.Resource {
 							},
 							MinItems: 0,
 						},
+						"resource_group_id": {
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+						},
 					},
 				},
 			},
@@ -104,6 +116,7 @@ func dataSourceAlicloudCommonBandwidthPackagesRead(d *schema.ResourceData, meta 
 	request.RegionId = string(client.Region)
 	request.PageSize = requests.NewInteger(PageSizeLarge)
 	request.PageNumber = requests.NewInteger(1)
+	request.ResourceGroupId = d.Get("resource_group_id").(string)
 	idsMap := make(map[string]string)
 	if v, ok := d.GetOk("ids"); ok {
 		for _, vv := range v.([]interface{}) {
@@ -182,6 +195,7 @@ func CommonBandwidthPackagesDecriptionAttributes(d *schema.ResourceData, cbwps [
 			"isp":                 cbwp.ISP,
 			"name":                cbwp.Name,
 			"creation_time":       cbwp.CreationTime,
+			"resource_group_id":   cbwp.ResourceGroupId,
 			"public_ip_addresses": vpcService.FlattenPublicIpAddressesMappings(cbwp.PublicIpAddresses.PublicIpAddresse),
 		}
 		names = append(names, cbwp.Name)

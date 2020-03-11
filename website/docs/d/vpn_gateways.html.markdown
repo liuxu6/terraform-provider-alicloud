@@ -1,4 +1,5 @@
 ---
+subcategory: "VPN"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_vpn_gateways"
 sidebar_current: "docs-alicloud-datasource-vpn-gateways"
@@ -15,7 +16,7 @@ The VPNs data source lists a number of VPNs resource information owned by an Ali
 ```
 data "alicloud_vpn_gateways" "vpn_gateways" {
   vpc_id          = "fake-vpc-id"
-  vpn_gateway_id  = "fake-vpn-id"
+  ids             = ["fake-vpn-id1", "fake-vpn-id2"]
   status          = "active"
   business_status = "Normal"
   name_regex      = "testAcc*"

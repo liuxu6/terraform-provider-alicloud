@@ -5,7 +5,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,7 +18,7 @@ func dataSourceAlicloudNatGateways() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 			"output_file": {
@@ -77,6 +78,10 @@ func dataSourceAlicloudNatGateways() *schema.Resource {
 							Computed: true,
 						},
 						"forward_table_id": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"vpc_id": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
@@ -170,6 +175,7 @@ func NatGatewaysDecriptionAttributes(d *schema.ResourceData, gateways []vpc.NatG
 			"creation_time":    gateway.CreationTime,
 			"snat_table_id":    gateway.SnatTableIds.SnatTableId[0],
 			"forward_table_id": gateway.ForwardTableIds.ForwardTableId[0],
+			"vpc_id":           gateway.VpcId,
 		}
 		names = append(names, gateway.Name)
 		ids = append(ids, gateway.NatGatewayId)

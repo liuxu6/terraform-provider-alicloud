@@ -4,10 +4,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/gpdb"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -42,14 +44,14 @@ func resourceAlicloudGpdbInstance() *schema.Resource {
 			},
 			"instance_charge_type": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue([]string{string(PostPaid)}),
+				ValidateFunc: validation.StringInSlice([]string{"PostPaid"}, false),
 				Optional:     true,
 				ForceNew:     true,
 				Computed:     true,
 			},
 			"description": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateDBInstanceName,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 				Optional:     true,
 			},
 			"vswitch_id": {
@@ -66,7 +68,7 @@ func resourceAlicloudGpdbInstance() *schema.Resource {
 			},
 			"engine": {
 				Type:         schema.TypeString,
-				ValidateFunc: validateAllowedStringValue([]string{string(GPDB)}),
+				ValidateFunc: validation.StringInSlice([]string{"gpdb"}, false),
 				Optional:     true,
 				Computed:     true,
 				ForceNew:     true,
@@ -77,6 +79,7 @@ func resourceAlicloudGpdbInstance() *schema.Resource {
 				Computed: true,
 				ForceNew: true,
 			},
+			"tags": tagsSchema(),
 		},
 	}
 }
@@ -104,13 +107,14 @@ func resourceAlicloudGpdbInstanceRead(d *schema.ResourceData, meta interface{}) 
 	d.Set("instance_class", instance.DBInstanceClass)
 	d.Set("instance_group_count", instance.DBInstanceGroupCount)
 	d.Set("instance_network_type", instance.InstanceNetworkType)
-	security_ips, err := gpdbService.GetSecurityIps(d.Id())
+	security_ips, err := gpdbService.DescribeGpdbSecurityIps(d.Id())
 	if err != nil {
 		return WrapError(err)
 	}
 	d.Set("security_ip_list", security_ips)
 	d.Set("create_time", instance.CreationTime)
 	d.Set("instance_charge_type", instance.PayType)
+	d.Set("tags", gpdbService.tagsToMap(instance.Tags.Tag))
 
 	return nil
 }
@@ -129,7 +133,7 @@ func resourceAlicloudGpdbInstanceCreate(d *schema.ResourceData, meta interface{}
 			return client.CreateDBInstance(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, InvalidGpdbConcurrentOperate) {
+			if IsExpectedErrors(err, []string{"SYSTEM.CONCURRENT_OPERATE"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -188,6 +192,10 @@ func resourceAlicloudGpdbInstanceUpdate(d *schema.ResourceData, meta interface{}
 		d.SetPartial("security_ip_list")
 	}
 
+	if err := gpdbService.setInstanceTags(d); err != nil {
+		return WrapError(err)
+	}
+
 	// Finish Update
 	d.Partial(false)
 
@@ -207,7 +215,7 @@ func resourceAlicloudGpdbInstanceDelete(d *schema.ResourceData, meta interface{}
 		})
 
 		if err != nil {
-			if IsExceptedErrors(err, []string{InvalidGpdbInstanceStatus}) {
+			if IsExpectedErrors(err, []string{"OperationDenied.DBInstanceStatus"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -216,7 +224,7 @@ func resourceAlicloudGpdbInstanceDelete(d *schema.ResourceData, meta interface{}
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidGpdbInstanceIdNotFound, InvalidGpdbNameNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidDBInstanceId.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

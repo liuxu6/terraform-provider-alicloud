@@ -1,4 +1,5 @@
 ---
+subcategory: "Container Service (CS)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_cs_managed_kubernetes_clusters"
 sidebar_current: "docs-alicloud-datasource-cs-managed-kubernetes-clusters"
@@ -53,6 +54,9 @@ The following attributes are exported in addition to the arguments listed above:
   * `nat_gateway_id` - The ID of nat gateway used to launch kubernetes cluster.
   * `worker_nodes` - List of cluster worker nodes. It contains several attributes to `Block Nodes`.
   * `connections` - Map of kubernetes cluster connection information. It contains several attributes to `Block Connections`.
+  * `log_config` - A list of one element containing information about the associated log store. It contains the following attributes:
+    * `type` - Type of collecting logs.
+    * `project` - Log Service project name. 
 
 ### Block Nodes
 

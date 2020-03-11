@@ -6,7 +6,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/dds"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -18,20 +19,18 @@ func dataSourceAlicloudMongoDBInstances() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"ids": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"instance_type": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
-					string(MongoDBSharding),
-					string(MongoDBReplicate),
-				}),
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{"sharding", "replicate"}, false),
 			},
 			"instance_class": {
 				Type:     schema.TypeString,
@@ -41,6 +40,7 @@ func dataSourceAlicloudMongoDBInstances() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
+			"tags": tagsSchema(),
 			"output_file": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -164,6 +164,10 @@ func dataSourceAlicloudMongoDBInstances() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"tags": {
+							Type:     schema.TypeMap,
+							Computed: true,
+						},
 					},
 				},
 			},
@@ -173,6 +177,7 @@ func dataSourceAlicloudMongoDBInstances() *schema.Resource {
 
 func dataSourceAlicloudMongoDBInstancesRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	ddsService := MongoDBService{client}
 
 	request := dds.CreateDescribeDBInstancesRequest()
 	request.RegionId = client.RegionId
@@ -183,13 +188,20 @@ func dataSourceAlicloudMongoDBInstancesRead(d *schema.ResourceData, meta interfa
 		request.DBInstanceType = v.(string)
 	}
 
+	if v, ok := d.GetOk("tags"); ok {
+		var reqTags []dds.DescribeDBInstancesTag
+		for key, value := range v.(map[string]interface{}) {
+			reqTags = append(reqTags, dds.DescribeDBInstancesTag{
+				Key:   key,
+				Value: value.(string),
+			})
+		}
+		request.Tag = &reqTags
+	}
+
 	var nameRegex *regexp.Regexp
 	if v, ok := d.GetOk("name_regex"); ok {
-		if r, err := regexp.Compile(v.(string)); err == nil {
-			nameRegex = r
-		} else {
-			return WrapError(err)
-		}
+		nameRegex = regexp.MustCompile(v.(string))
 	}
 
 	var instClass string
@@ -224,10 +236,8 @@ func dataSourceAlicloudMongoDBInstancesRead(d *schema.ResourceData, meta interfa
 		}
 
 		for _, item := range response.DBInstances.DBInstance {
-			if nameRegex != nil {
-				if !nameRegex.MatchString(item.DBInstanceDescription) {
-					continue
-				}
+			if nameRegex != nil && !nameRegex.MatchString(item.DBInstanceDescription) {
+				continue
 			}
 			if len(instClass) > 0 && instClass != strings.ToLower(string(item.DBInstanceClass)) {
 				continue
@@ -247,11 +257,11 @@ func dataSourceAlicloudMongoDBInstancesRead(d *schema.ResourceData, meta interfa
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	var ids []string
@@ -273,10 +283,11 @@ func dataSourceAlicloudMongoDBInstancesRead(d *schema.ResourceData, meta interfa
 			"network_type":      item.NetworkType,
 			"lock_mode":         item.LockMode,
 			"availability_zone": item.ZoneId,
+			"instance_class":    item.DBInstanceClass,
+			"storage":           item.DBInstanceStorage,
+			"replication":       item.ReplicationFactor,
+			"tags":              ddsService.tagsToMap(item.Tags.Tag),
 		}
-		mapping["instance_class"] = item.DBInstanceClass
-		mapping["storage"] = item.DBInstanceStorage
-		mapping["replication"] = item.ReplicationFactor
 		mongoList := []map[string]interface{}{}
 		for _, v := range item.MongosList.MongosAttribute {
 			mongo := map[string]interface{}{

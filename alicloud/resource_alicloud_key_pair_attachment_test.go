@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -20,9 +20,9 @@ func testAccCheckKeyPairAttachmentDestroy(s *terraform.State) error {
 		client := testAccProvider.Meta().(*connectivity.AliyunClient)
 		ecsService := EcsService{client}
 
-		instance_ids := rs.Primary.Attributes["instance_ids"]
+		instanceIds := rs.Primary.Attributes["instance_ids"]
 
-		for _, inst := range instance_ids {
+		for _, inst := range instanceIds {
 			response, err := ecsService.DescribeInstance(string(inst))
 			if err != nil {
 				return err
@@ -78,7 +78,7 @@ data "alicloud_instance_types" "default" {
  	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
 }
 data "alicloud_images" "default" {
-	name_regex = "^ubuntu_14.*_64"
+	name_regex = "^ubuntu_18.*64"
 	most_recent = true
 	owners = "system"
 }

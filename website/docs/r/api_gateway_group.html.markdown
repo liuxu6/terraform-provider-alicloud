@@ -1,4 +1,5 @@
 ---
+subcategory: "API Gateway"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_api_gateway_group"
 sidebar_current: "docs-alicloud-resource-api-gateway-group"
@@ -36,6 +37,8 @@ The following arguments are supported:
 The following attributes are exported:
 
 * `id` - The ID of the api group of api gateway.
+* `sub_domain` - (Available in 1.69.0+)	Second-level domain name automatically assigned to the API group.
+* `vpc_domain` - (Available in 1.69.0+)	Second-level VPC domain name automatically assigned to the API group.
 
 ## Import
 

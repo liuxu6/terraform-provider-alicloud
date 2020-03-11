@@ -5,9 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -36,14 +38,26 @@ func resourceAlicloudDBAccount() *schema.Resource {
 
 			"password": {
 				Type:      schema.TypeString,
-				Required:  true,
+				Optional:  true,
 				Sensitive: true,
 			},
-
+			"kms_encrypted_password": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				DiffSuppressFunc: kmsDiffSuppressFunc,
+			},
+			"kms_encryption_context": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("kms_encrypted_password").(string) == ""
+				},
+				Elem: schema.TypeString,
+			},
 			"type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateAllowedStringValue([]string{string(DBAccountNormal), string(DBAccountSuper)}),
+				ValidateFunc: validation.StringInSlice([]string{"Normal", "Super"}, false),
 				ForceNew:     true,
 				Computed:     true,
 			},
@@ -63,7 +77,24 @@ func resourceAlicloudDBAccountCreate(d *schema.ResourceData, meta interface{}) e
 	request.RegionId = client.RegionId
 	request.DBInstanceId = d.Get("instance_id").(string)
 	request.AccountName = d.Get("name").(string)
-	request.AccountPassword = d.Get("password").(string)
+
+	password := d.Get("password").(string)
+	kmsPassword := d.Get("kms_encrypted_password").(string)
+
+	if password == "" && kmsPassword == "" {
+		return WrapError(Error("One of the 'password' and 'kms_encrypted_password' should be set."))
+	}
+
+	if password != "" {
+		request.AccountPassword = password
+	} else {
+		kmsService := KmsService{client}
+		decryptResp, err := kmsService.Decrypt(kmsPassword, d.Get("kms_encryption_context").(map[string]interface{}))
+		if err != nil {
+			return WrapError(err)
+		}
+		request.AccountPassword = decryptResp.Plaintext
+	}
 	request.AccountType = d.Get("type").(string)
 
 	// Description will not be set when account type is normal and it is a API bug
@@ -79,7 +110,7 @@ func resourceAlicloudDBAccountCreate(d *schema.ResourceData, meta interface{}) e
 			return rdsClient.CreateAccount(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, OperationDeniedDBStatus) {
+			if IsExpectedErrors(err, OperationDeniedDBStatus) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -106,7 +137,7 @@ func resourceAlicloudDBAccountRead(d *schema.ResourceData, meta interface{}) err
 	rdsService := RdsService{client}
 	object, err := rdsService.DescribeDBAccount(d.Id())
 	if err != nil {
-		if rdsService.NotFoundDBInstance(err) {
+		if NotFoundError(err) {
 			d.SetId("")
 			return nil
 		}
@@ -149,7 +180,7 @@ func resourceAlicloudDBAccountUpdate(d *schema.ResourceData, meta interface{}) e
 		d.SetPartial("description")
 	}
 
-	if d.HasChange("password") {
+	if d.HasChange("password") || d.HasChange("kms_encrypted_password") {
 		if err := rdsService.WaitForAccount(d.Id(), Available, DefaultTimeoutMedium); err != nil {
 			return WrapError(err)
 		}
@@ -157,7 +188,27 @@ func resourceAlicloudDBAccountUpdate(d *schema.ResourceData, meta interface{}) e
 		request.RegionId = client.RegionId
 		request.DBInstanceId = instanceId
 		request.AccountName = accountName
-		request.AccountPassword = d.Get("password").(string)
+
+		password := d.Get("password").(string)
+		kmsPassword := d.Get("kms_encrypted_password").(string)
+
+		if password == "" && kmsPassword == "" {
+			return WrapError(Error("One of the 'password' and 'kms_encrypted_password' should be set."))
+		}
+
+		if password != "" {
+			d.SetPartial("password")
+			request.AccountPassword = password
+		} else {
+			kmsService := KmsService{meta.(*connectivity.AliyunClient)}
+			decryptResp, err := kmsService.Decrypt(kmsPassword, d.Get("kms_encryption_context").(map[string]interface{}))
+			if err != nil {
+				return WrapError(err)
+			}
+			request.AccountPassword = decryptResp.Plaintext
+			d.SetPartial("kms_encrypted_password")
+			d.SetPartial("kms_encryption_context")
+		}
 
 		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
 			return rdsClient.ResetAccountPassword(request)
@@ -188,7 +239,7 @@ func resourceAlicloudDBAccountDelete(d *schema.ResourceData, meta interface{}) e
 	raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
 		return rdsClient.DeleteAccount(request)
 	})
-	if err != nil && !IsExceptedError(err, InvalidAccountNameNotFound) {
+	if err != nil && !IsExpectedErrors(err, []string{"InvalidAccountName.NotFound"}) {
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)

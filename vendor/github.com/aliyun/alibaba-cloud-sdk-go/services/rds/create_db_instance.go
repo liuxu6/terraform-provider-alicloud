@@ -76,37 +76,42 @@ func (client *Client) CreateDBInstanceWithCallback(request *CreateDBInstanceRequ
 // CreateDBInstanceRequest is the request struct for api CreateDBInstance
 type CreateDBInstanceRequest struct {
 	*requests.RpcRequest
-	ConnectionMode        string           `position:"Query" name:"ConnectionMode"`
-	ResourceOwnerId       requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	DBInstanceStorage     requests.Integer `position:"Query" name:"DBInstanceStorage"`
-	SystemDBCharset       string           `position:"Query" name:"SystemDBCharset"`
-	ClientToken           string           `position:"Query" name:"ClientToken"`
-	ZoneIdSlave1          string           `position:"Query" name:"ZoneIdSlave1"`
-	ZoneIdSlave2          string           `position:"Query" name:"ZoneIdSlave2"`
-	EngineVersion         string           `position:"Query" name:"EngineVersion"`
-	ResourceGroupId       string           `position:"Query" name:"ResourceGroupId"`
-	Engine                string           `position:"Query" name:"Engine"`
-	DBInstanceDescription string           `position:"Query" name:"DBInstanceDescription"`
-	DBInstanceStorageType string           `position:"Query" name:"DBInstanceStorageType"`
-	BusinessInfo          string           `position:"Query" name:"BusinessInfo"`
-	DBInstanceNetType     string           `position:"Query" name:"DBInstanceNetType"`
-	Period                string           `position:"Query" name:"Period"`
-	ResourceOwnerAccount  string           `position:"Query" name:"ResourceOwnerAccount"`
-	OwnerAccount          string           `position:"Query" name:"OwnerAccount"`
-	EncryptionKey         string           `position:"Query" name:"EncryptionKey"`
-	OwnerId               requests.Integer `position:"Query" name:"OwnerId"`
-	UsedTime              string           `position:"Query" name:"UsedTime"`
-	DBInstanceClass       string           `position:"Query" name:"DBInstanceClass"`
-	SecurityIPList        string           `position:"Query" name:"SecurityIPList"`
-	VSwitchId             string           `position:"Query" name:"VSwitchId"`
-	PrivateIpAddress      string           `position:"Query" name:"PrivateIpAddress"`
-	AutoRenew             string           `position:"Query" name:"AutoRenew"`
-	RoleARN               string           `position:"Query" name:"RoleARN"`
-	VPCId                 string           `position:"Query" name:"VPCId"`
-	TunnelId              string           `position:"Query" name:"TunnelId"`
-	ZoneId                string           `position:"Query" name:"ZoneId"`
-	PayType               string           `position:"Query" name:"PayType"`
-	InstanceNetworkType   string           `position:"Query" name:"InstanceNetworkType"`
+	ResourceOwnerId                requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	DBInstanceStorage              requests.Integer `position:"Query" name:"DBInstanceStorage"`
+	SystemDBCharset                string           `position:"Query" name:"SystemDBCharset"`
+	EngineVersion                  string           `position:"Query" name:"EngineVersion"`
+	ResourceGroupId                string           `position:"Query" name:"ResourceGroupId"`
+	TargetDedicatedHostIdForMaster string           `position:"Query" name:"TargetDedicatedHostIdForMaster"`
+	DBInstanceDescription          string           `position:"Query" name:"DBInstanceDescription"`
+	BusinessInfo                   string           `position:"Query" name:"BusinessInfo"`
+	Period                         string           `position:"Query" name:"Period"`
+	EncryptionKey                  string           `position:"Query" name:"EncryptionKey"`
+	OwnerId                        requests.Integer `position:"Query" name:"OwnerId"`
+	DBInstanceClass                string           `position:"Query" name:"DBInstanceClass"`
+	SecurityIPList                 string           `position:"Query" name:"SecurityIPList"`
+	VSwitchId                      string           `position:"Query" name:"VSwitchId"`
+	PrivateIpAddress               string           `position:"Query" name:"PrivateIpAddress"`
+	TargetDedicatedHostIdForLog    string           `position:"Query" name:"TargetDedicatedHostIdForLog"`
+	AutoRenew                      string           `position:"Query" name:"AutoRenew"`
+	RoleARN                        string           `position:"Query" name:"RoleARN"`
+	TunnelId                       string           `position:"Query" name:"TunnelId"`
+	ZoneId                         string           `position:"Query" name:"ZoneId"`
+	InstanceNetworkType            string           `position:"Query" name:"InstanceNetworkType"`
+	ConnectionMode                 string           `position:"Query" name:"ConnectionMode"`
+	ClientToken                    string           `position:"Query" name:"ClientToken"`
+	TargetDedicatedHostIdForSlave  string           `position:"Query" name:"TargetDedicatedHostIdForSlave"`
+	ZoneIdSlave1                   string           `position:"Query" name:"ZoneIdSlave1"`
+	ZoneIdSlave2                   string           `position:"Query" name:"ZoneIdSlave2"`
+	Engine                         string           `position:"Query" name:"Engine"`
+	DBInstanceStorageType          string           `position:"Query" name:"DBInstanceStorageType"`
+	DedicatedHostGroupId           string           `position:"Query" name:"DedicatedHostGroupId"`
+	DBInstanceNetType              string           `position:"Query" name:"DBInstanceNetType"`
+	ResourceOwnerAccount           string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount                   string           `position:"Query" name:"OwnerAccount"`
+	UsedTime                       string           `position:"Query" name:"UsedTime"`
+	VPCId                          string           `position:"Query" name:"VPCId"`
+	Category                       string           `position:"Query" name:"Category"`
+	PayType                        string           `position:"Query" name:"PayType"`
 }
 
 // CreateDBInstanceResponse is the response struct for api CreateDBInstance

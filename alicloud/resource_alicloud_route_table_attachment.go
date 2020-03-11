@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -48,7 +48,7 @@ func resourceAliyunRouteTableAttachmentCreate(d *schema.ResourceData, meta inter
 			return vpcClient.AssociateRouteTable(&args)
 		})
 		if err != nil {
-			if IsExceptedError(err, TaskConflict) {
+			if IsExpectedErrors(err, []string{"TaskConflict"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -110,7 +110,7 @@ func resourceAliyunRouteTableAttachmentDelete(d *schema.ResourceData, meta inter
 		})
 		//Waiting for unassociate the route table
 		if err != nil {
-			if IsExceptedError(err, TaskConflict) {
+			if IsExpectedErrors(err, []string{"TaskConflict"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)

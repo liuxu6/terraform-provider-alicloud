@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cbn"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -63,7 +63,7 @@ func resourceAlicloudCenRouteEntryCreate(d *schema.ResourceData, meta interface{
 			return cbnClient.PublishRouteEntries(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{OperationBlocking, InvalidStateForOperationMsg}) {
+			if IsExpectedErrors(err, []string{"Operation.Blocking", "not in a valid state for the operation"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -145,7 +145,7 @@ func resourceAlicloudCenRouteEntryDelete(d *schema.ResourceData, meta interface{
 			return cbnClient.WithdrawPublishedRouteEntries(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InvalidCenInstanceStatus, InternalError}) {
+			if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus", "InternalError"}) {
 				return resource.RetryableError(err)
 			}
 
@@ -155,7 +155,7 @@ func resourceAlicloudCenRouteEntryDelete(d *schema.ResourceData, meta interface{
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{NotFoundRoute, InstanceNotExistMsg}) {
+		if IsExpectedErrors(err, []string{"InvalidOperation.NotFoundRoute", "The instance is not exist"}) {
 			return nil
 		}
 		return WrapErrorf(err, DataDefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

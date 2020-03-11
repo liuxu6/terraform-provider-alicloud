@@ -76,7 +76,8 @@ func (client *Client) UpdatePublicWhiteIpsWithCallback(request *UpdatePublicWhit
 // UpdatePublicWhiteIpsRequest is the request struct for api UpdatePublicWhiteIps
 type UpdatePublicWhiteIpsRequest struct {
 	*requests.RoaRequest
-	InstanceId string `position:"Path" name:"InstanceId"`
+	InstanceId  string `position:"Path" name:"InstanceId"`
+	ClientToken string `position:"Query" name:"clientToken"`
 }
 
 // UpdatePublicWhiteIpsResponse is the response struct for api UpdatePublicWhiteIps
@@ -92,7 +93,7 @@ func CreateUpdatePublicWhiteIpsRequest() (request *UpdatePublicWhiteIpsRequest) 
 		RoaRequest: &requests.RoaRequest{},
 	}
 	request.InitWithApiInfo("elasticsearch", "2017-06-13", "UpdatePublicWhiteIps", "/openapi/instances/[InstanceId]/public-white-ips", "elasticsearch", "openAPI")
-	request.Method = requests.POST
+	request.Method = requests.PATCH
 	return
 }
 

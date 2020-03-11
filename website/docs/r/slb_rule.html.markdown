@@ -1,4 +1,5 @@
 ---
+subcategory: "Server Load Balancer (SLB)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_slb_rule"
 sidebar_current: "docs-alicloud-resource-slb-rule"
@@ -38,7 +39,7 @@ data "alicloud_instance_types" "default" {
   memory_size       = 2
 }
 data "alicloud_images" "default" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }
@@ -125,7 +126,7 @@ resource "alicloud_slb_rule" "default" {
 The following arguments are supported:
 
 * `load_balancer_id` - (Required, ForceNew) The Load Balancer ID which is used to launch the new forwarding rule.
-* `name` - (Optional, ForceNew) Name of the forwarding rule. Our plugin provides a default name: "tf-slb-rule".
+* `name` - (Optional) Name of the forwarding rule. Our plugin provides a default name: "tf-slb-rule".
 * `frontend_port` - (Required, ForceNew) The listener frontend port which is used to launch the new forwarding rule. Valid range: [1-65535].
 * `domain` - (Optional, ForceNew) Domain name of the forwarding rule. It can contain letters a-z, numbers 0-9, hyphens (-), and periods (.),
 and wildcard characters. The following two domain name formats are supported:
@@ -149,6 +150,7 @@ and characters '-' '/' '?' '%' '#' and '&' are allowed. URLs must be started wit
 * `health_check_interval` - (Optional, Available in v1.51.0+) Time interval of health checks. It is required when `health_check` is on. Valid value range: [1-50] in seconds. Default to 2.
 * `health_check_http_code` - (Optional, Available in v1.51.0+) Regular health check HTTP status code. Multiple codes are segmented by “,”. It is required when `health_check` is on. Default to `http_2xx`.  Valid values are: `http_2xx`,  `http_3xx`, `http_4xx` and `http_5xx`.
 * `listener_sync` - (Optional, Available in v1.51.0+) Indicates whether a forwarding rule inherits the settings of a health check , session persistence, and scheduling algorithm from a listener. Default to on.
+* `delete_protection_validation` - (Optional, Available in 1.63.0+) Checking DeleteProtection of SLB instance before deleting. If true, this resource will not be deleted when its SLB instance enabled DeleteProtection. Default to false.
 
 ## Attributes Reference
 

@@ -2,7 +2,8 @@ package alicloud
 
 import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/nas"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -17,28 +18,28 @@ func resourceAlicloudNasFileSystem() *schema.Resource {
 		},
 
 		Schema: map[string]*schema.Schema{
-			"storage_type": &schema.Schema{
+			"storage_type": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					"Capacity",
 					"Performance",
-				}),
+				}, false),
 			},
-			"protocol_type": &schema.Schema{
+			"protocol_type": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					"NFS",
 					"SMB",
-				}),
+				}, false),
 			},
-			"description": &schema.Schema{
+			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNASDescription,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 		},
 	}
@@ -112,7 +113,7 @@ func resourceAlicloudNasFileSystemDelete(d *schema.ResourceData, meta interface{
 	})
 
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidFileSystemIDNotFound, ForbiddenNasNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidFileSystem.NotFound", "Forbidden.NasNotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

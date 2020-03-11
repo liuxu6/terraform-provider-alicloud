@@ -2,22 +2,22 @@ package alicloud
 
 import (
 	"fmt"
-	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/denverdino/aliyungo/common"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 
 	"encoding/base64"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
-)
-
-const (
-	DefaultStopInstanceTimeout = 300
 )
 
 func resourceAliyunInstance() *schema.Resource {
@@ -52,7 +52,17 @@ func resourceAliyunInstance() *schema.Resource {
 			"instance_type": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ValidateFunc: validateInstanceType,
+				ValidateFunc: validation.StringMatch(regexp.MustCompile(`^ecs\..*`), "prefix must be 'ecs.'"),
+			},
+
+			"credit_specification": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				ValidateFunc: validation.StringInSlice([]string{
+					string(CreditSpecificationStandard),
+					string(CreditSpecificationUnlimited),
+				}, false),
 			},
 
 			"security_groups": {
@@ -71,34 +81,37 @@ func resourceAliyunInstance() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      "ECS-Instance",
-				ValidateFunc: validateInstanceName,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
 			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceDescription,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 
 			"internet_charge_type": {
 				Type:             schema.TypeString,
 				Optional:         true,
-				ValidateFunc:     validateInternetChargeType,
+				ValidateFunc:     validation.StringInSlice([]string{"PayByBandwidth", "PayByTraffic"}, false),
 				Default:          PayByTraffic,
 				DiffSuppressFunc: ecsInternetDiffSuppressFunc,
 			},
 			"internet_max_bandwidth_in": {
 				Type:             schema.TypeInt,
 				Optional:         true,
-				ValidateFunc:     validateIntegerInRange(1, 200),
 				Computed:         true,
 				DiffSuppressFunc: ecsInternetDiffSuppressFunc,
 			},
 			"internet_max_bandwidth_out": {
-				Type:         schema.TypeInt,
-				Optional:     true,
-				Default:      0,
-				ValidateFunc: validateIntegerInRange(0, 100),
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  0,
 			},
 			"host_name": {
 				Type:     schema.TypeString,
@@ -109,6 +122,19 @@ func resourceAliyunInstance() *schema.Resource {
 				Type:      schema.TypeString,
 				Optional:  true,
 				Sensitive: true,
+			},
+			"kms_encrypted_password": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				DiffSuppressFunc: kmsDiffSuppressFunc,
+			},
+			"kms_encryption_context": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("kms_encrypted_password") == ""
+				},
+				Elem: schema.TypeString,
 			},
 			"io_optimized": {
 				Type:       schema.TypeString,
@@ -124,7 +150,7 @@ func resourceAliyunInstance() *schema.Resource {
 				Default:      DiskCloudEfficiency,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateDiskCategory,
+				ValidateFunc: validation.StringInSlice([]string{"all", "cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd", "local_disk"}, false),
 			},
 			"system_disk_size": {
 				Type:     schema.TypeInt,
@@ -135,14 +161,14 @@ func resourceAliyunInstance() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				MinItems: 1,
-				MaxItems: 15,
+				MaxItems: 16,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"name": {
 							Type:         schema.TypeString,
 							Optional:     true,
 							ForceNew:     true,
-							ValidateFunc: validateDiskName,
+							ValidateFunc: validation.StringLenBetween(2, 128),
 						},
 						"size": {
 							Type:     schema.TypeInt,
@@ -152,7 +178,7 @@ func resourceAliyunInstance() *schema.Resource {
 						"category": {
 							Type:         schema.TypeString,
 							Optional:     true,
-							ValidateFunc: validateDiskCategory,
+							ValidateFunc: validation.StringInSlice([]string{"all", "cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd", "local_disk"}, false),
 							Default:      DiskCloudEfficiency,
 							ForceNew:     true,
 						},
@@ -177,7 +203,7 @@ func resourceAliyunInstance() *schema.Resource {
 							Type:         schema.TypeString,
 							Optional:     true,
 							ForceNew:     true,
-							ValidateFunc: validateDiskDescription,
+							ValidateFunc: validation.StringLenBetween(2, 256),
 						},
 					},
 				},
@@ -205,51 +231,52 @@ func resourceAliyunInstance() *schema.Resource {
 			"instance_charge_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceChargeType,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 				Default:      PostPaid,
 			},
 			"period": {
-				Type:             schema.TypeInt,
-				Optional:         true,
-				Default:          1,
-				ValidateFunc:     validateInstanceChargeTypePeriod,
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  1,
+				ValidateFunc: validation.Any(
+					validation.IntBetween(1, 9),
+					validation.IntInSlice([]int{12, 24, 36, 48, 60})),
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"period_unit": {
 				Type:             schema.TypeString,
 				Optional:         true,
 				Default:          Month,
-				ValidateFunc:     validateInstanceChargeTypePeriodUnit,
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
+				ValidateFunc:     validation.StringInSlice([]string{"Week", "Month"}, false),
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"renewal_status": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  RenewNormal,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(RenewAutoRenewal),
 					string(RenewNormal),
-					string(RenewNotRenewal)}),
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
+					string(RenewNotRenewal)}, false),
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"auto_renew_period": {
 				Type:             schema.TypeInt,
 				Optional:         true,
 				Default:          1,
-				ValidateFunc:     validateAllowedIntValue([]int{1, 2, 3, 6, 12}),
+				ValidateFunc:     validation.IntInSlice([]int{1, 2, 3, 6, 12}),
 				DiffSuppressFunc: ecsNotAutoRenewDiffSuppressFunc,
 			},
 			"include_data_disks": {
 				Type:             schema.TypeBool,
 				Optional:         true,
 				Default:          true,
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 			"dry_run": {
-				Type:             schema.TypeBool,
-				Optional:         true,
-				Default:          false,
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
 			},
 
 			"public_ip": {
@@ -265,7 +292,6 @@ func resourceAliyunInstance() *schema.Resource {
 			"user_data": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 			},
 			"role_name": {
 				Type:             schema.TypeString,
@@ -287,7 +313,7 @@ func resourceAliyunInstance() *schema.Resource {
 				Optional:         true,
 				ForceNew:         true,
 				Default:          NoSpot,
-				ValidateFunc:     validateInstanceSpotStrategy,
+				ValidateFunc:     validation.StringInSlice([]string{"NoSpot", "SpotAsPriceGo", "SpotWithPriceLimit"}, false),
 				DiffSuppressFunc: ecsSpotStrategyDiffSuppressFunc,
 			},
 
@@ -309,21 +335,36 @@ func resourceAliyunInstance() *schema.Resource {
 				Optional:         true,
 				Default:          false,
 				Description:      descriptions["A behavior mark used to delete 'PrePaid' ECS instance forcibly."],
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
 			},
 
 			"security_enhancement_strategy": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(ActiveSecurityEnhancementStrategy),
 					string(DeactiveSecurityEnhancementStrategy),
-				}),
+				}, false),
 			},
 
 			"tags":        tagsSchema(),
 			"volume_tags": tagsSchemaComputed(),
+
+			"auto_release_time": {
+				Type:     schema.TypeString,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					diff := d.Get("instance_charge_type").(string) == "PrePaid"
+					if diff {
+						return diff
+					}
+					if old != "" && new != "" && strings.HasPrefix(new, strings.Trim(old, "Z")) {
+						diff = true
+					}
+					return diff
+				},
+			},
 		},
 	}
 }
@@ -349,12 +390,14 @@ func resourceAliyunInstanceCreate(d *schema.ResourceData, meta interface{}) erro
 	if d.Get("is_outdated").(bool) == true {
 		request.IoOptimized = "none"
 	}
-	err = resource.Retry(DefaultTimeout*time.Second, func() *resource.RetryError {
+	wait := incrementalWait(1*time.Second, 1*time.Second)
+	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
 		raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 			return ecsClient.RunInstances(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InvalidPrivateIpAddressDuplicated}) {
+			if IsThrottling(err) {
+				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -382,7 +425,6 @@ func resourceAliyunInstanceRead(d *schema.ResourceData, meta interface{}) error 
 	ecsService := EcsService{client}
 
 	instance, err := ecsService.DescribeInstance(d.Id())
-
 	if err != nil {
 		if NotFoundError(err) {
 			d.SetId("")
@@ -391,8 +433,7 @@ func resourceAliyunInstanceRead(d *schema.ResourceData, meta interface{}) error 
 		return WrapError(err)
 	}
 
-	disk, err := ecsService.QueryInstanceSystemDisk(d.Id())
-
+	disk, err := ecsService.DescribeInstanceSystemDisk(d.Id(), instance.ResourceGroupId)
 	if err != nil {
 		if NotFoundError(err) {
 			d.SetId("")
@@ -400,17 +441,19 @@ func resourceAliyunInstanceRead(d *schema.ResourceData, meta interface{}) error 
 		}
 		return WrapError(err)
 	}
+	d.Set("system_disk_category", disk.Category)
+	d.Set("system_disk_size", disk.Size)
+	d.Set("volume_tags", tagsToMap(disk.Tags.Tag))
 
 	d.Set("instance_name", instance.InstanceName)
+	d.Set("resource_group_id", instance.ResourceGroupId)
 	d.Set("description", instance.Description)
 	d.Set("status", instance.Status)
 	d.Set("availability_zone", instance.ZoneId)
 	d.Set("host_name", instance.HostName)
 	d.Set("image_id", instance.ImageId)
 	d.Set("instance_type", instance.InstanceType)
-	d.Set("system_disk_category", disk.Category)
-	d.Set("system_disk_size", disk.Size)
-	d.Set("password", d.Get("password"))
+	d.Set("password", d.Get("password").(string))
 	d.Set("internet_max_bandwidth_out", instance.InternetMaxBandwidthOut)
 	d.Set("internet_max_bandwidth_in", instance.InternetMaxBandwidthIn)
 	d.Set("instance_charge_type", instance.InstanceChargeType)
@@ -419,6 +462,9 @@ func resourceAliyunInstanceRead(d *schema.ResourceData, meta interface{}) error 
 	d.Set("spot_price_limit", instance.SpotPriceLimit)
 	d.Set("internet_charge_type", instance.InternetChargeType)
 	d.Set("deletion_protection", instance.DeletionProtection)
+	d.Set("credit_specification", instance.CreditSpecification)
+	d.Set("auto_release_time", instance.AutoReleaseTime)
+	d.Set("tags", tagsToMap(instance.Tags.Tag))
 
 	if len(instance.PublicIpAddress.IpAddress) > 0 {
 		d.Set("public_ip", instance.PublicIpAddress.IpAddress[0])
@@ -438,26 +484,27 @@ func resourceAliyunInstanceRead(d *schema.ResourceData, meta interface{}) error 
 	for _, sg := range instance.SecurityGroupIds.SecurityGroupId {
 		sgs = append(sgs, sg)
 	}
-	log.Printf("[DEBUG] Setting Security Group Ids: %#v", sgs)
 	if err := d.Set("security_groups", sgs); err != nil {
 		return WrapError(err)
 	}
 
-	dataRequest := ecs.CreateDescribeUserDataRequest()
-	dataRequest.RegionId = client.RegionId
-	dataRequest.InstanceId = d.Id()
-	raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-		return ecsClient.DescribeUserData(dataRequest)
-	})
+	if !d.IsNewResource() || d.HasChange("user_data") {
+		dataRequest := ecs.CreateDescribeUserDataRequest()
+		dataRequest.RegionId = client.RegionId
+		dataRequest.InstanceId = d.Id()
+		raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+			return ecsClient.DescribeUserData(dataRequest)
+		})
 
-	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), dataRequest.GetActionName(), AlibabaCloudSdkGoERROR)
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), dataRequest.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(dataRequest.GetActionName(), raw, dataRequest.RpcRequest, dataRequest)
+		response, _ := raw.(*ecs.DescribeUserDataResponse)
+		d.Set("user_data", userDataHashSum(response.UserData))
 	}
-	addDebug(dataRequest.GetActionName(), raw, dataRequest.RpcRequest, dataRequest)
-	response, _ := raw.(*ecs.DescribeUserDataResponse)
-	d.Set("user_data", userDataHashSum(response.UserData))
 
-	if len(instance.VpcAttributes.VSwitchId) > 0 {
+	if len(instance.VpcAttributes.VSwitchId) > 0 && (!d.IsNewResource() || d.HasChange("role_name")) {
 		request := ecs.CreateDescribeInstanceRamRoleRequest()
 		request.RegionId = client.RegionId
 		request.InstanceIds = convertListToJsonString([]interface{}{d.Id()})
@@ -486,47 +533,29 @@ func resourceAliyunInstanceRead(d *schema.ResourceData, meta interface{}) error 
 		}
 		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 		response, _ := raw.(*ecs.DescribeInstanceAutoRenewAttributeResponse)
+		periodUnit := d.Get("period_unit").(string)
+		if periodUnit == "" {
+			periodUnit = "Month"
+		}
 		if len(response.InstanceRenewAttributes.InstanceRenewAttribute) > 0 {
 			renew := response.InstanceRenewAttributes.InstanceRenewAttribute[0]
 			d.Set("renewal_status", renew.RenewalStatus)
 			d.Set("auto_renew_period", renew.Duration)
+			if renew.RenewalStatus == "AutoRenewal" {
+				periodUnit = renew.PeriodUnit
+			}
+			if periodUnit == "Year" {
+				periodUnit = "Month"
+				d.Set("auto_renew_period", renew.Duration*12)
+			}
 		}
-
+		period, err := computePeriodByUnit(instance.CreationTime, instance.ExpiredTime, d.Get("period").(int), periodUnit)
+		if err != nil {
+			return WrapError(err)
+		}
+		d.Set("period", period)
+		d.Set("period_unit", periodUnit)
 	}
-	tags, err := ecsService.DescribeTags(d.Id(), TagResourceInstance)
-	if err != nil && !NotFoundError(err) {
-		return WrapError(err)
-	}
-	if len(tags) > 0 {
-		d.Set("tags", tagsToMap(tags))
-	}
-
-	ids, err := ecsService.QueryInstanceAllDisks(d.Id())
-	if err != nil {
-		return WrapError(err)
-	}
-
-	request := ecs.CreateListTagResourcesRequest()
-	request.RegionId = client.RegionId
-	raw, err = client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-		request.ResourceType = string(TagResourceDisk)
-		request.ResourceId = &ids
-		return ecsClient.ListTagResources(request)
-	})
-	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	volumeTagsResp := raw.(*ecs.ListTagResourcesResponse)
-	var volumeTags []ecs.Tag
-	for _, tag := range volumeTagsResp.TagResources.TagResource {
-		volumeTags = append(volumeTags, ecs.Tag{
-			TagKey:   tag.TagKey,
-			TagValue: tag.TagValue,
-		})
-	}
-
-	d.Set("volume_tags", tagsToMap(volumeTags))
 
 	return nil
 }
@@ -537,42 +566,44 @@ func resourceAliyunInstanceUpdate(d *schema.ResourceData, meta interface{}) erro
 
 	d.Partial(true)
 
-	if err := setTags(client, TagResourceInstance, d); err != nil {
-		log.Printf("[DEBUG] Set tags for instance got error: %#v", err)
-		return WrapError(err)
-	} else {
-		d.SetPartial("tags")
+	if !d.IsNewResource() {
+		if err := setTags(client, TagResourceInstance, d); err != nil {
+			return WrapError(err)
+		} else {
+			d.SetPartial("tags")
+		}
 	}
 
 	if err := setVolumeTags(client, TagResourceDisk, d); err != nil {
-		log.Printf("[DEBUG] Set volume tags (%s) go error: %#v", d.Id(), err)
 		return WrapError(err)
 	} else {
 		d.SetPartial("volume_tags")
 	}
 
 	if d.HasChange("security_groups") {
-		o, n := d.GetChange("security_groups")
-		os := o.(*schema.Set)
-		ns := n.(*schema.Set)
+		if !d.IsNewResource() || d.Get("vswitch_id").(string) == "" {
+			o, n := d.GetChange("security_groups")
+			os := o.(*schema.Set)
+			ns := n.(*schema.Set)
 
-		rl := expandStringList(os.Difference(ns).List())
-		al := expandStringList(ns.Difference(os).List())
+			rl := expandStringList(os.Difference(ns).List())
+			al := expandStringList(ns.Difference(os).List())
 
-		if len(al) > 0 {
-			err := ecsService.JoinSecurityGroups(d.Id(), al)
-			if err != nil {
-				return WrapError(err)
+			if len(al) > 0 {
+				err := ecsService.JoinSecurityGroups(d.Id(), al)
+				if err != nil {
+					return WrapError(err)
+				}
 			}
-		}
-		if len(rl) > 0 {
-			err := ecsService.LeaveSecurityGroups(d.Id(), rl)
-			if err != nil {
-				return WrapError(err)
+			if len(rl) > 0 {
+				err := ecsService.LeaveSecurityGroups(d.Id(), rl)
+				if err != nil {
+					return WrapError(err)
+				}
 			}
-		}
 
-		d.SetPartial("security_groups")
+			d.SetPartial("security_groups")
+		}
 	}
 
 	run := false
@@ -591,19 +622,31 @@ func resourceAliyunInstanceUpdate(d *schema.ResourceData, meta interface{}) erro
 		return WrapError(err)
 	}
 
+	if d.HasChange("auto_release_time") {
+		request := ecs.CreateModifyInstanceAutoReleaseTimeRequest()
+		request.InstanceId = d.Id()
+		request.RegionId = client.RegionId
+		request.AutoReleaseTime = d.Get("auto_release_time").(string)
+		_, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+			return ecsClient.ModifyInstanceAutoReleaseTime(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		d.SetPartial("auto_release_time")
+	}
+
 	typeUpdate, err := modifyInstanceType(d, meta, run)
 	if err != nil {
 		return WrapError(err)
 	}
 	if imageUpdate || vpcUpdate || passwordUpdate || typeUpdate {
 		run = true
-		log.Printf("[INFO] Need rebooting to make all changes valid.")
 		instance, errDesc := ecsService.DescribeInstance(d.Id())
 		if errDesc != nil {
 			return WrapError(errDesc)
 		}
 		if instance.Status == string(Running) {
-			log.Printf("[DEBUG] Stop instance when changing image or password or vpc attribute")
 			stopRequest := ecs.CreateStopInstanceRequest()
 			stopRequest.RegionId = client.RegionId
 			stopRequest.InstanceId = d.Id()
@@ -635,7 +678,6 @@ func resourceAliyunInstanceUpdate(d *schema.ResourceData, meta interface{}) erro
 			return WrapError(err)
 		}
 
-		log.Printf("[DEBUG] Start instance after changing image or password or vpc attribute")
 		startRequest := ecs.CreateStartInstanceRequest()
 		startRequest.InstanceId = d.Id()
 
@@ -644,7 +686,7 @@ func resourceAliyunInstanceUpdate(d *schema.ResourceData, meta interface{}) erro
 				return ecsClient.StartInstance(startRequest)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{"IncorrectInstanceStatus"}) {
+				if IsExpectedErrors(err, []string{"IncorrectInstanceStatus"}) {
 					time.Sleep(time.Second)
 					return resource.RetryableError(err)
 				}
@@ -682,7 +724,7 @@ func resourceAliyunInstanceUpdate(d *schema.ResourceData, meta interface{}) erro
 	}
 
 	if err := modifyInstanceChargeType(d, meta, false); err != nil {
-		return err
+		return WrapError(err)
 	}
 
 	// Only PrePaid instance can support modifying renewal attribute
@@ -733,12 +775,17 @@ func resourceAliyunInstanceDelete(d *schema.ResourceData, meta interface{}) erro
 	deleteRequest.InstanceId = d.Id()
 	deleteRequest.Force = requests.NewBoolean(true)
 
-	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+	wait := incrementalWait(1*time.Second, 1*time.Second)
+	err := resource.Retry(d.Timeout(schema.TimeoutDelete), func() *resource.RetryError {
 		raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 			return ecsClient.DeleteInstance(deleteRequest)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{"IncorrectInstanceStatus", "DependencyViolation.RouteEntry", "IncorrectInstanceStatus.Initializing"}) {
+			if IsExpectedErrors(err, []string{"IncorrectInstanceStatus", "DependencyViolation.RouteEntry", "IncorrectInstanceStatus.Initializing"}) {
+				return resource.RetryableError(err)
+			}
+			if IsExpectedErrors(err, []string{Throttling, "LastTokenProcessing"}) {
+				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -747,13 +794,13 @@ func resourceAliyunInstanceDelete(d *schema.ResourceData, meta interface{}) erro
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, EcsNotFound) {
+		if IsExpectedErrors(err, EcsNotFound) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), deleteRequest.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 
-	stateConf := BuildStateConf([]string{"Pending", "Running", "Stopped", "Stopping"}, []string{}, d.Timeout(schema.TimeoutUpdate), 10*time.Second, ecsService.InstanceStateRefreshFunc(d.Id(), []string{}))
+	stateConf := BuildStateConf([]string{"Pending", "Running", "Stopped", "Stopping"}, []string{}, d.Timeout(schema.TimeoutDelete), 10*time.Second, ecsService.InstanceStateRefreshFunc(d.Id(), []string{}))
 
 	if _, err = stateConf.WaitForState(); err != nil {
 		return WrapErrorf(err, IdMsg, d.Id())
@@ -763,7 +810,6 @@ func resourceAliyunInstanceDelete(d *schema.ResourceData, meta interface{}) erro
 
 func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.RunInstancesRequest, error) {
 	client := meta.(*connectivity.AliyunClient)
-	ecsService := EcsService{client}
 
 	request := ecs.CreateRunInstancesRequest()
 	request.RegionId = client.RegionId
@@ -775,47 +821,33 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 
 	systemDiskCategory := DiskCategory(d.Get("system_disk_category").(string))
 
-	zoneID := d.Get("availability_zone").(string)
-	// check instanceType and systemDiskCategory, when zoneID is not empty
-	if zoneID != "" {
-		zone, err := ecsService.DescribeZone(zoneID)
-		if err != nil {
-			return nil, WrapError(err)
-		}
-
-		if err := ecsService.ResourceAvailable(zone, ResourceTypeInstance); err != nil {
-			return nil, WrapError(err)
-		}
-
-		if err := ecsService.DiskAvailable(zone, systemDiskCategory); err != nil {
-			return nil, WrapError(err)
-		}
-
-		request.ZoneId = zoneID
-
+	if v, ok := d.GetOk("availability_zone"); ok && v.(string) != "" {
+		request.ZoneId = v.(string)
 	}
 
 	request.SystemDiskCategory = string(systemDiskCategory)
 	request.SystemDiskSize = strconv.Itoa(d.Get("system_disk_size").(int))
 
-	sgs, ok := d.GetOk("security_groups")
-
-	if ok {
-		sgList := expandStringList(sgs.(*schema.Set).List())
-		sg0 := sgList[0]
-		// check security group instance exist
-		object, err := ecsService.DescribeSecurityGroup(sg0)
-		if err != nil {
-			return nil, WrapError(err)
-		}
-		request.SecurityGroupId = object.SecurityGroupId
-		if object.VpcId != "" && d.Get("vswitch_id").(string) == "" {
-			return nil, WrapError(Error("The specified security_group_id %s is in a VPC %s, and `vswitch_id` is required when creating a new instance resource in a VPC.", sg0, object.VpcId))
+	if v, ok := d.GetOk("security_groups"); ok {
+		// At present, the classic network instance does not support multi sg in runInstances
+		sgs := expandStringList(v.(*schema.Set).List())
+		if d.Get("vswitch_id").(string) == "" && len(sgs) > 0 {
+			request.SecurityGroupId = sgs[0]
+		} else {
+			request.SecurityGroupIds = &sgs
 		}
 	}
 
 	if v := d.Get("instance_name").(string); v != "" {
 		request.InstanceName = v
+	}
+
+	if v := d.Get("credit_specification").(string); v != "" {
+		request.CreditSpecification = v
+	}
+
+	if v := d.Get("resource_group_id").(string); v != "" {
+		request.ResourceGroupId = v
 	}
 
 	if v := d.Get("description").(string); v != "" {
@@ -838,6 +870,15 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 
 	if v := d.Get("password").(string); v != "" {
 		request.Password = v
+	}
+
+	if v := d.Get("kms_encrypted_password").(string); v != "" {
+		kmsService := KmsService{client}
+		decryptResp, err := kmsService.Decrypt(v, d.Get("kms_encryption_context").(map[string]interface{}))
+		if err != nil {
+			return request, WrapError(err)
+		}
+		request.Password = decryptResp.Plaintext
 	}
 
 	vswitchValue := d.Get("subnet_id").(string)
@@ -868,7 +909,12 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 	}
 
 	if v := d.Get("user_data").(string); v != "" {
-		request.UserData = base64.StdEncoding.EncodeToString([]byte(v))
+		_, base64DecodeError := base64.StdEncoding.DecodeString(v)
+		if base64DecodeError == nil {
+			request.UserData = v
+		} else {
+			request.UserData = base64.StdEncoding.EncodeToString([]byte(v))
+		}
 	}
 
 	if v := d.Get("role_name").(string); v != "" {
@@ -880,11 +926,24 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 	}
 
 	if v, ok := d.GetOk("security_enhancement_strategy"); ok {
-		value := v.(string)
-		request.SecurityEnhancementStrategy = value
+		request.SecurityEnhancementStrategy = v.(string)
+	}
+	if v, ok := d.GetOk("auto_release_time"); ok && v.(string) != "" {
+		request.AutoReleaseTime = v.(string)
 	}
 	request.DryRun = requests.NewBoolean(d.Get("dry_run").(bool))
 	request.DeletionProtection = requests.NewBoolean(d.Get("deletion_protection").(bool))
+
+	if v, ok := d.GetOk("tags"); ok && len(v.(map[string]interface{})) > 0 {
+		tags := make([]ecs.RunInstancesTag, len(v.(map[string]interface{})))
+		for key, value := range v.(map[string]interface{}) {
+			tags = append(tags, ecs.RunInstancesTag{
+				Key:   key,
+				Value: value.(string),
+			})
+		}
+		request.Tag = &tags
+	}
 	request.ClientToken = buildClientToken(request.GetActionName())
 
 	if v, ok := d.GetOk("data_disks"); ok {
@@ -923,6 +982,7 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 
 func modifyInstanceChargeType(d *schema.ResourceData, meta interface{}, forceDelete bool) error {
 	if d.IsNewResource() {
+		d.Partial(false)
 		return nil
 	}
 
@@ -949,7 +1009,7 @@ func modifyInstanceChargeType(d *schema.ResourceData, meta interface{}, forceDel
 				return ecsClient.ModifyInstanceChargeType(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{Throttling}) {
+				if IsExpectedErrors(err, []string{Throttling}) {
 					time.Sleep(10 * time.Second)
 					return resource.RetryableError(err)
 				}
@@ -981,6 +1041,7 @@ func modifyInstanceChargeType(d *schema.ResourceData, meta interface{}, forceDel
 
 func modifyInstanceImage(d *schema.ResourceData, meta interface{}, run bool) (bool, error) {
 	if d.IsNewResource() {
+		d.Partial(false)
 		return false, nil
 	}
 	client := meta.(*connectivity.AliyunClient)
@@ -1017,7 +1078,7 @@ func modifyInstanceImage(d *schema.ResourceData, meta interface{}, run bool) (bo
 			}
 			var disk ecs.Disk
 			err := resource.Retry(2*time.Minute, func() *resource.RetryError {
-				disk, err = ecsService.QueryInstanceSystemDisk(d.Id())
+				disk, err = ecsService.DescribeInstanceSystemDisk(d.Id(), instance.ResourceGroupId)
 				if err != nil {
 					if NotFoundError(err) {
 						return resource.RetryableError(err)
@@ -1056,6 +1117,7 @@ func modifyInstanceImage(d *schema.ResourceData, meta interface{}, run bool) (bo
 
 func modifyInstanceAttribute(d *schema.ResourceData, meta interface{}) (bool, error) {
 	if d.IsNewResource() {
+		d.Partial(false)
 		return false, nil
 	}
 
@@ -1065,39 +1127,68 @@ func modifyInstanceAttribute(d *schema.ResourceData, meta interface{}) (bool, er
 	request.InstanceId = d.Id()
 
 	if d.HasChange("instance_name") {
-		log.Printf("[DEBUG] ModifyInstanceAttribute instance_name")
 		d.SetPartial("instance_name")
 		request.InstanceName = d.Get("instance_name").(string)
 		update = true
 	}
 
 	if d.HasChange("description") {
-		log.Printf("[DEBUG] ModifyInstanceAttribute description")
 		d.SetPartial("description")
 		request.Description = d.Get("description").(string)
 		update = true
 	}
 
+	if d.HasChange("user_data") {
+		d.SetPartial("user_data")
+		if v, ok := d.GetOk("user_data"); ok && v.(string) != "" {
+			_, base64DecodeError := base64.StdEncoding.DecodeString(v.(string))
+			if base64DecodeError == nil {
+				request.UserData = v.(string)
+			} else {
+				request.UserData = base64.StdEncoding.EncodeToString([]byte(v.(string)))
+			}
+		}
+		update = true
+		reboot = true
+	}
+
 	if d.HasChange("host_name") {
-		log.Printf("[DEBUG] ModifyInstanceAttribute host_name")
 		d.SetPartial("host_name")
 		request.HostName = d.Get("host_name").(string)
 		update = true
 		reboot = true
 	}
 
-	if d.HasChange("password") {
-		log.Printf("[DEBUG] ModifyInstanceAttribute password")
-		d.SetPartial("password")
-		request.Password = d.Get("password").(string)
-		update = true
-		reboot = true
+	if d.HasChange("password") || d.HasChange("kms_encrypted_password") {
+		if v := d.Get("password").(string); v != "" {
+			d.SetPartial("password")
+			request.Password = v
+			update = true
+			reboot = true
+		}
+		if v := d.Get("kms_encrypted_password").(string); v != "" {
+			kmsService := KmsService{meta.(*connectivity.AliyunClient)}
+			decryptResp, err := kmsService.Decrypt(v, d.Get("kms_encryption_context").(map[string]interface{}))
+			if err != nil {
+				return reboot, WrapError(err)
+			}
+			request.Password = decryptResp.Plaintext
+			d.SetPartial("kms_encrypted_password")
+			d.SetPartial("kms_encryption_context")
+			update = true
+			reboot = true
+		}
 	}
 
 	if d.HasChange("deletion_protection") {
-		log.Printf("[DEBUG] ModifyInstanceAttribute deletion_protection")
 		d.SetPartial("deletion_protection")
 		request.DeletionProtection = requests.NewBoolean(d.Get("deletion_protection").(bool))
+		update = true
+	}
+
+	if d.HasChange("credit_specification") {
+		d.SetPartial("credit_specification")
+		request.CreditSpecification = d.Get("credit_specification").(string)
 		update = true
 	}
 
@@ -1108,7 +1199,7 @@ func modifyInstanceAttribute(d *schema.ResourceData, meta interface{}) (bool, er
 				return ecsClient.ModifyInstanceAttribute(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{"InvalidChargeType.ValueNotSupported"}) {
+				if IsExpectedErrors(err, []string{"InvalidChargeType.ValueNotSupported"}) {
 					time.Sleep(time.Minute)
 					return resource.RetryableError(err)
 				}
@@ -1126,6 +1217,7 @@ func modifyInstanceAttribute(d *schema.ResourceData, meta interface{}) (bool, er
 
 func modifyVpcAttribute(d *schema.ResourceData, meta interface{}, run bool) (bool, error) {
 	if d.IsNewResource() {
+		d.Partial(false)
 		return false, nil
 	}
 
@@ -1168,7 +1260,7 @@ func modifyVpcAttribute(d *schema.ResourceData, meta interface{}, run bool) (boo
 				return ecsClient.ModifyInstanceVpcAttribute(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{"OperationConflict"}) {
+				if IsExpectedErrors(err, []string{"OperationConflict"}) {
 					time.Sleep(1 * time.Second)
 					return resource.RetryableError(err)
 				}
@@ -1191,6 +1283,7 @@ func modifyVpcAttribute(d *schema.ResourceData, meta interface{}, run bool) (boo
 
 func modifyInstanceType(d *schema.ResourceData, meta interface{}, run bool) (bool, error) {
 	if d.IsNewResource() {
+		d.Partial(false)
 		return false, nil
 	}
 	client := meta.(*connectivity.AliyunClient)
@@ -1223,7 +1316,7 @@ func modifyInstanceType(d *schema.ResourceData, meta interface{}, run bool) (boo
 					return ecsClient.ModifyPrepayInstanceSpec(request)
 				})
 				if err != nil {
-					if IsExceptedError(err, EcsThrottling) {
+					if IsExpectedErrors(err, []string{Throttling}) {
 						time.Sleep(5 * time.Second)
 						return resource.RetryableError(err)
 					}
@@ -1248,7 +1341,7 @@ func modifyInstanceType(d *schema.ResourceData, meta interface{}, run bool) (boo
 					return ecsClient.ModifyInstanceSpec(&args)
 				})
 				if err != nil {
-					if IsExceptedError(err, EcsThrottling) {
+					if IsExpectedErrors(err, []string{Throttling}) {
 						time.Sleep(10 * time.Second)
 						return resource.RetryableError(err)
 					}
@@ -1292,6 +1385,7 @@ func modifyInstanceType(d *schema.ResourceData, meta interface{}, run bool) (boo
 
 func modifyInstanceNetworkSpec(d *schema.ResourceData, meta interface{}) error {
 	if d.IsNewResource() {
+		d.Partial(false)
 		return nil
 	}
 
@@ -1324,18 +1418,19 @@ func modifyInstanceNetworkSpec(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	//An instance that was successfully modified once cannot be modified again within 5 minutes.
+	wait := incrementalWait(2*time.Second, 2*time.Second)
 	client := meta.(*connectivity.AliyunClient)
 	if update {
-		if err := resource.Retry(6*time.Minute, func() *resource.RetryError {
+		if err := resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
 			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 				return ecsClient.ModifyInstanceNetworkSpec(request)
 			})
 			if err != nil {
-				if IsExceptedError(err, EcsThrottling) {
-					time.Sleep(10 * time.Second)
+				if IsExpectedErrors(err, []string{Throttling, "LastOrderProcessing", "LastRequestProcessing", "LastTokenProcessing"}) {
+					wait()
 					return resource.RetryableError(err)
 				}
-				if IsExceptedError(err, EcsInternalError) {
+				if IsExpectedErrors(err, []string{"InternalError"}) {
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)

@@ -6,7 +6,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cloudapi"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -19,13 +20,15 @@ func dataSourceAlicloudApiGatewayApps() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"ids": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
+			"tags": tagsSchema(),
 			"output_file": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -61,6 +64,10 @@ func dataSourceAlicloudApiGatewayApps() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"app_code": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
 					},
 				},
 			},
@@ -69,6 +76,7 @@ func dataSourceAlicloudApiGatewayApps() *schema.Resource {
 }
 func dataSourceAlicloudApigatewayAppsRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	cloudApiService := CloudApiService{client}
 
 	request := cloudapi.CreateDescribeAppAttributesRequest()
 	request.RegionId = client.RegionId
@@ -93,11 +101,11 @@ func dataSourceAlicloudApigatewayAppsRead(d *schema.ResourceData, meta interface
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	var filteredAppsTemp []cloudapi.AppAttribute
@@ -124,6 +132,15 @@ func dataSourceAlicloudApigatewayAppsRead(d *schema.ResourceData, meta interface
 				continue
 			}
 		}
+		if value, ok := d.GetOk("tags"); ok {
+			tags, err := cloudApiService.DescribeTags(strconv.FormatInt(app.AppId, 10), value.(map[string]interface{}), TagResourceApp)
+			if err != nil {
+				return WrapError(err)
+			}
+			if len(tags) < 1 {
+				continue
+			}
+		}
 
 		filteredAppsTemp = append(filteredAppsTemp, app)
 	}
@@ -132,16 +149,30 @@ func dataSourceAlicloudApigatewayAppsRead(d *schema.ResourceData, meta interface
 }
 
 func apigatewayAppsDecriptionAttributes(d *schema.ResourceData, apps []cloudapi.AppAttribute, meta interface{}) error {
+	client := meta.(*connectivity.AliyunClient)
 	var ids []string
 	var s []map[string]interface{}
 	var names []string
 	for _, app := range apps {
+		request := cloudapi.CreateDescribeAppSecurityRequest()
+		request.RegionId = client.RegionId
+		request.AppId = requests.NewInteger64(app.AppId)
+		raw, err := client.WithCloudApiClient(func(cloudApiClient *cloudapi.Client) (interface{}, error) {
+			return cloudApiClient.DescribeAppSecurity(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_api_gateway_apps", request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		response, _ := raw.(*cloudapi.DescribeAppSecurityResponse)
+
 		mapping := map[string]interface{}{
 			"id":            app.AppId,
 			"name":          app.AppName,
 			"description":   app.Description,
 			"created_time":  app.CreatedTime,
 			"modified_time": app.ModifiedTime,
+			"app_code":      response.AppCode,
 		}
 		ids = append(ids, strconv.FormatInt(app.AppId, 10))
 		s = append(s, mapping)

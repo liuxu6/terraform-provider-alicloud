@@ -2,14 +2,17 @@ package alicloud
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 
 	"sort"
 
 	"github.com/denverdino/aliyungo/cs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -33,7 +36,7 @@ func resourceAlicloudCSApplication() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateContainerAppName,
+				ValidateFunc: validation.StringMatch(regexp.MustCompile(`^[a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,63}$`), "should be 1-64 characters long, and can contain numbers, English letters and hyphens, but cannot start with hyphens."),
 			},
 			"description": {
 				Type:     schema.TypeString,
@@ -295,12 +298,11 @@ func resourceAlicloudCSApplicationUpdate(d *schema.ResourceData, meta interface{
 				return nil, csProjectClient.RollBackBlueGreenProject(parts[1], true)
 			})
 		}
-		if err != nil {
-			return fmt.Errorf("Rollbacking container application blue-green got an error: %#v", err)
-		}
-	} else if update {
+		return fmt.Errorf("Rollbacking container application blue-green got an error: %#v", err)
+	}
+	if update {
 		for {
-			if err := invoker.Run(func() error {
+			err := invoker.Run(func() error {
 				cluster, certs, err := csService.GetContainerClusterAndCertsByName(clusterName)
 				if err == nil {
 					_, err = client.WithCsProjectClient(cluster.ClusterID, cluster.MasterURL, *certs, func(csProjectClient *cs.ProjectClient) (interface{}, error) {
@@ -308,9 +310,10 @@ func resourceAlicloudCSApplicationUpdate(d *schema.ResourceData, meta interface{
 					})
 				}
 				return err
-			}); err != nil {
-				if IsExceptedError(err, ApplicationConfirmConflict) {
-					if err := invoker.Run(func() error {
+			})
+			if err != nil {
+				if IsExpectedErrors(err, []string{"Conflicts with unconfirmed updates for operation"}) {
+					err := invoker.Run(func() error {
 						cluster, certs, err := csService.GetContainerClusterAndCertsByName(clusterName)
 						if err == nil {
 							_, err = client.WithCsProjectClient(cluster.ClusterID, cluster.MasterURL, *certs, func(csProjectClient *cs.ProjectClient) (interface{}, error) {
@@ -318,23 +321,24 @@ func resourceAlicloudCSApplicationUpdate(d *schema.ResourceData, meta interface{
 							})
 						}
 						return err
-					}); err != nil {
+					})
+					if err != nil {
 						return fmt.Errorf("Rollbacking container application blue-green got an error: %#v", err)
 					}
-					if err := csService.WaitForContainerApplication(parts[0], parts[1], Running, DefaultTimeoutMedium); err != nil {
+					err = csService.WaitForContainerApplication(parts[0], parts[1], Running, DefaultTimeoutMedium)
+					if err != nil {
 						return fmt.Errorf("After rolling back blue-green project, waitting for container application %#v got an error: %#v", Running, err)
 					}
 					continue
 				}
 				return fmt.Errorf("Updating container application got an error: %#v", err)
-			} else {
-				break
 			}
+			break
 		}
 	}
 
 	if d.Get("blue_green_confirm").(bool) {
-		if err := invoker.Run(func() error {
+		err := invoker.Run(func() error {
 			cluster, certs, err := csService.GetContainerClusterAndCertsByName(clusterName)
 			if err == nil {
 				_, err = client.WithCsProjectClient(cluster.ClusterID, cluster.MasterURL, *certs, func(csProjectClient *cs.ProjectClient) (interface{}, error) {
@@ -342,7 +346,8 @@ func resourceAlicloudCSApplicationUpdate(d *schema.ResourceData, meta interface{
 				})
 			}
 			return err
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("Confirmming container application blue-green got an error: %#v", err)
 		}
 	}
@@ -376,10 +381,10 @@ func resourceAlicloudCSApplicationDelete(d *schema.ResourceData, meta interface{
 			return err
 		})
 		if err != nil {
-			if IsExceptedError(err, ApplicationNotFound) {
+			if IsExpectedErrors(err, []string{"Not Found"}) {
 				return nil
 			}
-			if !IsExceptedError(err, ApplicationErrorIgnore) && !IsExceptedError(err, AliyunGoClientFailure) {
+			if !IsExpectedErrors(err, []string{"Unable to reach primary cluster manager", AliyunGoClientFailure}) {
 				return resource.NonRetryableError(fmt.Errorf("Deleting container application %s got an error: %#v.", appName, err))
 			}
 		}
@@ -399,7 +404,7 @@ func resourceAlicloudCSApplicationDelete(d *schema.ResourceData, meta interface{
 			project, _ = raw.(cs.GetProjectResponse)
 			return nil
 		}); err != nil {
-			if IsExceptedError(err, ApplicationNotFound) || IsExceptedError(err, ApplicationErrorIgnore) {
+			if IsExpectedErrors(err, []string{"Not Found", "Unable to reach primary cluster manager"}) {
 				return nil
 			}
 			return resource.NonRetryableError(fmt.Errorf("Getting container application %s got an error: %#v.", appName, err))

@@ -1,15 +1,15 @@
 resource "alicloud_api_gateway_group" "apiGatewayGroup" {
-  name        = "${var.apigateway_group_name}"
-  description = "${var.apigateway_group_description}"
+  name        = var.apigateway_group_name
+  description = var.apigateway_group_description
 }
 
 resource "alicloud_api_gateway_api" "apiGatewayApi" {
   name        = "terraformapi"
-  group_id    = "${alicloud_api_gateway_group.apiGatewayGroup.id}"
+  group_id    = alicloud_api_gateway_group.apiGatewayGroup.id
   description = "description"
   auth_type   = "APP"
 
-  request_config = {
+  request_config {
     protocol = "HTTP"
     method   = "GET"
     path     = "/test/path1"
@@ -27,13 +27,13 @@ resource "alicloud_api_gateway_api" "apiGatewayApi" {
   }
 
   request_parameters {
-      name         = "aa"
-      type         = "STRING"
-      required     = "REQUIRED"
-      in           = "QUERY"
-      in_service   = "QUERY"
-      name_service = "testparams"
-    }
+    name         = "aa"
+    type         = "STRING"
+    required     = "REQUIRED"
+    in           = "QUERY"
+    in_service   = "QUERY"
+    name_service = "testparams"
+  }
 
   stage_names = [
     "RELEASE",
@@ -43,13 +43,14 @@ resource "alicloud_api_gateway_api" "apiGatewayApi" {
 }
 
 resource "alicloud_api_gateway_app" "apiGatewayApp" {
-  name        = "${var.apigateway_app_name_test}"
-  description = "${var.apigateway_app_description_test}"
+  name        = var.apigateway_app_name_test
+  description = var.apigateway_app_description_test
 }
 
 resource "alicloud_api_gateway_app_attachment" "foo" {
-  api_id     = "${alicloud_api_gateway_api.apiGatewayApi.api_id}"
-  group_id   = "${alicloud_api_gateway_group.apiGatewayGroup.id}"
+  api_id     = alicloud_api_gateway_api.apiGatewayApi.api_id
+  group_id   = alicloud_api_gateway_group.apiGatewayGroup.id
   stage_name = "PRE"
-  app_id     = "${alicloud_api_gateway_app.apiGatewayApp.id}"
+  app_id     = alicloud_api_gateway_app.apiGatewayApp.id
 }
+

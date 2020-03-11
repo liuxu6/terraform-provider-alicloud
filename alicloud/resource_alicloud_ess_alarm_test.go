@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
-func TestAccAlicloudEssAlarm_basic(t *testing.T) {
+func TestAccAlicloudEssAlarmBasic(t *testing.T) {
 	var v ess.Alarm
 	rand := acctest.RandIntRange(10000, 999999)
 	var basicMap = map[string]string{
@@ -224,11 +224,21 @@ func TestAccAlicloudEssAlarm_basic(t *testing.T) {
 					}),
 				),
 			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"scaling_group_id": "${alicloud_ess_scaling_group.new.id}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"scaling_group_id": CHECKSET,
+					}),
+				),
+			},
 		},
 	})
 }
 
-func TestAccAlicloudEssAlarm_multi(t *testing.T) {
+func TestAccAlicloudEssAlarmMulti(t *testing.T) {
 	var v ess.Alarm
 	rand := acctest.RandIntRange(10000, 999999)
 	var basicMap = map[string]string{
@@ -306,6 +316,14 @@ func resourceEssAlarmConfigDependence(name string) string {
 		min_size = 1
 		max_size = 1
 		scaling_group_name = "${var.name}"
+		removal_policies = ["OldestInstance", "NewestInstance"]
+		vswitch_ids = ["${alicloud_vswitch.default.id}","${alicloud_vswitch.default1.id}"]
+	}
+
+	resource "alicloud_ess_scaling_group" "new" {
+		min_size = 1
+		max_size = 1
+		scaling_group_name = "${var.name}-new"
 		removal_policies = ["OldestInstance", "NewestInstance"]
 		vswitch_ids = ["${alicloud_vswitch.default.id}","${alicloud_vswitch.default1.id}"]
 	}

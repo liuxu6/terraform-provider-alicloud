@@ -4,10 +4,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/alidns"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -34,7 +36,7 @@ func resourceAlicloudDnsRecord() *schema.Resource {
 			"type": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ValidateFunc: validateDomainRecordType,
+				ValidateFunc: validation.StringInSlice([]string{"A", "NS", "MX", "TXT", "CNAME", "SRV", "AAAA", "CAA", "REDIRECT_URL", "FORWORD_URL"}, false),
 			},
 			"value": {
 				Type:             schema.TypeString,
@@ -52,10 +54,9 @@ func resourceAlicloudDnsRecord() *schema.Resource {
 				DiffSuppressFunc: dnsPriorityDiffSuppressFunc,
 			},
 			"routing": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ValidateFunc: validateDomainRecordLine,
-				Default:      "default",
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "default",
 			},
 			"status": {
 				Type:     schema.TypeString,
@@ -98,7 +99,7 @@ func resourceAlicloudDnsRecordCreate(d *schema.ResourceData, meta interface{}) e
 			return dnsClient.AddDomainRecord(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, DnsInternalError) {
+			if IsExpectedErrors(err, []string{"InternalError"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -122,7 +123,7 @@ func resourceAlicloudDnsRecordUpdate(d *schema.ResourceData, meta interface{}) e
 	request.RecordId = d.Id()
 	request.RR = d.Get("host_record").(string)
 	request.Type = d.Get("type").(string)
-	if request.Type == MXRecord {
+	if request.Type == "MX" {
 		request.Priority = requests.NewInteger(d.Get("priority").(int))
 	}
 	request.TTL = requests.NewInteger(d.Get("ttl").(int))
@@ -177,10 +178,10 @@ func resourceAlicloudDnsRecordDelete(d *schema.ResourceData, meta interface{}) e
 			return dnsClient.DeleteDomainRecord(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{DomainRecordNotBelongToUser}) {
+			if IsExpectedErrors(err, []string{"DomainRecordNotBelongToUser"}) {
 				return nil
 			}
-			if IsExceptedErrors(err, []string{RecordForbiddenDNSChange, DnsInternalError}) {
+			if IsExpectedErrors(err, []string{"RecordForbidden.DNSChange", "InternalError"}) {
 				return resource.RetryableError(WrapErrorf(err, DefaultTimeoutMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR))
 			}
 			return resource.NonRetryableError(WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR))

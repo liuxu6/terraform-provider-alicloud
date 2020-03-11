@@ -4,9 +4,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -35,7 +37,7 @@ func resourceAliyunForwardEntry() *schema.Resource {
 			"ip_protocol": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"tcp", "udp", "any"}),
+				ValidateFunc: validation.StringInSlice([]string{"tcp", "udp", "any"}, false),
 			},
 			"internal_ip": {
 				Type:     schema.TypeString,
@@ -81,7 +83,7 @@ func resourceAliyunForwardEntryCreate(d *schema.ResourceData, meta interface{}) 
 			return vpcClient.CreateForwardEntry(ar)
 		})
 		if err != nil {
-			if IsExceptedError(err, InvalidIpNotInNatgw) {
+			if IsExpectedErrors(err, []string{"InvalidIp.NotInNatgw"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -199,7 +201,7 @@ func resourceAliyunForwardEntryDelete(d *schema.ResourceData, meta interface{}) 
 			return vpcClient.DeleteForwardEntry(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{UnknownError}) {
+			if IsExpectedErrors(err, []string{"UnknownError"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -208,7 +210,7 @@ func resourceAliyunForwardEntryDelete(d *schema.ResourceData, meta interface{}) 
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidForwardEntryIdNotFound, InvalidForwardTableIdNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidForwardEntryId.NotFound", "InvalidForwardTableId.NotFound"}) {
 			return nil
 		}
 		WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

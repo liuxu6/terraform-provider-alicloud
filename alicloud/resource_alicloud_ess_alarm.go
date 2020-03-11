@@ -4,10 +4,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -46,63 +48,51 @@ func resourceAlicloudEssAlarm() *schema.Resource {
 			"scaling_group_id": {
 				Type:     schema.TypeString,
 				Required: true,
+				ForceNew: true,
 			},
 			"metric_type": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  System,
-				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
-					string(System),
-					string(Custom),
-				}),
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      "system",
+				ForceNew:     true,
+				ValidateFunc: validation.StringInSlice([]string{"system", "custom"}, false),
 			},
 			"metric_name": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
 			"period": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  FiveMinite,
-				ForceNew: true,
-				ValidateFunc: validateAllowedIntValue([]int{
-					int(OneMinite),
-					int(TwoMinite),
-					int(FiveMinite),
-					int(FifteenMinite),
-				}),
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Default:      300,
+				ForceNew:     true,
+				ValidateFunc: validation.IntInSlice([]int{60, 120, 300, 900}),
 			},
 			"statistics": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  Average,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(Average),
 					string(Minimum),
 					string(Maximum),
-				}),
+				}, false),
 			},
 			"threshold": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
 			"comparison_operator": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  Gte,
-				ValidateFunc: validateAllowedStringValue([]string{
-					string(Gt),
-					string(Gte),
-					string(Lt),
-					string(Lte),
-				}),
+				Type:         schema.TypeString,
+				Optional:     true,
+				Default:      ">=",
+				ValidateFunc: validation.StringInSlice([]string{">", ">=", "<", "<="}, false),
 			},
 			"evaluation_count": {
 				Type:         schema.TypeInt,
 				Optional:     true,
 				Default:      3,
-				ValidateFunc: validateEvaluationCount,
+				ValidateFunc: validation.IntAtLeast(0),
 			},
 			"cloud_monitor_group_id": {
 				Type:     schema.TypeInt,
@@ -136,7 +126,7 @@ func resourceAliyunEssAlarmCreate(d *schema.ResourceData, meta interface{}) erro
 			return essClient.CreateAlarm(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, EssThrottling) {
+			if IsExpectedErrors(err, []string{Throttling}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -214,6 +204,9 @@ func resourceAliyunEssAlarmUpdate(d *schema.ResourceData, meta interface{}) erro
 	request.AlarmTaskId = d.Id()
 	request.RegionId = client.RegionId
 	d.Partial(true)
+	if metricType, ok := d.GetOk("metric_type"); ok && metricType.(string) != "" {
+		request.MetricType = metricType.(string)
+	}
 	if d.HasChange("name") {
 		request.Name = d.Get("name").(string)
 	}
@@ -245,8 +238,8 @@ func resourceAliyunEssAlarmUpdate(d *schema.ResourceData, meta interface{}) erro
 	if d.HasChange("evaluation_count") {
 		request.EvaluationCount = requests.NewInteger(d.Get("evaluation_count").(int))
 	}
-	if d.HasChange("cloud_monitor_group_id") {
-		request.GroupId = requests.NewInteger(d.Get("cloud_monitor_group_id").(int))
+	if v, ok := d.GetOk("cloud_monitor_group_id"); ok {
+		request.GroupId = requests.NewInteger(v.(int))
 	}
 
 	dimensions := d.Get("dimensions").(map[string]interface{})
@@ -322,7 +315,7 @@ func resourceAliyunEssAlarmDelete(d *schema.ResourceData, meta interface{}) erro
 		return essClient.DeleteAlarm(request)
 	})
 	if err != nil {
-		if IsExceptedError(err, InvalidEssAlarmTaskNotFound) {
+		if IsExpectedErrors(err, []string{"404"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

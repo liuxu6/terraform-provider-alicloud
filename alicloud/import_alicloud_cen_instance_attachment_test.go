@@ -6,8 +6,8 @@ import (
 
 	"github.com/hashicorp/terraform/helper/acctest"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -48,9 +48,8 @@ func testAccCheckCenInstanceAttachmentDestroy(s *terraform.State) error {
 				continue
 			}
 			return err
-		} else {
-			return fmt.Errorf("CEN %s child instance %s still attach", instance.CenId, instance.ChildInstanceId)
 		}
+		return fmt.Errorf("CEN %s child instance %s still attach", instance.CenId, instance.ChildInstanceId)
 	}
 
 	return nil

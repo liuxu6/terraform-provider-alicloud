@@ -76,12 +76,12 @@ func (client *Client) QueryUserOmsDataWithCallback(request *QueryUserOmsDataRequ
 // QueryUserOmsDataRequest is the request struct for api QueryUserOmsData
 type QueryUserOmsDataRequest struct {
 	*requests.RpcRequest
-	DataType  string           `position:"Query" name:"DataType"`
-	Marker    string           `position:"Query" name:"Marker"`
-	PageSize  requests.Integer `position:"Query" name:"PageSize"`
 	EndTime   string           `position:"Query" name:"EndTime"`
 	StartTime string           `position:"Query" name:"StartTime"`
 	OwnerId   requests.Integer `position:"Query" name:"OwnerId"`
+	DataType  string           `position:"Query" name:"DataType"`
+	Marker    string           `position:"Query" name:"Marker"`
+	PageSize  requests.Integer `position:"Query" name:"PageSize"`
 	Table     string           `position:"Query" name:"Table"`
 }
 

@@ -1,13 +1,13 @@
 package alicloud
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -48,21 +48,10 @@ func resourceAliyunRouteEntry() *schema.Resource {
 				ForceNew: true,
 			},
 			"name": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-					if len(value) < 2 || len(value) > 128 {
-						errors = append(errors, fmt.Errorf("%s cannot be longer than 128 characters", k))
-					}
-
-					if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-						errors = append(errors, fmt.Errorf("%s cannot starts with http:// or https://", k))
-					}
-
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 		},
 	}
@@ -104,7 +93,7 @@ func resourceAliyunRouteEntryCreate(d *schema.ResourceData, meta interface{}) er
 			// Route Entry does not support concurrence when creating or deleting it;
 			// Route Entry does not support creating or deleting within 5 seconds frequently
 			// It must ensure all the route entries, vpc, vswitches' status must be available before creating or deleting route entry.
-			if IsExceptedErrors(err, []string{TaskConflict, IncorrectRouteEntryStatus, Throttling, IncorrectVpcStatus}) {
+			if IsExpectedErrors(err, []string{"TaskConflict", "IncorrectRouteEntryStatus", Throttling, "IncorrectVpcStatus"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -113,7 +102,7 @@ func resourceAliyunRouteEntryCreate(d *schema.ResourceData, meta interface{}) er
 		return nil
 	})
 	if err != nil {
-		if IsExceptedError(err, RouterEntryConflictDuplicated) {
+		if IsExpectedErrors(err, []string{"RouterEntryConflict.Duplicated"}) {
 			en, err := vpcService.DescribeRouteEntry(rtId + ":" + table.VRouterId + ":" + cidr + ":" + nt + ":" + ni)
 			if err != nil {
 				return WrapError(err)
@@ -178,7 +167,7 @@ func resourceAliyunRouteEntryDelete(d *schema.ResourceData, meta interface{}) er
 			return vpcClient.DeleteRouteEntry(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{IncorrectVpcStatus, TaskConflict, IncorrectRouteEntryStatus, RouterEntryForbbiden, UnknownError}) {
+			if IsExpectedErrors(err, []string{"IncorrectVpcStatus", "TaskConflict", "IncorrectRouteEntryStatus", "Forbbiden", "UnknownError"}) {
 				// Route Entry does not support creating or deleting within 5 seconds frequently
 				time.Sleep(time.Duration(retryTimes) * time.Second)
 				retryTimes += 7
@@ -190,7 +179,7 @@ func resourceAliyunRouteEntryDelete(d *schema.ResourceData, meta interface{}) er
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidRouteEntryNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidRouteEntry.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

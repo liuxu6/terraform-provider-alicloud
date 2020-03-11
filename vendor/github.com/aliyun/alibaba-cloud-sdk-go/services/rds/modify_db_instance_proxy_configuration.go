@@ -78,10 +78,10 @@ type ModifyDBInstanceProxyConfigurationRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId         requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ResourceOwnerAccount    string           `position:"Query" name:"ResourceOwnerAccount"`
-	ProxyConfigurationKey   string           `position:"Query" name:"ProxyConfigurationKey"`
 	ProxyConfigurationValue string           `position:"Query" name:"ProxyConfigurationValue"`
-	DBInstanceId            string           `position:"Query" name:"DBInstanceId"`
 	OwnerId                 requests.Integer `position:"Query" name:"OwnerId"`
+	ProxyConfigurationKey   string           `position:"Query" name:"ProxyConfigurationKey"`
+	DBInstanceId            string           `position:"Query" name:"DBInstanceId"`
 }
 
 // ModifyDBInstanceProxyConfigurationResponse is the response struct for api ModifyDBInstanceProxyConfiguration

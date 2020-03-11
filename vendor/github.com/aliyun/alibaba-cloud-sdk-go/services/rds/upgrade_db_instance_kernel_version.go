@@ -78,10 +78,10 @@ type UpgradeDBInstanceKernelVersionRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	UpgradeTime          string           `position:"Query" name:"UpgradeTime"`
 	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	SwitchTime           string           `position:"Query" name:"SwitchTime"`
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 }
 
 // UpgradeDBInstanceKernelVersionResponse is the response struct for api UpgradeDBInstanceKernelVersion

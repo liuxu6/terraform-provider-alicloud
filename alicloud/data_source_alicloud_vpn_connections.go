@@ -6,7 +6,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -19,6 +20,7 @@ func dataSourceAlicloudVpnConnections() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				ForceNew: true,
 				MinItems: 1,
 			},
@@ -44,7 +46,7 @@ func dataSourceAlicloudVpnConnections() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 
@@ -84,7 +86,7 @@ func dataSourceAlicloudVpnConnections() *schema.Resource {
 							Computed: true,
 						},
 						"create_time": {
-							Type:     schema.TypeInt,
+							Type:     schema.TypeString,
 							Computed: true,
 						},
 						"effect_immediately": {
@@ -211,11 +213,11 @@ func dataSourceAlicloudVpnConnectionsRead(d *schema.ResourceData, meta interface
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	var filteredVpnConns []vpc.VpnConnection
@@ -268,7 +270,7 @@ func vpnConnectionsDecriptionAttributes(d *schema.ResourceData, vpnSetTypes []vp
 			"name":                conn.Name,
 			"local_subnet":        conn.LocalSubnet,
 			"remote_subnet":       conn.RemoteSubnet,
-			"create_time":         conn.CreateTime,
+			"create_time":         TimestampToStr(conn.CreateTime),
 			"effect_immediately":  conn.EffectImmediately,
 			"status":              conn.Status,
 			"ike_config":          vpnGatewayService.ParseIkeConfig(conn.IkeConfig),

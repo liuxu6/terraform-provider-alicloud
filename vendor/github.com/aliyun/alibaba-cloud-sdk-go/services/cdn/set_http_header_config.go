@@ -78,10 +78,10 @@ type SetHttpHeaderConfigRequest struct {
 	*requests.RpcRequest
 	HeaderValue   string           `position:"Query" name:"HeaderValue"`
 	SecurityToken string           `position:"Query" name:"SecurityToken"`
-	ConfigId      requests.Integer `position:"Query" name:"ConfigId"`
 	DomainName    string           `position:"Query" name:"DomainName"`
-	HeaderKey     string           `position:"Query" name:"HeaderKey"`
 	OwnerId       requests.Integer `position:"Query" name:"OwnerId"`
+	ConfigId      requests.Integer `position:"Query" name:"ConfigId"`
+	HeaderKey     string           `position:"Query" name:"HeaderKey"`
 }
 
 // SetHttpHeaderConfigResponse is the response struct for api SetHttpHeaderConfig
@@ -95,7 +95,7 @@ func CreateSetHttpHeaderConfigRequest() (request *SetHttpHeaderConfigRequest) {
 	request = &SetHttpHeaderConfigRequest{
 		RpcRequest: &requests.RpcRequest{},
 	}
-	request.InitWithApiInfo("Cdn", "2018-05-10", "SetHttpHeaderConfig", "cdn", "openAPI")
+	request.InitWithApiInfo("Cdn", "2018-05-10", "SetHttpHeaderConfig", "", "")
 	return
 }
 

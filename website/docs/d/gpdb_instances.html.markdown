@@ -1,4 +1,5 @@
 ---
+subcategory: "AnalyticDB for PostgreSQL (GPDB)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_gpdb_instances"
 sidebar_current: "docs-alicloud-datasource-gpdb-instances"
@@ -35,6 +36,7 @@ The following arguments are supported:
 * `name_regex` - (Optional) A regex string to apply to the instance name.
 * `availability_zone` - (Optional) Instance availability zone.
 * `vswitch_id` - (Optional) Used to retrieve instances belong to specified `vswitch` resources.
+* `tags` - (Optional, Available in v1.55.3+) A mapping of tags to assign to the resource.
 * `output_file` - (Optional) The name of file that can save the collection of instances after running `terraform plan`.
 
 ## Attributes Reference

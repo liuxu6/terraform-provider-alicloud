@@ -2,6 +2,7 @@ package alicloud
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -71,26 +72,56 @@ func TestAccAlicloudVSwitchesDataSourceBasic(t *testing.T) {
 		}),
 	}
 
-	allConf := dataSourceTestAccConfig{
+	tagsConf := dataSourceTestAccConfig{
 		existConfig: testAccCheckAlicloudVSwitchesDataSourceConfig(rand, map[string]string{
 			"name_regex": `"${alicloud_vswitch.default.name}"`,
-			"ids":        `[ "${alicloud_vswitch.default.id}" ]`,
-			"cidr_block": `"172.16.0.0/24"`,
-			"is_default": `"false"`,
-			"vpc_id":     `"${alicloud_vpc.default.id}"`,
-			"zone_id":    `"${data.alicloud_zones.default.zones.0.id}"`,
+			"tags": `{
+							Created = "TF"
+							For 	= "acceptance test"
+					  }`,
 		}),
 		fakeConfig: testAccCheckAlicloudVSwitchesDataSourceConfig(rand, map[string]string{
 			"name_regex": `"${alicloud_vswitch.default.name}"`,
-			"ids":        `[ "${alicloud_vswitch.default.id}" ]`,
-			"cidr_block": `"172.16.0.0/24"`,
-			"is_default": `"false"`,
-			"vpc_id":     `"${alicloud_vpc.default.id}"`,
-			"zone_id":    `"${data.alicloud_zones.default.zones.0.id}_fake"`,
+			"tags": `{
+							Created = "TF-fake"
+							For 	= "acceptance test"
+					  }`,
 		}),
 	}
 
-	vswitchesCheckInfo.dataSourceTestCheck(t, rand, nameRegexConf, idsConf, cidrBlockConf, idDefaultConf, vpcIdConf, zoneIdConf, allConf)
+	resourceGroupIdConf := dataSourceTestAccConfig{
+		existConfig: testAccCheckAlicloudVSwitchesDataSourceConfig(rand, map[string]string{
+			"name_regex": `"${alicloud_vswitch.default.name}"`,
+			// The resource route tables do not support resource_group_id, so it was set empty.
+			"resource_group_id": `""`,
+		}),
+		fakeConfig: testAccCheckAlicloudVSwitchesDataSourceConfig(rand, map[string]string{
+			"name_regex":        `"${alicloud_vswitch.default.name}"`,
+			"resource_group_id": fmt.Sprintf(`"%s_fake"`, os.Getenv("ALICLOUD_RESOURCE_GROUP_ID")),
+		}),
+	}
+	allConf := dataSourceTestAccConfig{
+		existConfig: testAccCheckAlicloudVSwitchesDataSourceConfig(rand, map[string]string{
+			"name_regex":        `"${alicloud_vswitch.default.name}"`,
+			"ids":               `[ "${alicloud_vswitch.default.id}" ]`,
+			"cidr_block":        `"172.16.0.0/24"`,
+			"is_default":        `"false"`,
+			"vpc_id":            `"${alicloud_vpc.default.id}"`,
+			"zone_id":           `"${data.alicloud_zones.default.zones.0.id}"`,
+			"resource_group_id": `""`,
+		}),
+		fakeConfig: testAccCheckAlicloudVSwitchesDataSourceConfig(rand, map[string]string{
+			"name_regex":        `"${alicloud_vswitch.default.name}"`,
+			"ids":               `[ "${alicloud_vswitch.default.id}" ]`,
+			"cidr_block":        `"172.16.0.0/24"`,
+			"is_default":        `"false"`,
+			"vpc_id":            `"${alicloud_vpc.default.id}"`,
+			"zone_id":           `"${data.alicloud_zones.default.zones.0.id}_fake"`,
+			"resource_group_id": `""`,
+		}),
+	}
+
+	vswitchesCheckInfo.dataSourceTestCheck(t, rand, nameRegexConf, idsConf, cidrBlockConf, idDefaultConf, vpcIdConf, zoneIdConf, tagsConf, resourceGroupIdConf, allConf)
 
 }
 
@@ -116,6 +147,10 @@ resource "alicloud_vswitch" "default" {
   cidr_block = "172.16.0.0/24"
   vpc_id = "${alicloud_vpc.default.id}"
   availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  tags 		= {
+		Created = "TF"
+		For 	= "acceptance test"
+  }
 }
 
 data "alicloud_vswitches" "default" {

@@ -77,14 +77,14 @@ func (client *Client) CreateAgAccountWithCallback(request *CreateAgAccountReques
 type CreateAgAccountRequest struct {
 	*requests.RpcRequest
 	FirstName      string `position:"Query" name:"FirstName"`
-	LoginEmail     string `position:"Query" name:"LoginEmail"`
-	ProvinceName   string `position:"Query" name:"ProvinceName"`
 	CityName       string `position:"Query" name:"CityName"`
-	AccountAttr    string `position:"Query" name:"AccountAttr"`
 	Postcode       string `position:"Query" name:"Postcode"`
 	EnterpriseName string `position:"Query" name:"EnterpriseName"`
 	NationCode     string `position:"Query" name:"NationCode"`
 	LastName       string `position:"Query" name:"LastName"`
+	LoginEmail     string `position:"Query" name:"LoginEmail"`
+	ProvinceName   string `position:"Query" name:"ProvinceName"`
+	AccountAttr    string `position:"Query" name:"AccountAttr"`
 }
 
 // CreateAgAccountResponse is the response struct for api CreateAgAccount

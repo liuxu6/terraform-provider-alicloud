@@ -1,4 +1,5 @@
 ---
+subcategory: "VPC"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_snat_entry"
 sidebar_current: "docs-alicloud-resource-vpc"
@@ -40,19 +41,35 @@ resource "alicloud_nat_gateway" "default" {
   name          = "${var.name}"
 }
 
-resource "alicloud_eip" "eip" {
-  name = "${var.name}"
+resource "alicloud_eip" "default" {
+  count = 2
+  name  = "${var.name}"
 }
 
 resource "alicloud_eip_association" "default" {
-  allocation_id = "${alicloud_eip.eip.id}"
+  count         = 2
+  allocation_id = "${element(alicloud_eip.default.*.id, count.index)}"
   instance_id   = "${alicloud_nat_gateway.default.id}"
 }
 
+resource "alicloud_common_bandwidth_package" "default" {
+  name                 = "tf_cbp"
+  bandwidth            = 10
+  internet_charge_type = "PayByTraffic"
+  ratio                = 100
+}
+
+resource "alicloud_common_bandwidth_package_attachment" "default" {
+  count                = 2
+  bandwidth_package_id = "${alicloud_common_bandwidth_package.default.id}"
+  instance_id          = "${element(alicloud_eip.default.*.id, count.index)}"
+}
+
 resource "alicloud_snat_entry" "default" {
+  depends_on        = [alicloud_eip_association.default]
   snat_table_id     = "${alicloud_nat_gateway.default.snat_table_ids}"
   source_vswitch_id = "${alicloud_vswitch.vswitch.id}"
-  snat_ip           = "${alicloud_eip.eip.ip_address}"
+  snat_ip           = "${join(",", alicloud_eip.default.*.ip_address)}"
 }
 ```
 
@@ -61,7 +78,9 @@ resource "alicloud_snat_entry" "default" {
 The following arguments are supported:
 
 * `snat_table_id` - (Required, ForceNew) The value can get from `alicloud_nat_gateway` Attributes "snat_table_ids".
-* `source_vswitch_id` - (Required, ForceNew) The vswitch ID.
+* `source_vswitch_id` - (Optional, ForceNew) The vswitch ID.
+* `source_cidr` - (Optional, ForceNew, Available in 1.71.1+) The private network segment of Ecs. This parameter and the `source_vswitch_id` parameter are mutually exclusive and cannot appear at the same time.
+* `snat_entry_name` - (Optional, Available in 1.71.2+) The name of snat entry.
 * `snat_ip` - (Required) The SNAT ip address, the ip must along bandwidth package public ip which `alicloud_nat_gateway` argument `bandwidth_packages`.
 
 ## Attributes Reference

@@ -5,12 +5,24 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
+
+	"github.com/aliyun/aliyun-datahub-sdk-go/datahub"
+	sls "github.com/aliyun/aliyun-log-go-sdk"
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/aliyun/fc-go-sdk"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	"github.com/hashicorp/terraform/helper/acctest"
 
 	"strings"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -130,9 +142,343 @@ func testAccPreCheckWithMultipleAccount(t *testing.T) {
 	}
 }
 
+func testAccPreCheckOSSForImageImport(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("ALICLOUD_OSS_BUCKET_FOR_IMAGE")); v == "" {
+		t.Skipf("Skipping tests without OSS_Bucket set.")
+		t.Skipped()
+	}
+	if v := strings.TrimSpace(os.Getenv("ALICLOUD_OSS_OBJECT_FOR_IMAGE")); v == "" {
+		t.Skipf("Skipping OSS_Object does not exist.")
+		t.Skipped()
+	}
+}
+
 func testAccPreCheckWithCmsContactGroupSetting(t *testing.T) {
 	if v := strings.TrimSpace(os.Getenv("ALICLOUD_CMS_CONTACT_GROUP")); v == "" {
 		t.Skipf("Skipping the test case with no cms contact group setting")
 		t.Skipped()
 	}
+}
+
+func testAccPreCheckWithSmartAccessGatewaySetting(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("SAG_INSTANCE_ID")); v == "" {
+		t.Skipf("Skipping the test case with no sag instance id setting")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithSmartAccessGatewayAppSetting(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("SAG_APP_INSTANCE_ID")); v == "" {
+		t.Skipf("Skipping the test case with no sag app instance id setting")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithTime(t *testing.T) {
+	if time.Now().Day() != 1 {
+		t.Skipf("Skipping the test case with not the 1st of every month")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithAlikafkaAclEnable(t *testing.T) {
+	aclEnable := os.Getenv("ALICLOUD_ALIKAFKA_ACL_ENABLE")
+
+	if aclEnable != "true" {
+		t.Skipf("Skipping the test case because the acl is not enabled.")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithNoDefaultVpc(t *testing.T) {
+	region := os.Getenv("ALICLOUD_REGION")
+	rawClient, err := sharedClientForRegion(region)
+	if err != nil {
+		t.Skipf("Skipping the test case with err: %s", err)
+		t.Skipped()
+	}
+	client := rawClient.(*connectivity.AliyunClient)
+	request := vpc.CreateDescribeVpcsRequest()
+	request.RegionId = string(client.Region)
+	request.PageSize = requests.NewInteger(PageSizeSmall)
+	request.PageNumber = requests.NewInteger(1)
+	request.IsDefault = requests.NewBoolean(true)
+
+	raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
+		return vpcClient.DescribeVpcs(request)
+	})
+	if err != nil {
+		t.Skipf("Skipping the test case with err: %s", err)
+		t.Skipped()
+	}
+	response, _ := raw.(*vpc.DescribeVpcsResponse)
+
+	if len(response.Vpcs.Vpc) < 1 {
+		t.Skipf("Skipping the test case with there is no default vpc")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithNoDefaultVswitch(t *testing.T) {
+	region := os.Getenv("ALICLOUD_REGION")
+	rawClient, err := sharedClientForRegion(region)
+	if err != nil {
+		t.Skipf("Skipping the test case with err: %s", err)
+		t.Skipped()
+	}
+	client := rawClient.(*connectivity.AliyunClient)
+	request := vpc.CreateDescribeVSwitchesRequest()
+	request.RegionId = string(client.Region)
+	request.PageSize = requests.NewInteger(PageSizeSmall)
+	request.PageNumber = requests.NewInteger(1)
+	request.IsDefault = requests.NewBoolean(true)
+
+	raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
+		return vpcClient.DescribeVSwitches(request)
+	})
+	if err != nil {
+		t.Skipf("Skipping the test case with err: %s", err)
+		t.Skipped()
+	}
+	response, _ := raw.(*vpc.DescribeVSwitchesResponse)
+
+	if len(response.VSwitches.VSwitch) < 1 {
+		t.Skipf("Skipping the test case with there is no default vswitche")
+		t.Skipped()
+	}
+}
+
+var providerCommon = `
+provider "alicloud" {
+	assume_role {}
+}
+`
+
+func TestAccAlicloudProviderEcs(t *testing.T) {
+	var v ecs.Instance
+
+	resourceId := "alicloud_instance.default"
+	ra := resourceAttrInit(resourceId, testAccInstanceCheckMap)
+	serviceFunc := func() interface{} {
+		return &EcsService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+	rac := resourceAttrCheckInit(rc, ra)
+
+	rand := acctest.RandIntRange(1000, 9999)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	name := fmt.Sprintf("tf-testAcc%sEcsInstanceConfigVpc%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, func(name string) string {
+		return providerCommon + resourceInstanceVpcConfigDependence(name)
+	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"image_id":        "${data.alicloud_images.default.images.0.id}",
+					"security_groups": []string{"${alicloud_security_group.default.0.id}"},
+					"instance_type":   "${data.alicloud_instance_types.default.instance_types.0.id}",
+
+					"availability_zone":             "${data.alicloud_instance_types.default.instance_types.0.availability_zones.0}",
+					"system_disk_category":          "cloud_efficiency",
+					"instance_name":                 "${var.name}",
+					"key_name":                      "${alicloud_key_pair.default.key_name}",
+					"spot_strategy":                 "NoSpot",
+					"spot_price_limit":              "0",
+					"security_enhancement_strategy": "Active",
+					"user_data":                     "I_am_user_data",
+
+					"vswitch_id": "${alicloud_vswitch.default.id}",
+					"role_name":  "${alicloud_ram_role.default.name}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"instance_name": name,
+						"key_name":      name,
+						"role_name":     name,
+					}),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAlicloudProviderFC(t *testing.T) {
+	var v *fc.GetFunctionOutput
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testacc%salicloudfcfunction-%d", defaultRegionToTest, rand)
+	var basicMap = map[string]string{
+		"service":     CHECKSET,
+		"name":        name,
+		"runtime":     "python2.7",
+		"description": "tf",
+		"handler":     "hello.handler",
+		"oss_bucket":  CHECKSET,
+		"oss_key":     CHECKSET,
+	}
+	resourceId := "alicloud_fc_function.default"
+	ra := resourceAttrInit(resourceId, basicMap)
+	serviceFunc := func() interface{} {
+		return &FcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, func(name string) string {
+		return providerCommon + resourceFCFunctionConfigDependence(name)
+	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheckWithRegions(t, false, connectivity.FcNoSupportedRegions) },
+		Providers:    testAccProviders,
+		CheckDestroy: rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"service":     "${alicloud_fc_service.default.name}",
+					"name":        "${var.name}",
+					"runtime":     "python2.7",
+					"description": "tf",
+					"handler":     "hello.handler",
+					"oss_bucket":  "${alicloud_oss_bucket.default.id}",
+					"oss_key":     "${alicloud_oss_bucket_object.default.key}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(nil),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAlicloudProviderOss(t *testing.T) {
+	var v oss.GetBucketInfoResult
+
+	resourceId := "alicloud_oss_bucket.default"
+	ra := resourceAttrInit(resourceId, ossBucketBasicMap)
+
+	serviceFunc := func() interface{} {
+		return &OssService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+
+	rac := resourceAttrCheckInit(rc, ra)
+
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testacc%sbucket-%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, func(name string) string {
+		return providerCommon + resourceOssBucketConfigDependence(name)
+	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		// module name
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"bucket": name,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"bucket": name,
+					}),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAlicloudProviderLog(t *testing.T) {
+	var v *sls.LogProject
+	resourceId := "alicloud_log_project.default"
+	ra := resourceAttrInit(resourceId, logProjectMap)
+	serviceFunc := func() interface{} {
+		return &LogService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testacc%slogproject-%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, func(name string) string {
+		return providerCommon + resourceLogProjectConfigDependence(name)
+	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name": name,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name": name,
+					}),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAlicloudProviderDatahub(t *testing.T) {
+	var v *datahub.Project
+
+	resourceId := "alicloud_datahub_project.default"
+	ra := resourceAttrInit(resourceId, datahubProjectBasicMap)
+
+	serviceFunc := func() interface{} {
+		return &DatahubService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+
+	rac := resourceAttrCheckInit(rc, ra)
+
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(100000, 999999)
+	name := fmt.Sprintf("tf_testaccdatahubproject%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, func(name string) string {
+		return providerCommon + resourceDatahubProjectConfigDependence(name)
+	})
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithRegions(t, true, connectivity.DatahubSupportedRegions)
+		},
+		// module name
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name": name,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name": name,
+					}),
+				),
+			},
+		},
+	})
 }

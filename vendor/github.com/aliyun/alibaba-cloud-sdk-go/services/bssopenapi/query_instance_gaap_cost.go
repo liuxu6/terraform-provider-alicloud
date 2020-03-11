@@ -78,10 +78,10 @@ type QueryInstanceGaapCostRequest struct {
 	*requests.RpcRequest
 	ProductCode      string           `position:"Query" name:"ProductCode"`
 	SubscriptionType string           `position:"Query" name:"SubscriptionType"`
-	PageSize         requests.Integer `position:"Query" name:"PageSize"`
 	BillingCycle     string           `position:"Query" name:"BillingCycle"`
 	PageNum          requests.Integer `position:"Query" name:"PageNum"`
 	ProductType      string           `position:"Query" name:"ProductType"`
+	PageSize         requests.Integer `position:"Query" name:"PageSize"`
 }
 
 // QueryInstanceGaapCostResponse is the response struct for api QueryInstanceGaapCost

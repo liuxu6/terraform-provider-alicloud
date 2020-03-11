@@ -78,12 +78,12 @@ type DescribeDBInstanceNetInfoRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId          requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	Flag                     string           `position:"Query" name:"Flag"`
-	DBInstanceNetRWSplitType string           `position:"Query" name:"DBInstanceNetRWSplitType"`
-	ResourceOwnerAccount     string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken              string           `position:"Query" name:"ClientToken"`
-	OwnerAccount             string           `position:"Query" name:"OwnerAccount"`
 	DBInstanceId             string           `position:"Query" name:"DBInstanceId"`
+	ResourceOwnerAccount     string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount             string           `position:"Query" name:"OwnerAccount"`
 	OwnerId                  requests.Integer `position:"Query" name:"OwnerId"`
+	DBInstanceNetRWSplitType string           `position:"Query" name:"DBInstanceNetRWSplitType"`
 }
 
 // DescribeDBInstanceNetInfoResponse is the response struct for api DescribeDBInstanceNetInfo

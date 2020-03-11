@@ -3,7 +3,7 @@ package alicloud
 import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -16,6 +16,7 @@ func dataSourceAlicloudEips() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				ForceNew: true,
 				MinItems: 1,
 			},
@@ -31,6 +32,7 @@ func dataSourceAlicloudEips() *schema.Resource {
 				ForceNew: true,
 				MinItems: 1,
 			},
+			"tags": tagsSchema(),
 			"output_file": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -81,16 +83,23 @@ func dataSourceAlicloudEips() *schema.Resource {
 					},
 				},
 			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
 		},
 	}
 }
 func dataSourceAlicloudEipsRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	vpcService := VpcService{client}
 
 	request := vpc.CreateDescribeEipAddressesRequest()
 	request.RegionId = string(client.Region)
 	request.PageSize = requests.NewInteger(PageSizeLarge)
 	request.PageNumber = requests.NewInteger(1)
+	request.ResourceGroupId = d.Get("resource_group_id").(string)
 
 	idsMap := make(map[string]string)
 	ipsMap := make(map[string]string)
@@ -134,6 +143,15 @@ func dataSourceAlicloudEipsRead(d *schema.ResourceData, meta interface{}) error 
 					continue
 				}
 			}
+			if value, ok := d.GetOk("tags"); ok && len(value.(map[string]interface{})) > 0 {
+				tags, err := vpcService.DescribeTags(e.AllocationId, value.(map[string]interface{}), TagResourceEip)
+				if err != nil {
+					return WrapError(err)
+				}
+				if len(tags) < 1 {
+					continue
+				}
+			}
 			allEips = append(allEips, e)
 		}
 
@@ -141,11 +159,11 @@ func dataSourceAlicloudEipsRead(d *schema.ResourceData, meta interface{}) error 
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	return eipsDecriptionAttributes(d, allEips, meta)

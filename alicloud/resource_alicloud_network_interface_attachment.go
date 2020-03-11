@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -51,7 +51,7 @@ func resourceAliyunNetworkInterfaceAttachmentCreate(d *schema.ResourceData, meta
 			return ecsClient.AttachNetworkInterface(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, NetworkInterfaceInvalidOperations) {
+			if IsExpectedErrors(err, NetworkInterfaceInvalidOperations) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -115,7 +115,7 @@ func resourceAliyunNetworkInterfaceAttachmentDelete(d *schema.ResourceData, meta
 			return ecsClient.DetachNetworkInterface(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, NetworkInterfaceInvalidOperations) {
+			if IsExpectedErrors(err, NetworkInterfaceInvalidOperations) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)

@@ -76,17 +76,20 @@ func (client *Client) ModifyDBInstanceSpecWithCallback(request *ModifyDBInstance
 // ModifyDBInstanceSpecRequest is the request struct for api ModifyDBInstanceSpec
 type ModifyDBInstanceSpecRequest struct {
 	*requests.RpcRequest
-	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	DBInstanceStorage    requests.Integer `position:"Query" name:"DBInstanceStorage"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	ClientToken          string           `position:"Query" name:"ClientToken"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	EngineVersion        string           `position:"Query" name:"EngineVersion"`
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	DBInstanceClass      string           `position:"Query" name:"DBInstanceClass"`
-	EffectiveTime        string           `position:"Query" name:"EffectiveTime"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
-	PayType              string           `position:"Query" name:"PayType"`
+	ResourceOwnerId       requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	DBInstanceStorage     requests.Integer `position:"Query" name:"DBInstanceStorage"`
+	ClientToken           string           `position:"Query" name:"ClientToken"`
+	EngineVersion         string           `position:"Query" name:"EngineVersion"`
+	EffectiveTime         string           `position:"Query" name:"EffectiveTime"`
+	DBInstanceId          string           `position:"Query" name:"DBInstanceId"`
+	DBInstanceStorageType string           `position:"Query" name:"DBInstanceStorageType"`
+	SourceBiz             string           `position:"Query" name:"SourceBiz"`
+	Direction             string           `position:"Query" name:"Direction"`
+	ResourceOwnerAccount  string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount          string           `position:"Query" name:"OwnerAccount"`
+	OwnerId               requests.Integer `position:"Query" name:"OwnerId"`
+	DBInstanceClass       string           `position:"Query" name:"DBInstanceClass"`
+	PayType               string           `position:"Query" name:"PayType"`
 }
 
 // ModifyDBInstanceSpecResponse is the response struct for api ModifyDBInstanceSpec

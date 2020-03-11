@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -30,6 +30,7 @@ func sharedClientForRegion(region string) (interface{}, error) {
 		RegionId:  region,
 		AccessKey: accessKey,
 		SecretKey: secretKey,
+		Protocol:  "HTTPS",
 	}
 	if accountId := os.Getenv("ALICLOUD_ACCOUNT_ID"); accountId != "" {
 		conf.AccountId = accountId

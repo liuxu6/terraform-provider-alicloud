@@ -4,12 +4,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cloudapi"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -33,6 +33,7 @@ func resourceAliyunApigatewayApp() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
+			"tags": tagsSchema(),
 		},
 	}
 }
@@ -53,7 +54,7 @@ func resourceAliyunApigatewayAppCreate(d *schema.ResourceData, meta interface{})
 			return cloudApiClient.CreateApp(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, RepeatedCommit) {
+			if IsExpectedErrors(err, []string{"RepeatedCommit"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -65,14 +66,17 @@ func resourceAliyunApigatewayAppCreate(d *schema.ResourceData, meta interface{})
 	}); err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_apigateway_app", request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-
-	return resourceAliyunApigatewayAppRead(d, meta)
+	return resourceAliyunApigatewayAppUpdate(d, meta)
 }
 
 func resourceAliyunApigatewayAppRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	cloudApiService := CloudApiService{client}
-
+	tags, err := cloudApiService.DescribeTags(d.Id(), nil, TagResourceApp)
+	if err != nil {
+		return WrapError(err)
+	}
+	d.Set("tags", cloudApiService.tagsToMap(tags))
 	if err := resource.Retry(3*time.Second, func() *resource.RetryError {
 		object, err := cloudApiService.DescribeApiGatewayApp(d.Id())
 		if err != nil {
@@ -93,7 +97,14 @@ func resourceAliyunApigatewayAppRead(d *schema.ResourceData, meta interface{}) e
 
 func resourceAliyunApigatewayAppUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-
+	cloudApiService := CloudApiService{client}
+	if err := cloudApiService.setInstanceTags(d, TagResourceApp); err != nil {
+		return WrapError(err)
+	}
+	if d.IsNewResource() {
+		d.Partial(false)
+		return resourceAliyunApigatewayAppRead(d, meta)
+	}
 	if d.HasChange("name") || d.HasChange("description") {
 		request := cloudapi.CreateModifyAppRequest()
 		request.RegionId = client.RegionId
@@ -127,7 +138,7 @@ func resourceAliyunApigatewayAppDelete(d *schema.ResourceData, meta interface{})
 		return cloudApiClient.DeleteApp(request)
 	})
 	if err != nil {
-		if IsExceptedError(err, NotFoundApp) {
+		if IsExpectedErrors(err, []string{"NotFoundApp"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

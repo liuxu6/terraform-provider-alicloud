@@ -1,4 +1,5 @@
 ---
+subcategory: "ECS"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_instances"
 sidebar_current: "docs-alicloud-datasource-instances"
@@ -38,6 +39,8 @@ The following arguments are supported:
 * `vpc_id` - (Optional) ID of the VPC linked to the instances.
 * `vswitch_id` - (Optional) ID of the VSwitch linked to the instances.
 * `availability_zone` - (Optional) Availability zone where instances are located.
+* `resource_group_id` - (Optional, ForceNew, Available in 1.57.0+) The Id of resource group which the instance belongs.
+* `ram_role_name` - (Optional, ForceNew, Available in 1.69.0+) The RAM role name which the instance attaches.
 * `tags` - (Optional) A map of tags assigned to the ECS instances. It must be in the format:
   ```
   data "alicloud_instances" "taggedInstances" {
@@ -82,3 +85,5 @@ The following attributes are exported in addition to the arguments listed above:
     * `category` - Cloud disk category.
     * `type` - Cloud disk type: system disk or data disk.
   * `tags` - A map of tags assigned to the ECS instance.
+  * `resource_group_id` - The Id of resource group.
+  * `ram_role_name` - The Ram role name.

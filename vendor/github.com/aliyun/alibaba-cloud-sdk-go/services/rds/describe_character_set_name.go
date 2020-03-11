@@ -78,9 +78,9 @@ type DescribeCharacterSetNameRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	Engine               string           `position:"Query" name:"Engine"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	Engine               string           `position:"Query" name:"Engine"`
 }
 
 // DescribeCharacterSetNameResponse is the response struct for api DescribeCharacterSetName

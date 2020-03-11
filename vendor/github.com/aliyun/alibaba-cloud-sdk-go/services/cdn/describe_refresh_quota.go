@@ -76,8 +76,8 @@ func (client *Client) DescribeRefreshQuotaWithCallback(request *DescribeRefreshQ
 // DescribeRefreshQuotaRequest is the request struct for api DescribeRefreshQuota
 type DescribeRefreshQuotaRequest struct {
 	*requests.RpcRequest
-	SecurityToken string           `position:"Query" name:"SecurityToken"`
 	OwnerId       requests.Integer `position:"Query" name:"OwnerId"`
+	SecurityToken string           `position:"Query" name:"SecurityToken"`
 }
 
 // DescribeRefreshQuotaResponse is the response struct for api DescribeRefreshQuota
@@ -92,6 +92,8 @@ type DescribeRefreshQuotaResponse struct {
 	BlockQuota    string `json:"BlockQuota" xml:"BlockQuota"`
 	PreloadRemain string `json:"PreloadRemain" xml:"PreloadRemain"`
 	BlockRemain   string `json:"blockRemain" xml:"blockRemain"`
+	RegexQuota    string `json:"RegexQuota" xml:"RegexQuota"`
+	RegexRemain   string `json:"RegexRemain" xml:"RegexRemain"`
 }
 
 // CreateDescribeRefreshQuotaRequest creates a request to invoke DescribeRefreshQuota API
@@ -99,7 +101,7 @@ func CreateDescribeRefreshQuotaRequest() (request *DescribeRefreshQuotaRequest) 
 	request = &DescribeRefreshQuotaRequest{
 		RpcRequest: &requests.RpcRequest{},
 	}
-	request.InitWithApiInfo("Cdn", "2018-05-10", "DescribeRefreshQuota", "cdn", "openAPI")
+	request.InitWithApiInfo("Cdn", "2018-05-10", "DescribeRefreshQuota", "", "")
 	return
 }
 

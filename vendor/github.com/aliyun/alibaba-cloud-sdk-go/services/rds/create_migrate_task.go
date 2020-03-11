@@ -77,14 +77,14 @@ func (client *Client) CreateMigrateTaskWithCallback(request *CreateMigrateTaskRe
 type CreateMigrateTaskRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	IsOnlineDB           string           `position:"Query" name:"IsOnlineDB"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	MigrateTaskId        string           `position:"Query" name:"MigrateTaskId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	IsOnlineDB           string           `position:"Query" name:"IsOnlineDB"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	OssObjectPositions   string           `position:"Query" name:"OssObjectPositions"`
 	OSSUrls              string           `position:"Query" name:"OSSUrls"`
 	DBName               string           `position:"Query" name:"DBName"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	BackupMode           string           `position:"Query" name:"BackupMode"`
 	CheckDBMode          string           `position:"Query" name:"CheckDBMode"`
 }

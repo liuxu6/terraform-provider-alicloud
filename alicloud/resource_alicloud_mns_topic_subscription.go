@@ -3,8 +3,10 @@ package alicloud
 import (
 	"fmt"
 
-	"github.com/dxh031/ali_mns"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
+	ali_mns "github.com/aliyun/aliyun-mns-go-sdk"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -22,36 +24,35 @@ func resourceAlicloudMNSSubscription() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateStringLengthInRange(3, 256),
+				ValidateFunc: validation.StringLenBetween(3, 256),
 			},
 			"name": {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateStringLengthInRange(3, 256),
+				ValidateFunc: validation.StringLenBetween(3, 256),
 			},
 
 			"endpoint": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ForceNew:     true,
-				ValidateFunc: validateEndpoint,
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
 			},
 
 			"filter_tag": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateStringLengthInRange(0, 16),
+				ValidateFunc: validation.StringLenBetween(0, 16),
 			},
 
 			"notify_strategy": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  string(ali_mns.BACKOFF_RETRY),
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(ali_mns.BACKOFF_RETRY), string(ali_mns.EXPONENTIAL_DECAY_RETRY),
-				}),
+				}, false),
 			},
 
 			"notify_content_format": {
@@ -59,9 +60,6 @@ func resourceAlicloudMNSSubscription() *schema.Resource {
 				Optional: true,
 				Default:  string(ali_mns.SIMPLIFIED),
 				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
-					string(ali_mns.SIMPLIFIED), string(ali_mns.XML),
-				}),
 			},
 		},
 	}

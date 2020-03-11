@@ -77,16 +77,16 @@ func (client *Client) MigrateToOtherZoneWithCallback(request *MigrateToOtherZone
 type MigrateToOtherZoneRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	ZoneIdSlave1         string           `position:"Query" name:"ZoneIdSlave1"`
 	ZoneIdSlave2         string           `position:"Query" name:"ZoneIdSlave2"`
+	EffectiveTime        string           `position:"Query" name:"EffectiveTime"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
+	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	VSwitchId            string           `position:"Query" name:"VSwitchId"`
-	EffectiveTime        string           `position:"Query" name:"EffectiveTime"`
 	VPCId                string           `position:"Query" name:"VPCId"`
 	ZoneId               string           `position:"Query" name:"ZoneId"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	Category             string           `position:"Query" name:"Category"`
 }
 

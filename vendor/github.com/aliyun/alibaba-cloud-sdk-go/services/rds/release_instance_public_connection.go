@@ -79,9 +79,9 @@ type ReleaseInstancePublicConnectionRequest struct {
 	ResourceOwnerId         requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ResourceOwnerAccount    string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount            string           `position:"Query" name:"OwnerAccount"`
-	DBInstanceId            string           `position:"Query" name:"DBInstanceId"`
 	OwnerId                 requests.Integer `position:"Query" name:"OwnerId"`
 	CurrentConnectionString string           `position:"Query" name:"CurrentConnectionString"`
+	DBInstanceId            string           `position:"Query" name:"DBInstanceId"`
 }
 
 // ReleaseInstancePublicConnectionResponse is the response struct for api ReleaseInstancePublicConnection

@@ -135,21 +135,20 @@ type crTag struct {
 }
 
 func (c *CrService) DescribeCrNamespace(id string) (*cr.GetNamespaceResponse, error) {
+	response := &cr.GetNamespaceResponse{}
 	request := cr.CreateGetNamespaceRequest()
 	request.RegionId = c.client.RegionId
 	request.Namespace = id
-
-	var response *cr.GetNamespaceResponse
 
 	var err error
 	raw, err := c.client.WithCrClient(func(crClient *cr.Client) (interface{}, error) {
 		return crClient.GetNamespace(request)
 	})
 	if err != nil {
-		if IsExceptedError(err, ErrorNamespaceNotExist) {
+		if IsExpectedErrors(err, []string{"NAMESPACE_NOT_EXIST"}) {
 			return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
-		return nil, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RoaRequest, request)
 	response, _ = raw.(*cr.GetNamespaceResponse)
@@ -186,6 +185,7 @@ func (c *CrService) WaitForCRNamespace(id string, status Status, timeout int) er
 }
 
 func (c *CrService) DescribeCrRepo(id string) (*cr.GetRepoResponse, error) {
+	response := &cr.GetRepoResponse{}
 	sli := strings.Split(id, SLASH_SEPARATED)
 	repoNamespace := sli[0]
 	repoName := sli[1]
@@ -198,12 +198,12 @@ func (c *CrService) DescribeCrRepo(id string) (*cr.GetRepoResponse, error) {
 	raw, err := c.client.WithCrClient(func(crClient *cr.Client) (interface{}, error) {
 		return crClient.GetRepo(request)
 	})
-	response, _ := raw.(*cr.GetRepoResponse)
+	response, _ = raw.(*cr.GetRepoResponse)
 	if err != nil {
-		if IsExceptedError(err, ErrorRepoNotExist) {
+		if IsExpectedErrors(err, []string{"REPO_NOT_EXIST"}) {
 			return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
-		return nil, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RoaRequest, request)
 	return response, nil

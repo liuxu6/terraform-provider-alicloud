@@ -3,9 +3,11 @@ package alicloud
 import (
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -28,12 +30,32 @@ func resourceAliyunSslVpnClientCert() *schema.Resource {
 			"name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceName,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 
 			"status": {
 				Type:     schema.TypeString,
 				Computed: true,
+			},
+			"ca_cert": {
+				Type:      schema.TypeString,
+				Computed:  true,
+				Sensitive: true,
+			},
+			"client_cert": {
+				Type:      schema.TypeString,
+				Computed:  true,
+				Sensitive: true,
+			},
+			"client_key": {
+				Type:      schema.TypeString,
+				Computed:  true,
+				Sensitive: true,
+			},
+			"client_config": {
+				Type:      schema.TypeString,
+				Computed:  true,
+				Sensitive: true,
 			},
 		},
 	}
@@ -57,7 +79,7 @@ func resourceAliyunSslVpnClientCertCreate(d *schema.ResourceData, meta interface
 			return vpcClient.CreateSslVpnClientCert(&args)
 		})
 		if err != nil {
-			if IsExceptedError(err, VpnConfiguring) {
+			if IsExpectedErrors(err, []string{"VpnGateway.Configuring"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -99,6 +121,10 @@ func resourceAliyunSslVpnClientCertRead(d *schema.ResourceData, meta interface{}
 	d.Set("name", object.Name)
 	d.Set("status", object.Status)
 	d.Set("ssl_vpn_server_id", object.SslVpnServerId)
+	d.Set("ca_cert", object.CaCert)
+	d.Set("client_cert", object.ClientCert)
+	d.Set("client_key", object.ClientKey)
+	d.Set("client_config", object.ClientConfig)
 
 	return nil
 }
@@ -134,7 +160,7 @@ func resourceAliyunSslVpnClientCertDelete(d *schema.ResourceData, meta interface
 		})
 
 		if err != nil {
-			if IsExceptedError(err, VpnConfiguring) {
+			if IsExpectedErrors(err, []string{"VpnGateway.Configuring"}) {
 				return resource.RetryableError(err)
 			} else {
 				return resource.NonRetryableError(err)
@@ -144,7 +170,7 @@ func resourceAliyunSslVpnClientCertDelete(d *schema.ResourceData, meta interface
 		return nil
 	})
 	if err != nil {
-		if IsExceptedError(err, SslVpnClientCertNotFound) {
+		if IsExpectedErrors(err, []string{"InvalidSslVpnClientCertId.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

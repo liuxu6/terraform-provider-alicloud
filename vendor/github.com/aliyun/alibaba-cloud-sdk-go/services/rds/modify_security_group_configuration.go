@@ -79,8 +79,8 @@ type ModifySecurityGroupConfigurationRequest struct {
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	SecurityGroupId      string           `position:"Query" name:"SecurityGroupId"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 }
 
 // ModifySecurityGroupConfigurationResponse is the response struct for api ModifySecurityGroupConfiguration

@@ -1,14 +1,15 @@
 package alicloud
 
 import (
-	"fmt"
 	"strconv"
-	"strings"
+	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -26,23 +27,12 @@ func resourceAliyunCommonBandwidthPackage() *schema.Resource {
 			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateInstanceDescription,
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
 			"name": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(string)
-					if len(value) < 2 || len(value) > 128 {
-						errors = append(errors, fmt.Errorf("%s cannot be longer than 128 characters", k))
-					}
-
-					if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-						errors = append(errors, fmt.Errorf("%s cannot starts with http:// or https://", k))
-					}
-
-					return
-				},
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringLenBetween(2, 128),
 			},
 			"bandwidth": {
 				Type:     schema.TypeInt,
@@ -53,13 +43,20 @@ func resourceAliyunCommonBandwidthPackage() *schema.Resource {
 				Optional:     true,
 				ForceNew:     true,
 				Default:      PayByTraffic,
-				ValidateFunc: validateCommonBandwidthPackageChargeType,
+				ValidateFunc: validation.StringInSlice([]string{"PayByBandwidth", "PayBy95", "PayByTraffic"}, false),
 			},
 			"ratio": {
 				Type:         schema.TypeInt,
 				Optional:     true,
+				ForceNew:     true,
 				Default:      100,
-				ValidateFunc: validateRatio,
+				ValidateFunc: validation.IntBetween(10, 100),
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				Computed: true,
 			},
 		},
 	}
@@ -75,19 +72,34 @@ func resourceAliyunCommonBandwidthPackageCreate(d *schema.ResourceData, meta int
 	request.Bandwidth = requests.NewInteger(d.Get("bandwidth").(int))
 	request.Name = d.Get("name").(string)
 	request.Description = d.Get("description").(string)
+	request.ResourceGroupId = d.Get("resource_group_id").(string)
 	request.InternetChargeType = d.Get("internet_charge_type").(string)
 	request.Ratio = requests.NewInteger(d.Get("ratio").(int))
-	request.ClientToken = buildClientToken(request.GetActionName())
-	raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
-		return vpcClient.CreateCommonBandwidthPackage(request)
+
+	wait := incrementalWait(1*time.Second, 1*time.Second)
+	err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+		request.ClientToken = buildClientToken(request.GetActionName())
+		raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
+			return vpcClient.CreateCommonBandwidthPackage(request)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{"BandwidthPackageOperation.conflict", Throttling}) {
+				wait()
+				return resource.RetryableError(err)
+
+			}
+			return resource.NonRetryableError(err)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		response, _ := raw.(*vpc.CreateCommonBandwidthPackageResponse)
+		d.SetId(response.BandwidthPackageId)
+		return nil
 	})
 	if err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_common_bandwidth_package", request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	response, _ := raw.(*vpc.CreateCommonBandwidthPackageResponse)
-	d.SetId(response.BandwidthPackageId)
-	if err = vpcService.WaitForCommonBandwidthPackage(response.BandwidthPackageId, Available, DefaultTimeout); err != nil {
+
+	if err = vpcService.WaitForCommonBandwidthPackage(d.Id(), Available, DefaultTimeout); err != nil {
 		return WrapError(err)
 	}
 
@@ -106,15 +118,16 @@ func resourceAliyunCommonBandwidthPackageRead(d *schema.ResourceData, meta inter
 		return WrapError(err)
 	}
 
-	if bandwidth, err := strconv.Atoi(object.Bandwidth); err != nil {
+	bandwidth, err := strconv.Atoi(object.Bandwidth)
+	if err != nil {
 		return WrapError(err)
-	} else {
-		d.Set("bandwidth", bandwidth)
 	}
+	d.Set("bandwidth", bandwidth)
 	d.Set("name", object.Name)
 	d.Set("description", object.Description)
 	d.Set("internet_charge_type", object.InternetChargeType)
 	d.Set("ratio", object.Ratio)
+	d.Set("resource_group_id", object.ResourceGroupId)
 	return nil
 }
 

@@ -1,4 +1,5 @@
 ---
+subcategory: "MongoDB"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_mongodb_instance"
 sidebar_current: "docs-alicloud-resource-mongodb-instance"
@@ -50,6 +51,12 @@ resource "alicloud_mongodb_instance" "example" {
 
 ```
 
+## Module Support
+
+You can use to the existing [mongodb module](https://registry.terraform.io/modules/terraform-alicloud-modules/mongodb/alicloud) 
+to create a MongoDB instance resource one-click.
+
+
 ## Argument Reference
 
 The following arguments are supported:
@@ -59,19 +66,27 @@ The following arguments are supported:
 * `db_instance_storage` - (Required) User-defined DB instance storage space.Unit: GB. Value range:
   - Custom storage space; value range: [10,2000]
   - 10-GB increments. 
-* `replication_factor` - (Optional) Number of replica set nodes. Valid values: [3,5,7]
+* `replication_factor` - (Optional) Number of replica set nodes. Valid values: [3, 5, 7]
 * `storage_engine` (Optional, ForceNew) Storage engine: WiredTiger or RocksDB. System Default value: WiredTiger.
 * `name` - (Optional) The name of DB instance. It a string of 2 to 256 characters.
-* `instance_charge_type` - (Optional, ForceNew) Valid values are `PrePaid`, `PostPaid`,System default to `PostPaid`.
+* `instance_charge_type` - (Optional) Valid values are `PrePaid`, `PostPaid`, System default to `PostPaid`. It can be modified from `PostPaid` to `PrePaid` after version 1.63.0.
 * `period` - (Optional) The duration that you will buy DB instance (in month). It is valid when instance_charge_type is `PrePaid`. Valid values: [1~9], 12, 24, 36. System default to 1.
 * `zone_id` - (Optional, ForceNew) The Zone to launch the DB instance. it supports multiple zone.
 If it is a multi-zone and `vswitch_id` is specified, the vswitch must in one of them.
 The multiple zone ID can be retrieved by setting `multi` to "true" in the data source `alicloud_zones`.
 * `vswitch_id` - (Optional, ForceNew) The virtual switch ID to launch DB instances in one VPC.
-* `account_password` -  (Optional) Password of the root account. It is a string of 6 to 32 characters and is composed of letters, numbers, and underlines.
+* `account_password` -  (Optional, Sensitive) Password of the root account. It is a string of 6 to 32 characters and is composed of letters, numbers, and underlines.
+* `kms_encrypted_password` - (Optional, Available in 1.57.1+) An KMS encrypts password used to a instance. If the `account_password` is filled in, this field will be ignored.
+* `kms_encryption_context` - (Optional, MapString, Available in 1.57.1+) An KMS encryption context used to decrypt `kms_encrypted_password` before creating or updating instance with `kms_encrypted_password`. See [Encryption Context](https://www.alibabacloud.com/help/doc-detail/42975.htm). It is valid when `kms_encrypted_password` is set.
 * `security_ip_list` - (Optional) List of IP addresses allowed to access all databases of an instance. The list contains up to 1,000 IP addresses, separated by commas. Supported formats include 0.0.0.0/0, 10.23.12.24 (IP), and 10.23.12.24/24 (Classless Inter-Domain Routing (CIDR) mode. /24 represents the length of the prefix in an IP address. The range of the prefix length is [1,32]).
+* `security_group_id` - (Optional, Available in 1.73.0+) The Security Group ID of ECS.
 * `backup_period` - (Optional, Available in 1.42.0+) MongoDB Instance backup period. It is required when `backup_time` was existed. Valid values: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]. Default to [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
-* `backup_time` - (Optional, Available in 1.42.0+) MongoDB instance backup time. It is required when `backup_period` was existed. In the format of HH:mmZ- HH:mmZ. Time setting interval is one hour. Default to a random time, like "23:00Z-24:00Z".
+* `backup_time` - (Optional, Available in 1.42.0+) MongoDB instance backup time. It is required when `backup_period` was existed. In the format of HH:mmZ- HH:mmZ. Time setting interval is one hour. If not set, the system will return a default, like "23:00Z-24:00Z".
+* `maintain_start_time` - (Optional, Available in v1.56.0+) The start time of the operation and maintenance time period of the instance, in the format of HH:mmZ (UTC time).
+* `maintain_end_time` - (Optional, Available in v1.56.0+) The end time of the operation and maintenance time period of the instance, in the format of HH:mmZ (UTC time).
+* `tags` - (Optional, Available in v1.66.0+) A mapping of tags to assign to the resource.
+
+-> **NOTE:** The start time to the end time must be 1 hour. For example, the MaintainStartTime is 01:00Z, then the MaintainEndTime must be 02:00Z.
 
 ## Attributes Reference
 
@@ -79,6 +94,7 @@ The following attributes are exported:
 
 * `id` - The ID of the MongoDB.
 * `retention_period` - Instance log backup retention days. Available in 1.42.0+.
+* `replica_set_name` - The name of the mongo replica set
 
 ### Timeouts
 

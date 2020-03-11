@@ -1,4 +1,5 @@
 ---
+subcategory: "API Gateway"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_api_gateway_app"
 sidebar_current: "docs-alicloud-resource-api-gateway-app"
@@ -28,8 +29,9 @@ resource "alicloud_api_gateway_app" "apiTest" {
 
 The following arguments are supported:
 
-* `name` - (Required) The name of the app. Defaults to null.
+* `name` - (Required) The name of the app. 
 * `description` - (Optional) The description of the app. Defaults to null.
+* `tags` - (Optional, Available in v1.55.3+) A mapping of tags to assign to the resource.
 
 ## Attributes Reference
 

@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/denverdino/aliyungo/cdn"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -129,7 +129,7 @@ func SkipTestAccAlicloudCdnDomain_https(t *testing.T) {
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckCdnDomainDestroy,
 		Steps: []resource.TestStep{
-			resource.TestStep{
+			{
 				Config: testAccCdnDomainHttpsConfig(rand),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckCdnDomainExists("alicloud_cdn_domain.domain", &v),
@@ -159,7 +159,7 @@ func TestAccAlicloudCdnDomain_domestic(t *testing.T) {
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckCdnDomainDestroy,
 		Steps: []resource.TestStep{
-			resource.TestStep{
+			{
 				Config: testAccCdnDomainDomestic(rand),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckCdnDomainExists("alicloud_cdn_domain.domain", &v),
@@ -224,7 +224,7 @@ func testAccCheckCdnDomainDestroy(s *terraform.State) error {
 			return cdnClient.DescribeCdnDomainDetail(request)
 		})
 
-		if err != nil && !IsExceptedErrors(err, []string{InvalidDomainNotFound}) {
+		if err != nil && !IsExpectedErrors(err, []string{"InvalidDomain.NotFound"}) {
 			return fmt.Errorf("Error Domain still exist.")
 		}
 	}

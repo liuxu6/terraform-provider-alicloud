@@ -3,12 +3,14 @@ package alicloud
 import (
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"strconv"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cas"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -19,18 +21,18 @@ func resourceAlicloudCasCertificate() *schema.Resource {
 		Delete: resourceAlicloudCasDelete,
 
 		Schema: map[string]*schema.Schema{
-			"name": &schema.Schema{
+			"name": {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateCasName,
+				ValidateFunc: validation.StringLenBetween(1, 64),
 			},
-			"cert": &schema.Schema{
+			"cert": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"key": &schema.Schema{
+			"key": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
@@ -102,7 +104,7 @@ func resourceAlicloudCasDelete(d *schema.ResourceData, meta interface{}) error {
 		})
 
 		if err != nil {
-			if IsExceptedErrors(err, []string{CertNotExist}) {
+			if IsExpectedErrors(err, []string{"CertNotExist"}) {
 				return nil
 			}
 			return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR))

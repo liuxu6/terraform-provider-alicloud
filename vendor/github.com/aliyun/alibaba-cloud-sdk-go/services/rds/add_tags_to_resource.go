@@ -79,21 +79,21 @@ type AddTagsToResourceRequest struct {
 	Tag4Value            string           `position:"Query" name:"Tag.4.value"`
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	Tag2Key              string           `position:"Query" name:"Tag.2.key"`
+	ClientToken          string           `position:"Query" name:"ClientToken"`
+	Tag3Key              string           `position:"Query" name:"Tag.3.key"`
+	Tag1Value            string           `position:"Query" name:"Tag.1.value"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
+	Tag3Value            string           `position:"Query" name:"Tag.3.value"`
+	ProxyId              string           `position:"Query" name:"proxyId"`
 	Tag5Key              string           `position:"Query" name:"Tag.5.key"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	ClientToken          string           `position:"Query" name:"ClientToken"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	Tag3Key              string           `position:"Query" name:"Tag.3.key"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	Tag5Value            string           `position:"Query" name:"Tag.5.value"`
 	Tags                 string           `position:"Query" name:"Tags"`
 	Tag1Key              string           `position:"Query" name:"Tag.1.key"`
-	Tag1Value            string           `position:"Query" name:"Tag.1.value"`
 	Tag2Value            string           `position:"Query" name:"Tag.2.value"`
 	Tag4Key              string           `position:"Query" name:"Tag.4.key"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
-	Tag3Value            string           `position:"Query" name:"Tag.3.value"`
-	ProxyId              string           `position:"Query" name:"proxyId"`
 }
 
 // AddTagsToResourceResponse is the response struct for api AddTagsToResource

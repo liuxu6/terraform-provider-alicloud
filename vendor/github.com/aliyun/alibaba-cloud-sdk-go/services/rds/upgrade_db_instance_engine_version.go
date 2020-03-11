@@ -77,12 +77,12 @@ func (client *Client) UpgradeDBInstanceEngineVersionWithCallback(request *Upgrad
 type UpgradeDBInstanceEngineVersionRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
-	EffectiveTime        string           `position:"Query" name:"EffectiveTime"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	EngineVersion        string           `position:"Query" name:"EngineVersion"`
+	EffectiveTime        string           `position:"Query" name:"EffectiveTime"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
+	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 }
 

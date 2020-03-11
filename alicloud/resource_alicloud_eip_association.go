@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -73,7 +73,7 @@ func resourceAliyunEipAssociationCreate(d *schema.ResourceData, meta interface{}
 			return vpcClient.AssociateEipAddress(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, TaskConflict) {
+			if IsExpectedErrors(err, []string{"TaskConflict"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -147,8 +147,8 @@ func resourceAliyunEipAssociationDelete(d *schema.ResourceData, meta interface{}
 			return vpcClient.UnassociateEipAddress(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InstanceIncorrectStatus, HaVipIncorrectStatus, TaskConflict,
-				HasBeenUsedBySnatTable, HasBeenUsedByForwardEntry}) {
+			if IsExpectedErrors(err, []string{"IncorrectInstanceStatus", "IncorrectHaVipStatus", "TaskConflict",
+				"InvalidIpStatus.HasBeenUsedBySnatTable", "InvalidIpStatus.HasBeenUsedByForwardEntry"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)

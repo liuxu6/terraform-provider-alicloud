@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -126,7 +126,10 @@ func TestAccAlicloudActionTrailUpdate(t *testing.T) {
 			{
 				Config: testActionTrailBasicConfig(num),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(nil),
+					testAccCheck(map[string]string{
+						// Waiting for several seconds avoid some needless error
+						ForceSleep: "100",
+					}),
 				),
 			},
 			{

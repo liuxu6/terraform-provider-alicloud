@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/denverdino/aliyungo/cs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -127,10 +127,7 @@ func testAccCheckContainerApplicationDestroy(s *terraform.State) error {
 		app, err := csService.DescribeContainerApplication(parts[0], parts[1])
 
 		if err != nil {
-			if NotFoundError(err) ||
-				IsExceptedError(err, ApplicationNotFound) ||
-				IsExceptedError(err, ApplicationErrorIgnore) ||
-				IsExceptedError(err, AliyunGoClientFailure) {
+			if NotFoundError(err) || IsExpectedErrors(err, []string{"Not Found", "Unable to reach primary cluster manager", AliyunGoClientFailure}) {
 				continue
 			}
 			return err

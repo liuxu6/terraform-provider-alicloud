@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cr"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -25,28 +27,28 @@ func resourceAlicloudCRRepo() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateContainerRegistryNamespaceName,
+				ValidateFunc: validation.StringLenBetween(2, 30),
 			},
 			"name": {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validateContainerRegistryRepoName,
+				ValidateFunc: validation.StringLenBetween(2, 30),
 			},
 			"summary": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ValidateFunc: validateStringLengthInRange(1, 100),
+				ValidateFunc: validation.StringLenBetween(1, 100),
 			},
 			"repo_type": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ValidateFunc: validateAllowedStringValue([]string{string(RepoTypePublic), string(RepoTypePrivate)}),
+				ValidateFunc: validation.StringInSlice([]string{RepoTypePublic, RepoTypePrivate}, false),
 			},
 			"detail": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateStringLengthInRange(0, 2000),
+				ValidateFunc: validation.StringLenBetween(0, 2000),
 			},
 			// computed
 			"domain_list": {
@@ -188,7 +190,7 @@ func resourceAlicloudCRRepoDelete(d *schema.ResourceData, meta interface{}) erro
 		return crClient.DeleteRepo(request)
 	})
 	if err != nil {
-		if IsExceptedError(err, ErrorRepoNotExist) {
+		if IsExpectedErrors(err, []string{"REPO_NOT_EXIST"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

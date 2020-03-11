@@ -7,8 +7,8 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cbn"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -73,7 +73,7 @@ func resourceAlicloudCenInstanceAttachmentCreate(d *schema.ResourceData, meta in
 			return cbnClient.AttachCenChildInstance(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InvalidCenInstanceStatus, InvalidChildInstanceStatus}) {
+			if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus", "InvalidOperation.ChildInstanceStatus"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -109,7 +109,7 @@ func resourceAlicloudCenInstanceAttachmentRead(d *schema.ResourceData, meta inte
 	d.Set("instance_id", object.CenId)
 	d.Set("child_instance_id", object.ChildInstanceId)
 	d.Set("child_instance_region_id", object.ChildInstanceRegionId)
-	d.Set("child_instance_owner_id", strconv.Itoa(object.ChildInstanceOwnerId))
+	d.Set("child_instance_owner_id", strconv.FormatInt(object.ChildInstanceOwnerId, 10))
 
 	return nil
 }
@@ -140,7 +140,7 @@ func resourceAlicloudCenInstanceAttachmentDelete(d *schema.ResourceData, meta in
 			return cbnClient.DetachCenChildInstance(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, InvalidCenInstanceStatus) {
+			if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus"}) {
 				return resource.RetryableError(err)
 			}
 
@@ -151,7 +151,7 @@ func resourceAlicloudCenInstanceAttachmentDelete(d *schema.ResourceData, meta in
 	})
 
 	if err != nil {
-		if IsExceptedError(err, ParameterInstanceIdNotExist) {
+		if IsExpectedErrors(err, []string{"ParameterInstanceId"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

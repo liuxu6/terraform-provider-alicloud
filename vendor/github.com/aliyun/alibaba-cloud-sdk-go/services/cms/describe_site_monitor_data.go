@@ -77,11 +77,11 @@ func (client *Client) DescribeSiteMonitorDataWithCallback(request *DescribeSiteM
 type DescribeSiteMonitorDataRequest struct {
 	*requests.RpcRequest
 	Period     string           `position:"Query" name:"Period"`
-	NextToken  string           `position:"Query" name:"NextToken"`
 	Length     requests.Integer `position:"Query" name:"Length"`
 	EndTime    string           `position:"Query" name:"EndTime"`
 	StartTime  string           `position:"Query" name:"StartTime"`
 	Type       string           `position:"Query" name:"Type"`
+	NextToken  string           `position:"Query" name:"NextToken"`
 	MetricName string           `position:"Query" name:"MetricName"`
 	TaskId     string           `position:"Query" name:"TaskId"`
 }
@@ -93,8 +93,8 @@ type DescribeSiteMonitorDataResponse struct {
 	Message   string `json:"Message" xml:"Message"`
 	Success   string `json:"Success" xml:"Success"`
 	RequestId string `json:"RequestId" xml:"RequestId"`
-	Data      string `json:"Data" xml:"Data"`
 	NextToken string `json:"NextToken" xml:"NextToken"`
+	Data      string `json:"Data" xml:"Data"`
 }
 
 // CreateDescribeSiteMonitorDataRequest creates a request to invoke DescribeSiteMonitorData API

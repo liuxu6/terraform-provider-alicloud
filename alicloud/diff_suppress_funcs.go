@@ -3,14 +3,9 @@ package alicloud
 import (
 	"log"
 	"strconv"
-
 	"strings"
 
-	"github.com/denverdino/aliyungo/common"
-	"github.com/denverdino/aliyungo/dns"
-	"github.com/denverdino/aliyungo/ecs"
-	"github.com/denverdino/aliyungo/rds"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
 
 func httpHttpsDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
@@ -124,14 +119,14 @@ func dnsValueDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
 }
 
 func dnsPriorityDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if recordType, ok := d.GetOk("type"); ok && recordType.(string) == dns.MXRecord {
-		return false
-	}
-	return true
+	return d.Get("type").(string) != "MX"
 }
 
 func slbInternetDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if internet, ok := d.GetOk("internet"); ok && internet.(bool) {
+	if internet, ok := d.GetOkExists("internet"); ok && internet.(bool) {
+		return true
+	}
+	if internet, ok := d.GetOkExists("address_type"); ok && internet.(string) == "internet" {
 		return true
 	}
 	return false
@@ -143,10 +138,6 @@ func slbInternetChargeTypeDiffSuppressFunc(k, old, new string, d *schema.Resourc
 		return true
 	}
 	return !slbInternetDiffSuppressFunc(k, old, new, d)
-}
-
-func slbInstanceSpecDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	return old == "" && d.Id() != ""
 }
 
 func slbBandwidthDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
@@ -170,19 +161,6 @@ func slbServerCertificateDiffSuppressFunc(k, old, new string, d *schema.Resource
 	return true
 }
 
-func ecsPrivateIpDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	vswitch := ""
-	if vsw, ok := d.GetOk("vswitch_id"); ok && vsw.(string) != "" {
-		vswitch = vsw.(string)
-	} else if subnet, ok := d.GetOk("subnet_id"); ok && subnet.(string) != "" {
-		vswitch = subnet.(string)
-	}
-
-	if vswitch != "" {
-		return false
-	}
-	return true
-}
 func ecsInternetDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
 	if max, ok := d.GetOk("internet_max_bandwidth_out"); ok && max.(int) > 0 {
 		return false
@@ -190,26 +168,12 @@ func ecsInternetDiffSuppressFunc(k, old, new string, d *schema.ResourceData) boo
 	return true
 }
 
-func ecsPostPaidDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	return common.InstanceChargeType(d.Get("instance_charge_type").(string)) == common.PostPaid
-}
-
-func ecsNotAutoRenewDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if common.InstanceChargeType(d.Get("instance_charge_type").(string)) == common.PostPaid {
-		return true
-	}
-	if RenewalStatus(d.Get("renewal_status").(string)) == RenewAutoRenewal {
-		return false
-	}
-	return true
-}
-
 func csKubernetesMasterPostPaidDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	return common.InstanceChargeType(d.Get("master_instance_charge_type").(string)) == common.PostPaid || !(d.Id() == "") && !d.Get("force_update").(bool)
+	return d.Get("master_instance_charge_type").(string) == "PostPaid" || !(d.Id() == "") && !d.Get("force_update").(bool)
 }
 
 func csKubernetesWorkerPostPaidDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	return common.InstanceChargeType(d.Get("worker_instance_charge_type").(string)) == common.PostPaid || !(d.Id() == "") && !d.Get("force_update").(bool)
+	return d.Get("worker_instance_charge_type").(string) == "PostPaid" || !(d.Id() == "") && !d.Get("force_update").(bool)
 }
 
 func csForceUpdate(k, old, new string, d *schema.ResourceData) bool {
@@ -237,26 +201,90 @@ func zoneIdDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
 }
 
 func logRetentionPeriodDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("enable_backup_log").(bool) {
+		return false
+	}
+	if d.Get("log_backup").(bool) {
+		return false
+	}
+	if v, err := strconv.Atoi(new); err != nil && v > d.Get("backup_retention_period").(int) {
+		return false
+	}
+	if v, err := strconv.Atoi(new); err != nil && v > d.Get("retention_period").(int) {
+		return false
+	}
+	return true
+}
+
+func enableBackupLogDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("enable_backup_log").(bool) {
+		return false
+	}
 	if d.Get("log_backup").(bool) {
 		return false
 	}
 
-	if v, err := strconv.Atoi(new); err != nil && v > d.Get("retention_period").(int) {
+	return true
+}
+
+func archiveBackupPeriodDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("enable_backup_log").(bool) {
+		return false
+	}
+	if d.Get("log_backup").(bool) {
+		return false
+	}
+	if v, err := strconv.Atoi(new); err != nil && v+730 >= d.Get("backup_retention_period").(int) {
+		return false
+	}
+	if v, err := strconv.Atoi(new); err != nil && v+730 >= d.Get("retention_period").(int) {
 		return false
 	}
 
 	return true
 }
 
-func rdsPostPaidDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if rds.DBPayType(d.Get("instance_charge_type").(string)) == rds.Prepaid {
+func PostPaidDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	return strings.ToLower(d.Get("instance_charge_type").(string)) == "postpaid"
+}
+func PostPaidAndRenewDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if strings.ToLower(d.Get("instance_charge_type").(string)) == "prepaid" && d.Get("auto_renew").(bool) {
+		return false
+	}
+	return true
+}
+func ecsNotAutoRenewDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("instance_charge_type").(string) == "PostPaid" {
+		return true
+	}
+	if RenewalStatus(d.Get("renewal_status").(string)) == RenewAutoRenewal {
 		return false
 	}
 	return true
 }
 
-func rdsPostPaidAndRenewDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if rds.DBPayType(d.Get("instance_charge_type").(string)) == rds.Prepaid && d.Get("auto_renew").(bool) {
+func polardbPostPaidDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("pay_type").(string) == "PrePaid" {
+		return false
+	}
+	return true
+}
+
+func polardbPostPaidAndRenewDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("pay_type").(string) == "PrePaid" && d.Get("renewal_status").(string) != string(RenewNotRenewal) {
+		return false
+	}
+	return true
+}
+
+func adbPostPaidAndRenewDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("pay_type").(string) == "PrePaid" && d.Get("renewal_status").(string) != string(RenewNotRenewal) {
+		return false
+	}
+	return true
+}
+func adbPostPaidDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("pay_type").(string) == "PrePaid" {
 		return false
 	}
 	return true
@@ -270,16 +298,15 @@ func ecsSpotStrategyDiffSuppressFunc(k, old, new string, d *schema.ResourceData)
 }
 
 func ecsSpotPriceLimitDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if common.InstanceChargeType(d.Get("instance_charge_type").(string)) == common.PostPaid &&
-		ecs.SpotStrategyType(d.Get("spot_strategy").(string)) == ecs.SpotWithPriceLimit {
+	if d.Get("instance_charge_type").(string) == "PostPaid" && d.Get("spot_strategy").(string) == "SpotWithPriceLimit" {
 		return false
 	}
 	return true
 }
 
 func ecsSecurityGroupRulePortRangeDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	protocol := ecs.IpProtocol(d.Get("ip_protocol").(string))
-	if protocol == ecs.IpProtocolTCP || protocol == ecs.IpProtocolUDP {
+	protocol := d.Get("ip_protocol").(string)
+	if protocol == "tcp" || protocol == "udp" {
 		if new == AllPortRange {
 			return true
 		}
@@ -310,13 +337,6 @@ func routerInterfaceVBRTypeDiffSuppressFunc(k, old, new string, d *schema.Resour
 		return true
 	}
 	return false
-}
-
-func rkvPostPaidDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if PayType(d.Get("instance_charge_type").(string)) == PrePaid {
-		return false
-	}
-	return true
 }
 
 func workerDataDiskSizeSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
@@ -357,13 +377,6 @@ func vpnSslConnectionsDiffSuppressFunc(k, old, new string, d *schema.ResourceDat
 
 func actiontrailRoleNmaeDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
 	if !d.IsNewResource() && strings.ToLower(old) != strings.ToLower(new) {
-		return false
-	}
-	return true
-}
-
-func mongoDBPeriodDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if PayType(d.Get("instance_charge_type").(string)) == PrePaid {
 		return false
 	}
 	return true
@@ -424,6 +437,30 @@ func slbRuleListenerSyncDiffSuppressFunc(k, old, new string, d *schema.ResourceD
 
 func slbAddressDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
 	if v, ok := d.GetOk("internet"); ok && v.(bool) {
+		return true
+	}
+	return false
+}
+
+func kmsDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if v, ok := d.GetOk("password"); ok && v.(string) != "" {
+		return true
+	}
+	if v, ok := d.GetOk("account_password"); ok && v.(string) != "" {
+		return true
+	}
+	return false
+}
+
+func sagDnatEntryTypeDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("type").(string) != "Intranet" {
+		return true
+	}
+	return false
+}
+
+func sagClientUserPasswordSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("user_name").(string) == "" {
 		return true
 	}
 	return false

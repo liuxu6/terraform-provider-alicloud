@@ -10,12 +10,14 @@ import (
 	"log"
 	"time"
 
+	"strconv"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 )
 
 /**
@@ -29,6 +31,7 @@ const (
 	CHECKSET   = "#CHECKSET"    // "TestCheckResourceAttrSet"
 	REMOVEKEY  = "#REMOVEKEY"   // remove checkMap key
 	REGEXMATCH = "#REGEXMATCH:" // "TestMatchResourceAttr" ,the map name/key like `"attribute" : REGEXMATCH + "attributeString"`
+	ForceSleep = "force_sleep"
 )
 
 const (
@@ -246,6 +249,13 @@ func (rac *resourceAttrCheck) resourceAttrMapUpdateSet() resourceAttrMapUpdate {
 
 // make a new map and copy from the old field checkMap, then update it according to the changeMap
 func (ra *resourceAttr) updateCheckMapPair(changeMap map[string]string) {
+	if interval, ok := changeMap[ForceSleep]; ok {
+		intervalInt, err := strconv.Atoi(interval)
+		if err == nil {
+			time.Sleep(time.Duration(intervalInt) * time.Second)
+			delete(changeMap, ForceSleep)
+		}
+	}
 	newCheckMap := make(map[string]string, len(ra.checkMap))
 	for k, v := range ra.checkMap {
 		newCheckMap[k] = v
@@ -465,7 +475,7 @@ func listValueMapChild(indentation int, key string, val reflect.Value) string {
 	var valList []string
 	for i := 0; i < val.Len(); i++ {
 		valList = append(valList, addIndentation(indentation)+key+" "+
-			mapValue(indentation, val.Index(i)))
+			mapValue(indentation, getRealValueType(val.Index(i))))
 	}
 
 	return fmt.Sprintf("%s\n%s", strings.Join(valList, "\n"), addIndentation(indentation))
@@ -699,7 +709,7 @@ data "alicloud_instance_types" "default" {
   memory_size       = 2
 }
 data "alicloud_images" "default" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }
@@ -738,7 +748,7 @@ data "alicloud_instance_types" "default" {
   availability_zone = "${data.alicloud_zones.default.zones.0.id}"
 }
 data "alicloud_images" "default" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }
@@ -780,6 +790,36 @@ resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
   availability_zone = "${data.alicloud_db_instance_classes.default.instance_classes.0.zone_ids.0.sub_zone_ids.0}"
+  name              = "${var.name}"
+}
+`
+const PolarDBCommonTestCase = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "${var.creation}"
+}
+resource "alicloud_vpc" "default" {
+  name       = "${var.name}"
+  cidr_block = "172.16.0.0/16"
+}
+resource "alicloud_vswitch" "default" {
+  vpc_id            = "${alicloud_vpc.default.id}"
+  cidr_block        = "172.16.0.0/24"
+  availability_zone = "${lookup(data.alicloud_zones.default.zones[(length(data.alicloud_zones.default.zones)-1)%length(data.alicloud_zones.default.zones)], "id")}"
+  name              = "${var.name}"
+}
+`
+const AdbCommonTestCase = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "${var.creation}"
+}
+resource "alicloud_vpc" "default" {
+  name       = "${var.name}"
+  cidr_block = "172.16.0.0/16"
+}
+resource "alicloud_vswitch" "default" {
+  vpc_id            = "${alicloud_vpc.default.id}"
+  cidr_block        = "172.16.0.0/24"
+  availability_zone = "${lookup(data.alicloud_zones.default.zones[(length(data.alicloud_zones.default.zones)-1)%length(data.alicloud_zones.default.zones)], "id")}"
   name              = "${var.name}"
 }
 `
@@ -846,5 +886,383 @@ resource "alicloud_vswitch" "default" {
   cidr_block = "172.16.0.0/21"
   availability_zone = "${data.alicloud_zones.default.zones.0.id}"
   name = "${var.name}"
+}
+`
+
+const EmrCommonTestCase = `
+data "alicloud_emr_main_versions" "default" {
+}
+
+data "alicloud_emr_instance_types" "default" {
+    destination_resource = "InstanceType"
+    cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+    support_local_storage = false
+    instance_charge_type = "PostPaid"
+    support_node_type = ["MASTER", "CORE"]
+}
+
+data "alicloud_emr_disk_types" "data_disk" {
+	destination_resource = "DataDisk"
+	cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.default.types.0.id
+	zone_id = data.alicloud_emr_instance_types.default.types.0.zone_id
+}
+
+data "alicloud_emr_disk_types" "system_disk" {
+	destination_resource = "SystemDisk"
+	cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.default.types.0.id
+	zone_id = data.alicloud_emr_instance_types.default.types.0.zone_id
+}
+
+resource "alicloud_vpc" "default" {
+  name = "${var.name}"
+  cidr_block = "172.16.0.0/12"
+}
+
+resource "alicloud_vswitch" "default" {
+  vpc_id = "${alicloud_vpc.default.id}"
+  cidr_block = "172.16.0.0/21"
+  availability_zone = "${data.alicloud_emr_instance_types.default.types.0.zone_id}"
+  name = "${var.name}"
+}
+
+resource "alicloud_security_group" "default" {
+    name = "${var.name}"
+    vpc_id = "${alicloud_vpc.default.id}"
+}
+
+resource "alicloud_ram_role" "default" {
+	name = "${var.name}"
+	document = <<EOF
+    {
+        "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+            "Service": [
+                "emr.aliyuncs.com", 
+                "ecs.aliyuncs.com"
+            ]
+            }
+        }
+        ],
+        "Version": "1"
+    }
+    EOF
+    description = "this is a role test."
+    force = true
+}
+`
+
+const EmrGatewayTestCase = `
+data "alicloud_emr_main_versions" "default" {
+}
+
+data "alicloud_emr_instance_types" "default" {
+    destination_resource = "InstanceType"
+    cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+    support_local_storage = false
+    instance_charge_type = "PostPaid"
+    support_node_type = ["MASTER","CORE"]
+}
+
+data "alicloud_emr_instance_types" "gateway" {
+    destination_resource = "InstanceType"
+    cluster_type = "GATEWAY"
+    support_local_storage = false
+    instance_charge_type = "PostPaid"
+    support_node_type = ["GATEWAY"]
+}
+
+data "alicloud_emr_disk_types" "data_disk" {
+	destination_resource = "DataDisk"
+	cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.default.types.0.id
+	zone_id = data.alicloud_emr_instance_types.default.types.0.zone_id
+}
+
+data "alicloud_emr_disk_types" "gateway_data_disk" {
+	destination_resource = "DataDisk"
+	cluster_type = "GATEWAY"
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.gateway.types.0.id
+	zone_id = data.alicloud_emr_instance_types.gateway.types.0.zone_id
+}
+
+data "alicloud_emr_disk_types" "system_disk" {
+	destination_resource = "SystemDisk"
+	cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.default.types.0.id
+	zone_id = data.alicloud_emr_instance_types.default.types.0.zone_id
+}
+
+data "alicloud_emr_disk_types" "gateway_system_disk" {
+	destination_resource = "SystemDisk"
+	cluster_type = "GATEWAY"
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.gateway.types.0.id
+	zone_id = data.alicloud_emr_instance_types.gateway.types.0.zone_id
+}
+
+resource "alicloud_vpc" "default" {
+  name = "${var.name}"
+  cidr_block = "172.16.0.0/12"
+}
+
+resource "alicloud_vswitch" "default" {
+  vpc_id = "${alicloud_vpc.default.id}"
+  cidr_block = "172.16.0.0/21"
+  availability_zone = "${data.alicloud_emr_instance_types.default.types.0.zone_id}"
+  name = "${var.name}"
+}
+
+resource "alicloud_security_group" "default" {
+    name = "${var.name}"
+    vpc_id = "${alicloud_vpc.default.id}"
+}
+
+resource "alicloud_ram_role" "default" {
+	name = "${var.name}"
+	document = <<EOF
+    {
+        "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+            "Service": [
+                "emr.aliyuncs.com", 
+                "ecs.aliyuncs.com"
+            ]
+            }
+        }
+        ],
+        "Version": "1"
+    }
+    EOF
+    description = "this is a role test."
+    force = true
+}
+
+resource "alicloud_emr_cluster" "default" {
+    name = "${var.name}"
+
+    emr_ver = data.alicloud_emr_main_versions.default.main_versions.0.emr_version
+
+    cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+
+    host_group {
+        host_group_name = "master_group"
+        host_group_type = "MASTER"
+        node_count = "2"
+        instance_type = data.alicloud_emr_instance_types.default.types.0.id
+        disk_type = data.alicloud_emr_disk_types.data_disk.types.0.value
+        disk_capacity = data.alicloud_emr_disk_types.data_disk.types.0.min > 160 ? data.alicloud_emr_disk_types.data_disk.types.0.min : 160
+        disk_count = "1"
+        sys_disk_type = data.alicloud_emr_disk_types.system_disk.types.0.value
+		sys_disk_capacity = data.alicloud_emr_disk_types.system_disk.types.0.min > 160 ? data.alicloud_emr_disk_types.system_disk.types.0.min : 160
+    }
+
+	host_group {
+        host_group_name = "core_group"
+        host_group_type = "CORE"
+        node_count = "2"
+        instance_type = data.alicloud_emr_instance_types.default.types.0.id
+        disk_type = data.alicloud_emr_disk_types.data_disk.types.0.value
+        disk_capacity = data.alicloud_emr_disk_types.data_disk.types.0.min > 160 ? data.alicloud_emr_disk_types.data_disk.types.0.min : 160
+        disk_count = "4"
+        sys_disk_type = data.alicloud_emr_disk_types.system_disk.types.0.value
+        sys_disk_capacity = data.alicloud_emr_disk_types.system_disk.types.0.min > 160 ? data.alicloud_emr_disk_types.system_disk.types.0.min : 160
+    }
+
+    high_availability_enable = true
+    zone_id = data.alicloud_emr_instance_types.default.types.0.zone_id
+    security_group_id = alicloud_security_group.default.id
+    is_open_public_ip = true
+    charge_type = "PostPaid"
+    vswitch_id = alicloud_vswitch.default.id
+    user_defined_emr_ecs_role = alicloud_ram_role.default.name
+    ssh_enable = true
+    master_pwd = "ABCtest1234!"
+}
+`
+const EmrLocalStorageTestCase = `
+data "alicloud_emr_main_versions" "default" {
+}
+
+data "alicloud_emr_instance_types" "local_disk" {
+    destination_resource = "InstanceType"
+    cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+    support_local_storage = true
+    instance_charge_type = "PostPaid"
+    support_node_type = ["CORE"]
+}
+
+data "alicloud_emr_instance_types" "cloud_disk" {
+    destination_resource = "InstanceType"
+    cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+    instance_charge_type = "PostPaid"
+    support_node_type = ["MASTER"]
+    zone_id = data.alicloud_emr_instance_types.local_disk.types.0.zone_id
+}
+
+data "alicloud_emr_disk_types" "data_disk" {
+	destination_resource = "DataDisk"
+	cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.cloud_disk.types.0.id
+	zone_id = data.alicloud_emr_instance_types.cloud_disk.types.0.zone_id
+}
+
+data "alicloud_emr_disk_types" "system_disk" {
+	destination_resource = "SystemDisk"
+	cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.cloud_disk.types.0.id
+	zone_id = data.alicloud_emr_instance_types.cloud_disk.types.0.zone_id
+}
+
+resource "alicloud_vpc" "default" {
+  name = "${var.name}"
+  cidr_block = "172.16.0.0/12"
+}
+
+resource "alicloud_vswitch" "default" {
+  vpc_id = "${alicloud_vpc.default.id}"
+  cidr_block = "172.16.0.0/21"
+  availability_zone = "${data.alicloud_emr_instance_types.cloud_disk.types.0.zone_id}"
+  name = "${var.name}"
+}
+
+resource "alicloud_security_group" "default" {
+    name = "${var.name}"
+    vpc_id = "${alicloud_vpc.default.id}"
+}
+
+resource "alicloud_ram_role" "default" {
+	name = "${var.name}"
+	document = <<EOF
+    {
+        "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+            "Service": [
+                "emr.aliyuncs.com", 
+                "ecs.aliyuncs.com"
+            ]
+            }
+        }
+        ],
+        "Version": "1"
+    }
+    EOF
+    description = "this is a role test."
+    force = true
+}
+`
+
+const SlbListenerCommonTestCase = `
+variable "ip_version" {
+  default = "ipv4"
+}	
+resource "alicloud_slb" "default" {
+  name = "${var.name}"
+  internet_charge_type = "PayByTraffic"
+  address_type = "internet"
+  specification = "slb.s1.small"
+}
+resource "alicloud_slb_acl" "default" {
+  name = "${var.name}"
+  ip_version = "${var.ip_version}"
+  entry_list {
+      entry="10.10.10.0/24"
+      comment="first"
+  }
+  entry_list {
+      entry="168.10.10.0/24"
+      comment="second"
+  }
+}
+`
+const SlbListenerVserverCommonTestCase = `
+data "alicloud_zones" "default" {
+  available_disk_category = "cloud_efficiency"
+  available_resource_creation= "VSwitch"
+}
+
+data "alicloud_instance_types" "default" {
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+}
+
+data "alicloud_images" "default" {
+  name_regex = "^ubuntu_18.*64"
+  most_recent = true
+  owners = "system"
+}
+
+resource "alicloud_vpc" "default" {
+  name = "${var.name}"
+  cidr_block = "172.16.0.0/16"
+}
+
+resource "alicloud_vswitch" "default" {
+  vpc_id = "${alicloud_vpc.default.id}"
+  cidr_block = "172.16.0.0/16"
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  name = "${var.name}"
+}
+
+resource "alicloud_security_group" "default" {
+  name = "${var.name}"
+  vpc_id = "${alicloud_vpc.default.id}"
+}
+
+resource "alicloud_instance" "default" {
+  image_id = "${data.alicloud_images.default.images.0.id}"
+  instance_type = "${data.alicloud_instance_types.default.instance_types.0.id}"
+  instance_name = "${var.name}"
+  count = "2"
+  security_groups = "${alicloud_security_group.default.*.id}"
+  internet_charge_type = "PayByTraffic"
+  internet_max_bandwidth_out = "10"
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  instance_charge_type = "PostPaid"
+  system_disk_category = "cloud_efficiency"
+  vswitch_id = "${alicloud_vswitch.default.id}"
+}
+
+resource "alicloud_slb" "default" {
+  name = "${var.name}"
+  vswitch_id = "${alicloud_vswitch.default.id}"
+}
+
+resource "alicloud_slb_server_group" "default" {
+  load_balancer_id = "${alicloud_slb.default.id}"
+  name = "${var.name}"
+}
+
+resource "alicloud_slb_master_slave_server_group" "default" {
+  load_balancer_id = "${alicloud_slb.default.id}"
+  name = "${var.name}"
+  servers {
+      server_id = "${alicloud_instance.default.0.id}"
+      port = 80
+      weight = 100
+      server_type = "Master"
+  }
+  servers {
+      server_id = "${alicloud_instance.default.1.id}"
+      port = 80
+      weight = 100
+      server_type = "Slave"
+  }
 }
 `

@@ -4,13 +4,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/denverdino/aliyungo/common"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"strconv"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -38,8 +42,8 @@ func resourceAliyunNatGateway() *schema.Resource {
 			"specification": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNatGatewaySpec,
-				Default:      NatGatewaySmallSpec,
+				ValidateFunc: validation.StringInSlice([]string{"Small", "Middle", "Large"}, false),
+				Default:      "Small",
 			},
 			"name": {
 				Type:     schema.TypeString,
@@ -92,21 +96,23 @@ func resourceAliyunNatGateway() *schema.Resource {
 				MaxItems: 4,
 				Optional: true,
 			},
-			"instance_charge_type": &schema.Schema{
+			"instance_charge_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
 				Computed:     true,
-				ValidateFunc: validateInstanceChargeType,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 			},
 
-			"period": &schema.Schema{
+			"period": {
 				Type:             schema.TypeInt,
 				Optional:         true,
 				ForceNew:         true,
-				Computed:         true,
-				DiffSuppressFunc: ecsPostPaidDiffSuppressFunc,
-				ValidateFunc:     validateRouterInterfaceChargeTypePeriod,
+				Default:          1,
+				DiffSuppressFunc: PostPaidDiffSuppressFunc,
+				ValidateFunc: validation.Any(
+					validation.IntBetween(1, 9),
+					validation.IntInSlice([]int{12, 24, 36})),
 			},
 		},
 	}
@@ -161,7 +167,7 @@ func resourceAliyunNatGatewayCreate(d *schema.ResourceData, meta interface{}) er
 			return vpcClient.CreateNatGateway(&args)
 		})
 		if err != nil {
-			if IsExceptedError(err, VswitchStatusError) || IsExceptedError(err, TaskConflict) {
+			if IsExpectedErrors(err, []string{"VswitchStatusError", "TaskConflict"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -201,6 +207,13 @@ func resourceAliyunNatGatewayRead(d *schema.ResourceData, meta interface{}) erro
 	d.Set("description", object.Description)
 	d.Set("vpc_id", object.VpcId)
 	d.Set("instance_charge_type", object.InstanceChargeType)
+	if object.InstanceChargeType == "PrePaid" {
+		period, err := computePeriodByUnit(object.CreationTime, object.ExpiredTime, d.Get("period").(int), "Month")
+		if err != nil {
+			return WrapError(err)
+		}
+		d.Set("period", period)
+	}
 
 	bindWidthPackages, err := flattenBandWidthPackages(object.BandwidthPackageIds.BandwidthPackageId, meta, d)
 	if err != nil {
@@ -305,10 +318,10 @@ func resourceAliyunNatGatewayDelete(d *schema.ResourceData, meta interface{}) er
 			return vpcClient.DeleteNatGateway(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, DependencyViolationBandwidthPackages) {
+			if IsExpectedErrors(err, []string{"DependencyViolation.BandwidthPackages"}) {
 				return resource.RetryableError(err)
 			}
-			if IsExceptedError(err, InvalidNatGatewayIdNotFound) {
+			if IsExpectedErrors(err, []string{"InvalidNatGatewayId.NotFound"}) {
 				return nil
 			}
 			return resource.NonRetryableError(err)
@@ -346,9 +359,9 @@ func deleteBandwidthPackages(d *schema.ResourceData, meta interface{}) error {
 					return vpcClient.DeleteBandwidthPackage(request)
 				})
 				if e != nil {
-					if IsExceptedError(e, NatGatewayInvalidRegionId) {
+					if IsExpectedErrors(e, []string{"Invalid.RegionId"}) {
 						return resource.NonRetryableError(e)
-					} else if IsExceptedError(e, InstanceNotExists) {
+					} else if IsExpectedErrors(e, []string{"INSTANCE_NOT_EXISTS"}) {
 						return nil
 					}
 					err = e

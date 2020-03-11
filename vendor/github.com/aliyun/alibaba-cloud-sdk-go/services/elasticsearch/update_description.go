@@ -76,7 +76,8 @@ func (client *Client) UpdateDescriptionWithCallback(request *UpdateDescriptionRe
 // UpdateDescriptionRequest is the request struct for api UpdateDescription
 type UpdateDescriptionRequest struct {
 	*requests.RoaRequest
-	InstanceId string `position:"Path" name:"InstanceId"`
+	InstanceId  string `position:"Path" name:"InstanceId"`
+	ClientToken string `position:"Query" name:"clientToken"`
 }
 
 // UpdateDescriptionResponse is the response struct for api UpdateDescription
@@ -92,7 +93,7 @@ func CreateUpdateDescriptionRequest() (request *UpdateDescriptionRequest) {
 		RoaRequest: &requests.RoaRequest{},
 	}
 	request.InitWithApiInfo("elasticsearch", "2017-06-13", "UpdateDescription", "/openapi/instances/[InstanceId]/description", "elasticsearch", "openAPI")
-	request.Method = requests.POST
+	request.Method = requests.PATCH
 	return
 }
 

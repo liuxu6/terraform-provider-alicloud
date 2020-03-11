@@ -1,20 +1,24 @@
 package alicloud
 
 import (
-	"fmt"
 	"log"
-	"strings"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/cdn"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/gpdb"
 
 	"regexp"
+	"time"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/cdn"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ots"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -22,7 +26,6 @@ func String(v string) *string {
 	return &v
 }
 
-// tagsSchema returns the schema to use for tags.
 func tagsSchema() *schema.Schema {
 	return &schema.Schema{
 		Type:     schema.TypeMap,
@@ -60,26 +63,51 @@ func setCdnTags(client *connectivity.AliyunClient, resourceType TagResourceType,
 
 func setVolumeTags(client *connectivity.AliyunClient, resourceType TagResourceType, d *schema.ResourceData) error {
 	if d.HasChange("volume_tags") {
-		resp, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-			req := ecs.CreateDescribeDisksRequest()
-			req.InstanceId = d.Id()
-			return ecsClient.DescribeDisks(req)
+		request := ecs.CreateDescribeDisksRequest()
+		request.InstanceId = d.Id()
+		var response *ecs.DescribeDisksResponse
+		wait := incrementalWait(1*time.Second, 1*time.Second)
+		err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+				return ecsClient.DescribeDisks(request)
+			})
+			if err != nil {
+				if IsThrottling(err) {
+					wait()
+					return resource.RetryableError(err)
+
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+			response, _ = raw.(*ecs.DescribeDisksResponse)
+			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("describe disk for %s failed, %#v", d.Id(), err)
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 
-		disks := resp.(*ecs.DescribeDisksResponse)
-		if len(disks.Disks.Disk) == 0 {
-			return fmt.Errorf("no specified system disk")
+		if len(response.Disks.Disk) == 0 {
+			return WrapError(Error("no specified system disk"))
 		}
 
 		var ids []string
-		for i := range disks.Disks.Disk {
-			ids = append(ids, disks.Disks.Disk[i].DiskId)
+		systemDiskTag := make(map[string]interface{})
+		for _, disk := range response.Disks.Disk {
+			ids = append(ids, disk.DiskId)
+			if disk.Type == "system" {
+				for _, t := range disk.Tags.Tag {
+					if !ecsTagIgnored(t) {
+						systemDiskTag[t.TagKey] = t.TagValue
+					}
+				}
+			}
 		}
 
 		oraw, nraw := d.GetChange("volume_tags")
+		if d.IsNewResource() {
+			oraw = systemDiskTag
+		}
 		return updateTags(client, ids, resourceType, oraw, nraw)
 	}
 
@@ -93,31 +121,42 @@ func updateTags(client *connectivity.AliyunClient, ids []string, resourceType Ta
 
 	// Set tags
 	if len(remove) > 0 {
-		log.Printf("[DEBUG] Removing tags: %#v from %#v", remove, ids)
-		args := ecs.CreateUntagResourcesRequest()
-		args.ResourceType = string(resourceType)
-		args.ResourceId = &ids
+		request := ecs.CreateUntagResourcesRequest()
+		request.ResourceType = string(resourceType)
+		request.ResourceId = &ids
 
 		var tagsKey []string
 		for _, t := range remove {
 			tagsKey = append(tagsKey, t.Key)
 		}
-		args.TagKey = &tagsKey
-		args.All = requests.NewBoolean(true)
+		request.TagKey = &tagsKey
 
-		_, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-			return ecsClient.UntagResources(args)
+		wait := incrementalWait(1*time.Second, 1*time.Second)
+		err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+				return ecsClient.UntagResources(request)
+			})
+			if err != nil {
+				if IsThrottling(err) {
+					wait()
+					return resource.RetryableError(err)
+
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+			return nil
 		})
+
 		if err != nil {
-			return fmt.Errorf("Remove tags got error: %s", err)
+			return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 	}
 
 	if len(create) > 0 {
-		log.Printf("[DEBUG] Creating tags: %s for %#v", create, ids)
-		args := ecs.CreateTagResourcesRequest()
-		args.ResourceType = string(resourceType)
-		args.ResourceId = &ids
+		request := ecs.CreateTagResourcesRequest()
+		request.ResourceType = string(resourceType)
+		request.ResourceId = &ids
 
 		var tags []ecs.TagResourcesTag
 		for _, t := range create {
@@ -126,13 +165,27 @@ func updateTags(client *connectivity.AliyunClient, ids []string, resourceType Ta
 				Value: t.Value,
 			})
 		}
-		args.Tag = &tags
+		request.Tag = &tags
 
-		_, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-			return ecsClient.TagResources(args)
+		wait := incrementalWait(1*time.Second, 1*time.Second)
+		err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+				return ecsClient.TagResources(request)
+			})
+			if err != nil {
+				if IsThrottling(err) {
+					wait()
+					return resource.RetryableError(err)
+
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+			return nil
 		})
+
 		if err != nil {
-			return fmt.Errorf("Creating tags got error: %s", err)
+			return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 	}
 
@@ -146,30 +199,29 @@ func updateCdnTags(client *connectivity.AliyunClient, ids []string, resourceType
 
 	// Set tags
 	if len(remove) > 0 {
-		log.Printf("[DEBUG] Removing tags: %#v from %#v", remove, ids)
-		args := cdn.CreateUntagResourcesRequest()
-		args.ResourceType = string(resourceType)
-		args.ResourceId = &ids
+		request := cdn.CreateUntagResourcesRequest()
+		request.ResourceType = string(resourceType)
+		request.ResourceId = &ids
 
 		var tagsKey []string
 		for _, t := range remove {
 			tagsKey = append(tagsKey, t.Key)
 		}
-		args.TagKey = &tagsKey
+		request.TagKey = &tagsKey
 
-		_, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
-			return cdnClient.UntagResources(args)
+		raw, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
+			return cdnClient.UntagResources(request)
 		})
 		if err != nil {
-			return fmt.Errorf("Remove tags got error: %s", err)
+			return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	}
 
 	if len(create) > 0 {
-		log.Printf("[DEBUG] Creating tags: %s for %#v", create, ids)
-		args := cdn.CreateTagResourcesRequest()
-		args.ResourceType = string(resourceType)
-		args.ResourceId = &ids
+		request := cdn.CreateTagResourcesRequest()
+		request.ResourceType = string(resourceType)
+		request.ResourceId = &ids
 
 		var tags []cdn.TagResourcesTag
 		for _, t := range create {
@@ -178,14 +230,15 @@ func updateCdnTags(client *connectivity.AliyunClient, ids []string, resourceType
 				Value: t.Value,
 			})
 		}
-		args.Tag = &tags
+		request.Tag = &tags
 
-		_, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
-			return cdnClient.TagResources(args)
+		raw, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
+			return cdnClient.TagResources(request)
 		})
 		if err != nil {
-			return fmt.Errorf("Creating tags got error: %s", err)
+			return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	}
 
 	return nil
@@ -214,11 +267,56 @@ func diffTags(oldTags, newTags []Tag) ([]Tag, []Tag) {
 	return tagsFromMap(create), remove
 }
 
+func diffRdsTags(oldTags, newTags map[string]interface{}) (remove []string, add []rds.TagResourcesTag) {
+	for k, _ := range oldTags {
+		remove = append(remove, k)
+	}
+	for k, v := range newTags {
+		add = append(add, rds.TagResourcesTag{
+			Key:   k,
+			Value: v.(string),
+		})
+	}
+	return
+}
+
+func diffGpdbTags(oldTags, newTags []gpdb.TagResourcesTag) ([]gpdb.TagResourcesTag, []gpdb.TagResourcesTag) {
+	// First, we're creating everything we have
+	create := make(map[string]interface{})
+	for _, t := range newTags {
+		create[t.Key] = t.Value
+	}
+
+	// Build the list of what to remove
+	var remove []gpdb.TagResourcesTag
+	for _, t := range oldTags {
+		old, ok := create[t.Key]
+		if !ok || old != t.Value {
+			// Delete it!
+			remove = append(remove, t)
+		}
+	}
+
+	return gpdbTagsFromMap(create), remove
+}
+
 // tagsFromMap returns the tags for the given map of data.
 func tagsFromMap(m map[string]interface{}) []Tag {
 	result := make([]Tag, 0, len(m))
 	for k, v := range m {
 		result = append(result, Tag{
+			Key:   k,
+			Value: v.(string),
+		})
+	}
+
+	return result
+}
+
+func gpdbTagsFromMap(m map[string]interface{}) []gpdb.TagResourcesTag {
+	result := make([]gpdb.TagResourcesTag, 0, len(m))
+	for k, v := range m {
+		result = append(result, gpdb.TagResourcesTag{
 			Key:   k,
 			Value: v.(string),
 		})
@@ -238,11 +336,32 @@ func tagsToMap(tags []ecs.Tag) map[string]string {
 	return result
 }
 
+func vpcTagsToMap(tags []vpc.Tag) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		if !vpcTagIgnored(t) {
+			result[t.Key] = t.Value
+		}
+	}
+	return result
+}
+
 func cdnTagsToMap(tags []cdn.TagItem) map[string]string {
 	result := make(map[string]string)
 	for _, t := range tags {
 		if !cdnTagIgnored(t) {
 			result[t.Key] = t.Value
+		}
+	}
+
+	return result
+}
+
+func slbTagsToMap(tags []slb.TagResource) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		if !slbTagIgnored(t) {
+			result[t.TagKey] = t.TagValue
 		}
 	}
 
@@ -291,20 +410,6 @@ func tagsMapEqual(expectMap map[string]interface{}, compareMap map[string]string
 	return true
 }
 
-func tagsToString(tags []ecs.Tag) string {
-	result := make([]string, 0, len(tags))
-
-	for _, tag := range tags {
-		ecsTags := ecs.Tag{
-			TagKey:   tag.TagKey,
-			TagValue: tag.TagValue,
-		}
-		result = append(result, ecsTags.TagKey+":"+ecsTags.TagValue)
-	}
-
-	return strings.Join(result, ",")
-}
-
 // tagIgnored compares a tag against a list of strings and checks if it should be ignored or not
 func ecsTagIgnored(t ecs.Tag) bool {
 	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
@@ -313,6 +418,19 @@ func ecsTagIgnored(t ecs.Tag) bool {
 		ok, _ := regexp.MatchString(v, t.TagKey)
 		if ok {
 			log.Printf("[DEBUG] Found Alibaba Cloud specific tag %s (val: %s), ignoring.\n", t.TagKey, t.TagValue)
+			return true
+		}
+	}
+	return false
+}
+
+func vpcTagIgnored(t vpc.Tag) bool {
+	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
+	for _, v := range filter {
+		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, t.Key)
+		ok, _ := regexp.MatchString(v, t.Key)
+		if ok {
+			log.Printf("[DEBUG] Found Alibaba Cloud specific tag %s (val: %s), ignoring.\n", t.Key, t.Value)
 			return true
 		}
 	}
@@ -340,6 +458,19 @@ func cdnTagIgnored(t cdn.TagItem) bool {
 		ok, _ := regexp.MatchString(v, t.Key)
 		if ok {
 			log.Printf("[DEBUG] Found Alibaba Cloud specific tag %s (val: %s), ignoring.\n", t.Key, t.Value)
+			return true
+		}
+	}
+	return false
+}
+
+func slbTagIgnored(t slb.TagResource) bool {
+	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
+	for _, v := range filter {
+		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, t.TagKey)
+		ok, _ := regexp.MatchString(v, t.TagKey)
+		if ok {
+			log.Printf("[DEBUG] Found Alibaba Cloud specific tag %s (val: %s), ignoring.\n", t.TagKey, t.TagValue)
 			return true
 		}
 	}

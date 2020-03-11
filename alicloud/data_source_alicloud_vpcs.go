@@ -3,9 +3,13 @@ package alicloud
 import (
 	"regexp"
 
+	"time"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -27,7 +31,7 @@ func dataSourceAlicloudVpcs() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 			"is_default": {
@@ -40,6 +44,7 @@ func dataSourceAlicloudVpcs() *schema.Resource {
 				Optional: true,
 				ForceNew: true,
 			},
+			"tags": tagsSchema(),
 			"output_file": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -48,11 +53,17 @@ func dataSourceAlicloudVpcs() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"names": {
 				Type:     schema.TypeList,
 				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
 			},
 			// Computed values
 			"vpcs": {
@@ -105,6 +116,10 @@ func dataSourceAlicloudVpcs() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"tags": {
+							Type:     schema.TypeMap,
+							Computed: true,
+						},
 					},
 				},
 			},
@@ -113,24 +128,26 @@ func dataSourceAlicloudVpcs() *schema.Resource {
 }
 func dataSourceAlicloudVpcsRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	vpcService := VpcService{client}
 
 	request := vpc.CreateDescribeVpcsRequest()
 	request.RegionId = string(client.Region)
 	request.PageSize = requests.NewInteger(PageSizeLarge)
 	request.PageNumber = requests.NewInteger(1)
-
+	request.ResourceGroupId = d.Get("resource_group_id").(string)
 	var allVpcs []vpc.Vpc
 	invoker := NewInvoker()
 	for {
 		var raw interface{}
 		var err error
-		if err = invoker.Run(func() error {
+		err = invoker.Run(func() error {
 			raw, err = client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
 				return vpcClient.DescribeVpcs(request)
 			})
 			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 			return err
-		}); err != nil {
+		})
+		if err != nil {
 			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_vpcs", request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 		response, _ := raw.(*vpc.DescribeVpcsResponse)
@@ -144,11 +161,11 @@ func dataSourceAlicloudVpcsRead(d *schema.ResourceData, meta interface{}) error 
 			break
 		}
 
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	var filteredVpcs []vpc.Vpc
@@ -193,21 +210,44 @@ func dataSourceAlicloudVpcsRead(d *schema.ResourceData, meta interface{}) error 
 			continue
 		}
 
+		if value, ok := d.GetOk("tags"); ok && len(value.(map[string]interface{})) > 0 {
+			tags, err := vpcService.DescribeTags(v.VpcId, value.(map[string]interface{}), TagResourceVpc)
+			if err != nil {
+				return WrapError(err)
+			}
+			if len(tags) < 1 {
+				continue
+			}
+
+		}
+
 		request := vpc.CreateDescribeVRoutersRequest()
 		request.RegionId = client.RegionId
 		request.VRouterId = v.VRouterId
 		request.RegionId = string(client.Region)
 
-		raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
-			return vpcClient.DescribeVRouters(request)
+		var response *vpc.DescribeVRoutersResponse
+		wait := incrementalWait(1*time.Second, 1*time.Second)
+		err := resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
+			raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
+				return vpcClient.DescribeVRouters(request)
+			})
+			if err != nil {
+				if IsThrottling(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+			response, _ = raw.(*vpc.DescribeVRoutersResponse)
+			return nil
 		})
+
 		if err != nil {
 			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_vpcs", request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-
-		response, _ := raw.(*vpc.DescribeVRoutersResponse)
 		if len(response.VRouters.VRouter) > 0 {
 			route_tables = append(route_tables, response.VRouters.VRouter[0].RouteTableIds.RouteTableId[0])
 		} else {
@@ -244,6 +284,7 @@ func vpcsDecriptionAttributes(d *schema.ResourceData, vpcSetTypes []vpc.Vpc, rou
 			"description":    vpc.Description,
 			"is_default":     vpc.IsDefault,
 			"creation_time":  vpc.CreationTime,
+			"tags":           vpcTagsToMap(vpc.Tags.Tag),
 		}
 		ids = append(ids, vpc.VpcId)
 		names = append(names, vpc.VpcName)

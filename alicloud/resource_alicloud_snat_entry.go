@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -30,13 +30,24 @@ func resourceAliyunSnatEntry() *schema.Resource {
 				ForceNew: true,
 			},
 			"source_vswitch_id": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Type:          schema.TypeString,
+				Optional:      true,
+				ForceNew:      true,
+				ConflictsWith: strings.Fields("source_cidr"),
 			},
 			"snat_ip": {
 				Type:     schema.TypeString,
 				Required: true,
+			},
+			"source_cidr": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				ForceNew:      true,
+				ConflictsWith: strings.Fields("source_vswitch_id"),
+			},
+			"snat_entry_name": {
+				Type:     schema.TypeString,
+				Optional: true,
 			},
 			"snat_entry_id": {
 				Type:     schema.TypeString,
@@ -55,14 +66,20 @@ func resourceAliyunSnatEntryCreate(d *schema.ResourceData, meta interface{}) err
 	request.SnatTableId = d.Get("snat_table_id").(string)
 	request.SourceVSwitchId = d.Get("source_vswitch_id").(string)
 	request.SnatIp = d.Get("snat_ip").(string)
+	if v, ok := d.GetOk("source_cidr"); ok {
+		request.SourceCIDR = v.(string)
+	}
 
+	if v, ok := d.GetOk("snat_entry_name"); ok {
+		request.SnatEntryName = v.(string)
+	}
 	if err := resource.Retry(3*time.Minute, func() *resource.RetryError {
 		ar := request
 		raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
 			return vpcClient.CreateSnatEntry(ar)
 		})
 		if err != nil {
-			if IsExceptedError(err, EIP_NOT_IN_GATEWAY) {
+			if IsExpectedErrors(err, []string{"EIP_NOT_IN_GATEWAY", "OperationUnsupported.EipNatBWPCheck"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -101,9 +118,14 @@ func resourceAliyunSnatEntryRead(d *schema.ResourceData, meta interface{}) error
 	}
 
 	d.Set("snat_table_id", object.SnatTableId)
-	d.Set("source_vswitch_id", object.SourceVSwitchId)
+	if _, ok := d.GetOk("source_cidr"); ok {
+		d.Set("source_cidr", object.SourceCIDR)
+	} else {
+		d.Set("source_vswitch_id", object.SourceVSwitchId)
+	}
 	d.Set("snat_ip", object.SnatIp)
 	d.Set("snat_entry_id", object.SnatEntryId)
+	d.Set("snat_entry_name", object.SnatEntryName)
 
 	return nil
 }
@@ -113,21 +135,30 @@ func resourceAliyunSnatEntryUpdate(d *schema.ResourceData, meta interface{}) err
 	if strings.HasPrefix(d.Id(), "snat-") {
 		d.SetId(fmt.Sprintf("%s%s%s", d.Get("snat_table_id").(string), COLON_SEPARATED, d.Id()))
 	}
+	client := meta.(*connectivity.AliyunClient)
+	vpcService := VpcService{client}
+
+	parts, err := ParseResourceId(d.Id(), 2)
+	if err != nil {
+		return WrapError(err)
+	}
+
+	request := vpc.CreateModifySnatEntryRequest()
+	request.RegionId = string(client.Region)
+	request.SnatTableId = parts[0]
+	request.SnatEntryId = parts[1]
+	update := false
 	if d.HasChange("snat_ip") {
-		client := meta.(*connectivity.AliyunClient)
-		vpcService := VpcService{client}
-
-		parts, err := ParseResourceId(d.Id(), 2)
-		if err != nil {
-			return WrapError(err)
-		}
-
-		request := vpc.CreateModifySnatEntryRequest()
-		request.RegionId = string(client.Region)
-		request.SnatTableId = parts[0]
-		request.SnatEntryId = parts[1]
+		update = true
 		request.SnatIp = d.Get("snat_ip").(string)
+	}
 
+	if d.HasChange("snat_entry_name") {
+		update = true
+		request.SnatEntryName = d.Get("snat_entry_name").(string)
+	}
+
+	if update {
 		raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
 			return vpcClient.ModifySnatEntry(request)
 		})
@@ -139,7 +170,6 @@ func resourceAliyunSnatEntryUpdate(d *schema.ResourceData, meta interface{}) err
 			return WrapError(err)
 		}
 	}
-
 	return resourceAliyunSnatEntryRead(d, meta)
 }
 
@@ -163,7 +193,7 @@ func resourceAliyunSnatEntryDelete(d *schema.ResourceData, meta interface{}) err
 			return vpcClient.DeleteSnatEntry(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{IncorretSnatEntryStatus}) {
+			if IsExpectedErrors(err, []string{"IncorretSnatEntryStatus"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -172,7 +202,7 @@ func resourceAliyunSnatEntryDelete(d *schema.ResourceData, meta interface{}) err
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{InvalidSnatTableIdNotFound, InvalidSnatEntryIdNotFound}) {
+		if IsExpectedErrors(err, []string{"InvalidSnatTableId.NotFound", "InvalidSnatEntryId.NotFound"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)

@@ -11,8 +11,8 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -65,11 +65,11 @@ func testSweepRouteTable(region string) error {
 			break
 		}
 
-		if page, err := getNextpageNumber(req.PageNumber); err != nil {
+		page, err := getNextpageNumber(req.PageNumber)
+		if err != nil {
 			return err
-		} else {
-			req.PageNumber = page
 		}
+		req.PageNumber = page
 	}
 
 	for _, vtb := range routeTables {
@@ -173,11 +173,24 @@ func TestAccAlicloudRouteTableBasic(t *testing.T) {
 				),
 			},
 			{
+				Config: testAccRouteTableConfig_tags(rand),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "acceptance test",
+					}),
+				),
+			},
+			{
 				Config: testAccRouteTableConfig_all(rand),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"name":        fmt.Sprintf("tf-testAccRouteTable%d_all", rand),
-						"description": fmt.Sprintf("tf-testAccRouteTable%d_description_all", rand),
+						"name":         fmt.Sprintf("tf-testAccRouteTable%d_all", rand),
+						"description":  fmt.Sprintf("tf-testAccRouteTable%d_description_all", rand),
+						"tags.%":       REMOVEKEY,
+						"tags.Created": REMOVEKEY,
+						"tags.For":     REMOVEKEY,
 					}),
 				),
 			},
@@ -271,6 +284,29 @@ resource "alicloud_route_table" "default" {
   vpc_id = "${alicloud_vpc.default.id}"
   name = "${var.name}_change"
   description = "${var.name}_description"
+}
+`, rand)
+}
+
+func testAccRouteTableConfig_tags(rand int) string {
+	return fmt.Sprintf(
+		`
+variable "name" {
+	default = "tf-testAccRouteTable%d"
+}
+resource "alicloud_vpc" "default" {
+	cidr_block = "172.16.0.0/12"
+	name = "${var.name}"
+}	
+
+resource "alicloud_route_table" "default" {
+  vpc_id = "${alicloud_vpc.default.id}"
+  name = "${var.name}_change"
+  description = "${var.name}_description"
+  tags 		= {
+		Created = "TF"
+		For 	= "acceptance test"
+  }
 }
 `, rand)
 }

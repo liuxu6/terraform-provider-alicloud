@@ -5,10 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -53,8 +55,9 @@ func resourceAliyunVpc() *schema.Resource {
 			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateStringLengthInRange(2, 256),
+				ValidateFunc: validation.StringLenBetween(2, 256),
 			},
+			"tags": tagsSchema(),
 			"router_id": {
 				Type:     schema.TypeString,
 				Computed: true,
@@ -84,10 +87,7 @@ func resourceAliyunVpcCreate(d *schema.ResourceData, meta interface{}) error {
 			return vpcClient.CreateVpc(&args)
 		})
 		if err != nil {
-			if IsExceptedError(err, VpcQuotaExceeded) {
-				return resource.NonRetryableError(WrapErrorf(err, "The number of VPC has quota has reached the quota limit in your account, and please use existing VPCs or remove some of them."))
-			}
-			if IsExceptedErrors(err, []string{TaskConflict, UnknownError, Throttling}) {
+			if IsExpectedErrors(err, []string{"TaskConflict", "UnknownError", Throttling}) {
 				time.Sleep(5 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -108,7 +108,7 @@ func resourceAliyunVpcCreate(d *schema.ResourceData, meta interface{}) error {
 		return WrapError(err)
 	}
 
-	return resourceAliyunVpcRead(d, meta)
+	return resourceAliyunVpcUpdate(d, meta)
 }
 
 func resourceAliyunVpcRead(d *schema.ResourceData, meta interface{}) error {
@@ -129,7 +129,7 @@ func resourceAliyunVpcRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("description", object.Description)
 	d.Set("router_id", object.VRouterId)
 	d.Set("resource_group_id", object.ResourceGroupId)
-
+	d.Set("tags", vpcTagsToMap(object.Tags.Tag))
 	// Retrieve all route tables and filter to get system
 	request := vpc.CreateDescribeRouteTablesRequest()
 	request.RegionId = client.RegionId
@@ -140,11 +140,11 @@ func resourceAliyunVpcRead(d *schema.ResourceData, meta interface{}) error {
 	var routeTabls []vpc.RouteTable
 	for {
 		total := 0
-		if err = resource.Retry(6*time.Minute, func() *resource.RetryError {
+		err = resource.Retry(6*time.Minute, func() *resource.RetryError {
 			raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
 				return vpcClient.DescribeRouteTables(request)
 			})
-			if err != nil && IsExceptedErrors(err, []string{Throttling}) {
+			if err != nil && IsExpectedErrors(err, []string{Throttling}) {
 				time.Sleep(10 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -153,7 +153,8 @@ func resourceAliyunVpcRead(d *schema.ResourceData, meta interface{}) error {
 			routeTabls = append(routeTabls, response.RouteTables.RouteTable...)
 			total = len(response.RouteTables.RouteTable)
 			return resource.NonRetryableError(err)
-		}); err != nil {
+		})
+		if err != nil {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 
@@ -180,7 +181,14 @@ func resourceAliyunVpcRead(d *schema.ResourceData, meta interface{}) error {
 
 func resourceAliyunVpcUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-
+	vpcService := VpcService{client}
+	if err := vpcService.setInstanceTags(d, TagResourceVpc); err != nil {
+		return WrapError(err)
+	}
+	if d.IsNewResource() {
+		d.Partial(false)
+		return resourceAliyunVpcRead(d, meta)
+	}
 	attributeUpdate := false
 	request := vpc.CreateModifyVpcAttributeRequest()
 	request.RegionId = client.RegionId
@@ -220,7 +228,7 @@ func resourceAliyunVpcDelete(d *schema.ResourceData, meta interface{}) error {
 			return vpcClient.DeleteVpc(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InvalidVpcIDNotFound, ForbiddenVpcNotFound}) {
+			if IsExpectedErrors(err, []string{"InvalidVpcID.NotFound", "Forbidden.VpcNotFound"}) {
 				return nil
 			}
 			return resource.RetryableError(err)

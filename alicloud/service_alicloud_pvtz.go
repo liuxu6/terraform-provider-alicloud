@@ -3,7 +3,7 @@ package alicloud
 import (
 	"strconv"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"time"
 
@@ -27,7 +27,7 @@ func (s *PvtzService) DescribePvtzZone(id string) (zone pvtz.DescribeZoneInfoRes
 			return pvtzClient.DescribeZoneInfo(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{ServiceUnavailable, PvtzThrottlingUser, PvtzSystemBusy}) {
+			if IsExpectedErrors(err, []string{ServiceUnavailable, ThrottlingUser, "System.Busy"}) {
 				time.Sleep(5 * time.Second)
 				return resource.RetryableError(err)
 			}
@@ -38,7 +38,7 @@ func (s *PvtzService) DescribePvtzZone(id string) (zone pvtz.DescribeZoneInfoRes
 		return nil
 	})
 	if err != nil {
-		if IsExceptedErrors(err, []string{ZoneNotExists, ZoneVpcNotExists}) {
+		if IsExpectedErrors(err, []string{"Zone.NotExists", "ZoneVpc.NotExists.VpcId"}) {
 			return zone, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 		return zone, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -114,7 +114,7 @@ func (s *PvtzService) DescribePvtzZoneRecord(id string) (record pvtz.Record, err
 				return pvtzClient.DescribeZoneRecords(request)
 			})
 			if err != nil {
-				if IsExceptedErrors(err, []string{ServiceUnavailable, PvtzThrottlingUser, PvtzSystemBusy}) {
+				if IsExpectedErrors(err, []string{ServiceUnavailable, ThrottlingUser, "System.Busy"}) {
 					time.Sleep(5 * time.Second)
 					return resource.RetryableError(err)
 				}
@@ -125,7 +125,7 @@ func (s *PvtzService) DescribePvtzZoneRecord(id string) (record pvtz.Record, err
 			return nil
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{ZoneNotExists, ZoneVpcNotExists}) {
+			if IsExpectedErrors(err, []string{"Zone.NotExists", "ZoneVpc.NotExists.VpcId"}) {
 				return record, WrapErrorf(Error(GetNotFoundMessage("ZoneRecord", id)), NotFoundMsg, AlibabaCloudSdkGoERROR)
 			}
 			return record, WrapErrorf(err, DefaultErrorMsg, recordIdStr, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -136,7 +136,7 @@ func (s *PvtzService) DescribePvtzZoneRecord(id string) (record pvtz.Record, err
 		}
 
 		for _, rec := range response.Records.Record {
-			if strconv.Itoa(rec.RecordId) == parts[0] {
+			if strconv.FormatInt(rec.RecordId, 10) == parts[0] {
 				record = rec
 				return record, nil
 			}
@@ -222,11 +222,11 @@ func (s *PvtzService) WaitForPvtzZoneRecord(id string, status Status, timeout in
 				return WrapError(err)
 			}
 		}
-		if strconv.Itoa(object.RecordId) == parts[0] {
+		if strconv.FormatInt(object.RecordId, 10) == parts[0] {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, strconv.Itoa(object.RecordId), id, ProviderERROR)
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, strconv.FormatInt(object.RecordId, 10), id, ProviderERROR)
 		}
 
 	}

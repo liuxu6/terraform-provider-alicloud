@@ -3,19 +3,30 @@ package alicloud
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/gpdb"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/hbase"
 
+	"github.com/denverdino/aliyungo/common"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/gpdb"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+
+	"time"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/adb"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/dds"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/elasticsearch"
-	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r-kvstore"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/polardb"
+	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r_kvstore"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
 	"github.com/aliyun/fc-go-sdk"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -28,15 +39,16 @@ func dataSourceAlicloudZones() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateInstanceType,
+				ValidateFunc: validation.StringMatch(regexp.MustCompile(`^ecs\..*`), "prefix must be 'ecs.'"),
 			},
 			"available_resource_creation": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(ResourceTypeInstance),
 					string(ResourceTypeRds),
+					string(ResourceTypePolarDB),
 					string(ResourceTypeRkv),
 					string(ResourceTypeVSwitch),
 					string(ResourceTypeDisk),
@@ -46,32 +58,42 @@ func dataSourceAlicloudZones() *schema.Resource {
 					string(ResourceTypeSlb),
 					string(ResourceTypeMongoDB),
 					string(ResourceTypeGpdb),
-				}),
+					string(ResourceTypeHBase),
+					string(ResourceTypeAdb),
+				}, false),
 			},
 			"available_slb_address_type": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(Vpc),
 					string(ClassicIntranet),
 					string(ClassicInternet),
-				}),
+				}, false),
 			},
 			"available_slb_address_ip_version": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(IPV4),
 					string(IPV6),
-				}),
+				}, false),
 			},
 			"available_disk_category": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ForceNew:     true,
-				ValidateFunc: validateDiskCategory,
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				ValidateFunc: validation.StringInSlice([]string{
+					"all",
+					"cloud",
+					"ephemeral_ssd",
+					"cloud_essd",
+					"cloud_efficiency",
+					"cloud_ssd",
+					"local_disk",
+				}, false),
 			},
 
 			"multi": {
@@ -80,24 +102,25 @@ func dataSourceAlicloudZones() *schema.Resource {
 				Default:  false,
 			},
 			"instance_charge_type": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ForceNew:     true,
-				Default:      PostPaid,
-				ValidateFunc: validateInstanceChargeType,
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				Default:  PostPaid,
+				// %q must contain a valid InstanceChargeType, expected common.PrePaid, common.PostPaid
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 			},
 			"network_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validateAllowedStringValue([]string{string(Vpc), string(Classic)}),
+				ValidateFunc: validation.StringInSlice([]string{"Vpc", "Classic"}, false),
 			},
 			"spot_strategy": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
 				Default:      NoSpot,
-				ValidateFunc: validateInstanceSpotStrategy,
+				ValidateFunc: validation.StringInSlice([]string{"NoSpot", "SpotAsPriceGo", "SpotWithPriceLimit"}, false),
 			},
 			"enable_details": {
 				Type:     schema.TypeBool,
@@ -168,25 +191,45 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 	multi := d.Get("multi").(bool)
 	var zoneIds []string
 	rdsZones := make(map[string]string)
+	polarDBZones := make(map[string]string)
 	rkvZones := make(map[string]string)
 	mongoDBZones := make(map[string]string)
 	gpdbZones := make(map[string]string)
+	hbaseZones := make(map[string]string)
+	adbZones := make(map[string]string)
+	instanceChargeType := d.Get("instance_charge_type").(string)
 
 	if strings.ToLower(Trim(resType)) == strings.ToLower(string(ResourceTypeRds)) {
-		request := rds.CreateDescribeRegionsRequest()
+		request := rds.CreateDescribeAvailableResourceRequest()
 		request.RegionId = client.RegionId
-		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
-			return rdsClient.DescribeRegions(request)
+		if instanceChargeType == string(PostPaid) {
+			request.InstanceChargeType = string(Postpaid)
+		} else {
+			request.InstanceChargeType = string(Prepaid)
+		}
+		var response = &rds.DescribeAvailableResourceResponse{}
+		err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+			raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+				return rdsClient.DescribeAvailableResource(request)
+			})
+			if err != nil {
+				if IsExpectedErrors(err, []string{Throttling}) {
+					time.Sleep(time.Duration(5) * time.Second)
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+			response = raw.(*rds.DescribeAvailableResourceResponse)
+			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("[ERROR] DescribeRegions got an error: %#v", err)
+			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_zones", request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-		regions, _ := raw.(*rds.DescribeRegionsResponse)
-		if len(regions.Regions.RDSRegion) <= 0 {
-			return fmt.Errorf("[ERROR] There is no available region for RDS.")
+		if len(response.AvailableZones.AvailableZone) <= 0 {
+			return WrapError(fmt.Errorf("[ERROR] There is no available zone for RDS."))
 		}
-		for _, r := range regions.Regions.RDSRegion {
+		for _, r := range response.AvailableZones.AvailableZone {
 			if multi && strings.Contains(r.ZoneId, MULTI_IZ_SYMBOL) && r.RegionId == string(client.Region) {
 				zoneIds = append(zoneIds, r.ZoneId)
 				continue
@@ -194,28 +237,49 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 			rdsZones[r.ZoneId] = r.RegionId
 		}
 	}
-	if strings.ToLower(Trim(resType)) == strings.ToLower(string(ResourceTypeRkv)) {
-		request := r_kvstore.CreateDescribeRegionsRequest()
+	if strings.ToLower(Trim(resType)) == strings.ToLower(string(ResourceTypePolarDB)) {
+		request := polardb.CreateDescribeRegionsRequest()
 		request.RegionId = client.RegionId
-		raw, err := client.WithRkvClient(func(rkvClient *r_kvstore.Client) (interface{}, error) {
-			return rkvClient.DescribeRegions(request)
+		raw, err := client.WithPolarDBClient(func(polarDBClient *polardb.Client) (interface{}, error) {
+			return polarDBClient.DescribeRegions(request)
 		})
 		if err != nil {
-			return fmt.Errorf("[ERROR] DescribeRegions got an error: %#v", err)
+			return WrapError(fmt.Errorf("[ERROR] DescribeRegions got an error: %#v", err))
 		}
 		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-		regions, _ := raw.(*r_kvstore.DescribeRegionsResponse)
-		if len(regions.RegionIds.KVStoreRegion) <= 0 {
-			return fmt.Errorf("[ERROR] There is no available region for KVStore")
+		regions, _ := raw.(*polardb.DescribeRegionsResponse)
+		if len(regions.Regions.Region) <= 0 {
+			return WrapError(fmt.Errorf("[ERROR] There is no available region for PolarDB."))
 		}
-		for _, r := range regions.RegionIds.KVStoreRegion {
-			for _, zoneID := range r.ZoneIdList.ZoneId {
-				if multi && strings.Contains(zoneID, MULTI_IZ_SYMBOL) && r.RegionId == string(client.Region) {
-					zoneIds = append(zoneIds, zoneID)
-					continue
-				}
-				rkvZones[zoneID] = r.RegionId
+		for _, r := range regions.Regions.Region {
+			if multi && strings.Contains(r.Zones.Zone[0].ZoneId, MULTI_IZ_SYMBOL) && r.RegionId == string(client.Region) {
+				zoneIds = append(zoneIds, r.Zones.Zone[0].ZoneId)
+				continue
 			}
+			polarDBZones[r.Zones.Zone[0].ZoneId] = r.RegionId
+		}
+	}
+	if strings.ToLower(Trim(resType)) == strings.ToLower(string(ResourceTypeRkv)) {
+		request := r_kvstore.CreateDescribeAvailableResourceRequest()
+		request.RegionId = client.RegionId
+		request.InstanceChargeType = instanceChargeType
+		raw, err := client.WithRkvClient(func(rkvClient *r_kvstore.Client) (interface{}, error) {
+			return rkvClient.DescribeAvailableResource(request)
+		})
+		if err != nil {
+			return WrapError(fmt.Errorf("[ERROR] DescribeAvailableResource got an error: %#v", err))
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		zones, _ := raw.(*r_kvstore.DescribeAvailableResourceResponse)
+		if len(zones.AvailableZones.AvailableZone) <= 0 {
+			return WrapError(fmt.Errorf("[ERROR] There is no available zones for KVStore"))
+		}
+		for _, zone := range zones.AvailableZones.AvailableZone {
+			if multi && strings.Contains(zone.ZoneId, MULTI_IZ_SYMBOL) {
+				zoneIds = append(zoneIds, zone.ZoneId)
+				continue
+			}
+			rkvZones[zone.ZoneId] = zone.RegionId
 		}
 	}
 	if strings.ToLower(Trim(resType)) == strings.ToLower(string(ResourceTypeMongoDB)) {
@@ -240,6 +304,52 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 				}
 				mongoDBZones[zonid.ZoneId] = r.RegionId
 			}
+		}
+	}
+	if strings.ToLower(Trim(resType)) == strings.ToLower(string(ResourceTypeHBase)) {
+		request := hbase.CreateDescribeRegionsRequest()
+		request.RegionId = client.RegionId
+		raw, err := client.WithHbaseClient(func(hbaseClient *hbase.Client) (interface{}, error) {
+			return hbaseClient.DescribeRegions(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_zones", request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		regions, _ := raw.(*hbase.DescribeRegionsResponse)
+		if len(regions.Regions.Region) <= 0 {
+			return WrapError(fmt.Errorf("[ERROR] There is no available region for HBase."))
+		}
+		for _, r := range regions.Regions.Region {
+			for _, zonid := range r.Zones.Zone {
+				if multi && strings.Contains(zonid.Id, MULTI_IZ_SYMBOL) && r.RegionId == string(client.Region) {
+					zoneIds = append(zoneIds, zonid.Id)
+					continue
+				}
+				hbaseZones[zonid.Id] = r.RegionId
+			}
+		}
+	}
+	if strings.ToLower(Trim(resType)) == strings.ToLower(string(ResourceTypeAdb)) {
+		request := adb.CreateDescribeRegionsRequest()
+		request.RegionId = client.RegionId
+		raw, err := client.WithAdbClient(func(adbClient *adb.Client) (interface{}, error) {
+			return adbClient.DescribeRegions(request)
+		})
+		if err != nil {
+			return WrapError(fmt.Errorf("[ERROR] DescribeRegions got an error: %#v", err))
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		regions, _ := raw.(*adb.DescribeRegionsResponse)
+		if len(regions.Regions.Region) <= 0 {
+			return WrapError(fmt.Errorf("[ERROR] There is no available region for adb."))
+		}
+		for _, r := range regions.Regions.Region {
+			if multi && strings.Contains(r.Zones.Zone[0].ZoneId, MULTI_IZ_SYMBOL) && r.RegionId == string(client.Region) {
+				zoneIds = append(zoneIds, r.Zones.Zone[0].ZoneId)
+				continue
+			}
+			adbZones[r.Zones.Zone[0].ZoneId] = r.RegionId
 		}
 	}
 	if strings.ToLower(Trim(resType)) == strings.ToLower(string(ResourceTypeGpdb)) {
@@ -275,7 +385,7 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 		})
 
 		if err != nil {
-			return BuildWrapError("[Error] DescribeZones", "", AlibabaCloudSdkGoERROR, err, "")
+			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_zones", request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 		addDebug(request.GetActionName(), raw, request.GetActionName(), request)
 		zones, _ := raw.(*elasticsearch.GetRegionConfigurationResponse)
@@ -348,9 +458,7 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 
 	req := ecs.CreateDescribeZonesRequest()
 	req.RegionId = client.RegionId
-	if v, ok := d.GetOk("instance_charge_type"); ok && v.(string) != "" {
-		req.InstanceChargeType = v.(string)
-	}
+	req.InstanceChargeType = instanceChargeType
 	if v, ok := d.GetOk("spot_strategy"); ok && v.(string) != "" {
 		req.SpotStrategy = v.(string)
 	}
@@ -399,6 +507,11 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 					continue
 				}
 			}
+			if len(hbaseZones) > 0 {
+				if _, ok := hbaseZones[zone.ZoneId]; !ok {
+					continue
+				}
+			}
 			if len(gpdbZones) > 0 {
 				if _, ok := gpdbZones[zone.ZoneId]; !ok {
 					continue
@@ -411,6 +524,11 @@ func dataSourceAlicloudZonesRead(d *schema.ResourceData, meta interface{}) error
 			}
 			if len(slaveZones) > 0 {
 				if _, ok := slaveZones[zone.ZoneId]; !ok {
+					continue
+				}
+			}
+			if len(adbZones) > 0 {
+				if _, ok := adbZones[zone.ZoneId]; !ok {
 					continue
 				}
 			}

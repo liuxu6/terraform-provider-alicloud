@@ -1,7 +1,13 @@
 package alicloud
 
 import (
+	"log"
+	"regexp"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
@@ -61,7 +67,7 @@ func (s *VpcService) DescribeNatGateway(id string) (nat vpc.NatGateway, err erro
 			return vpcClient.DescribeNatGateways(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, InvalidNatGatewayIdNotFound) {
+			if IsExpectedErrors(err, []string{"InvalidNatGatewayId.NotFound"}) {
 				return WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 			}
 			return WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -77,28 +83,28 @@ func (s *VpcService) DescribeNatGateway(id string) (nat vpc.NatGateway, err erro
 	return
 }
 
-func (s *VpcService) DescribeVpc(id string) (v vpc.DescribeVpcAttributeResponse, err error) {
-	request := vpc.CreateDescribeVpcAttributeRequest()
+func (s *VpcService) DescribeVpc(id string) (v vpc.Vpc, err error) {
+	request := vpc.CreateDescribeVpcsRequest()
 	request.RegionId = s.client.RegionId
 	request.VpcId = id
 
 	invoker := NewInvoker()
 	err = invoker.Run(func() error {
 		raw, err := s.client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
-			return vpcClient.DescribeVpcAttribute(request)
+			return vpcClient.DescribeVpcs(request)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InvalidVpcIDNotFound, ForbiddenVpcNotFound}) {
+			if IsExpectedErrors(err, []string{"InvalidVpcID.NotFound", "Forbidden.VpcNotFound"}) {
 				return WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 			}
 			return WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
 		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-		response, _ := raw.(*vpc.DescribeVpcAttributeResponse)
-		if response.VpcId != id {
+		response, _ := raw.(*vpc.DescribeVpcsResponse)
+		if len(response.Vpcs.Vpc) < 1 || response.Vpcs.Vpc[0].VpcId != id {
 			return WrapErrorf(Error(GetNotFoundMessage("VPC", id)), NotFoundMsg, ProviderERROR)
 		}
-		v = *response
+		v = response.Vpcs.Vpc[0]
 		return nil
 	})
 	return
@@ -115,7 +121,7 @@ func (s *VpcService) DescribeVSwitch(id string) (v vpc.DescribeVSwitchAttributes
 			return vpcClient.DescribeVSwitchAttributes(request)
 		})
 		if err != nil {
-			if IsExceptedError(err, InvalidVswitchIDNotFound) {
+			if IsExpectedErrors(err, []string{"InvalidVswitchID.NotFound"}) {
 				return WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 			}
 			return WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -156,7 +162,7 @@ func (s *VpcService) DescribeSnatEntry(id string) (snat vpc.SnatTableEntry, err 
 		//this special deal cause the DescribeSnatEntry can't find the records would be throw "cant find the snatTable error"
 		//so judge the snatEntries length priority
 		if err != nil {
-			if IsExceptedErrors(err, []string{InvalidSnatTableIdNotFound, InvalidSnatEntryIdNotFound}) {
+			if IsExpectedErrors(err, []string{"InvalidSnatTableId.NotFound", "InvalidSnatEntryId.NotFound"}) {
 				return snat, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 			}
 			return snat, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -176,11 +182,11 @@ func (s *VpcService) DescribeSnatEntry(id string) (snat vpc.SnatTableEntry, err 
 		if len(response.SnatTableEntries.SnatTableEntry) < PageSizeLarge {
 			break
 		}
-		if page, err := getNextpageNumber(request.PageNumber); err != nil {
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
 			return snat, WrapError(err)
-		} else {
-			request.PageNumber = page
 		}
+		request.PageNumber = page
 	}
 
 	return snat, WrapErrorf(Error(GetNotFoundMessage("SnatEntry", id)), NotFoundMsg, ProviderERROR)
@@ -204,7 +210,7 @@ func (s *VpcService) DescribeForwardEntry(id string) (entry vpc.ForwardTableEntr
 		//this special deal cause the DescribeSnatEntry can't find the records would be throw "cant find the snatTable error"
 		//so judge the snatEntries length priority
 		if err != nil {
-			if IsExceptedErrors(err, []string{InvalidForwardEntryIdNotFound, InvalidForwardTableIdNotFound}) {
+			if IsExpectedErrors(err, []string{"InvalidForwardEntryId.NotFound", "InvalidForwardTableId.NotFound"}) {
 				return WrapErrorf(Error(GetNotFoundMessage("ForwardEntry", id)), NotFoundMsg, ProviderERROR)
 			}
 			return WrapErrorf(err, DefaultErrorMsg, "ForwardEntry", request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -248,7 +254,8 @@ func (s *VpcService) QueryRouteTableById(routeTableId string) (rt vpc.RouteTable
 	return
 }
 
-func (s *VpcService) DescribeRouteEntry(id string) (v *vpc.RouteEntry, err error) {
+func (s *VpcService) DescribeRouteEntry(id string) (*vpc.RouteEntry, error) {
+	v := &vpc.RouteEntry{}
 	parts, err := ParseResourceId(id, 5)
 	if err != nil {
 		return v, WrapError(err)
@@ -279,8 +286,7 @@ func (s *VpcService) DescribeRouteEntry(id string) (v *vpc.RouteEntry, err error
 		for _, table := range response.RouteTables.RouteTable {
 			for _, entry := range table.RouteEntrys.RouteEntry {
 				if entry.DestinationCidrBlock == cidr && entry.NextHopType == nexthop_type && entry.InstanceId == nexthop_id {
-					v = &entry
-					return
+					return &entry, nil
 				}
 			}
 		}
@@ -919,7 +925,7 @@ func (s *VpcService) DescribeNetworkAcl(id string) (networkAcl vpc.NetworkAcl, e
 		return vpcClient.DescribeNetworkAcls(request)
 	})
 	if err != nil {
-		if IsExceptedError(err, NetworkAclNotFound) {
+		if IsExpectedErrors(err, []string{"InvalidNetworkAcl.NotFound"}) {
 			return networkAcl, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 		return networkAcl, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -1018,4 +1024,174 @@ func (s *VpcService) WaitForNetworkAclAttachment(id string, resource []vpc.Resou
 		}
 		time.Sleep(DefaultIntervalShort * time.Second)
 	}
+}
+
+func (s *VpcService) DescribeTags(resourceId string, resourceTags map[string]interface{}, resourceType TagResourceType) (tags []vpc.TagResource, err error) {
+	request := vpc.CreateListTagResourcesRequest()
+	request.RegionId = s.client.RegionId
+	request.ResourceType = string(resourceType)
+	request.ResourceId = &[]string{resourceId}
+	if resourceTags != nil && len(resourceTags) > 0 {
+		var reqTags []vpc.ListTagResourcesTag
+		for key, value := range resourceTags {
+			reqTags = append(reqTags, vpc.ListTagResourcesTag{
+				Key:   key,
+				Value: value.(string),
+			})
+		}
+		request.Tag = &reqTags
+	}
+
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	var raw interface{}
+
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		raw, err = s.client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
+			return vpcClient.ListTagResources(request)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{Throttling}) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		return nil
+	})
+	if err != nil {
+		err = WrapErrorf(err, DefaultErrorMsg, resourceId, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return
+	}
+	response, _ := raw.(*vpc.ListTagResourcesResponse)
+
+	return response.TagResources.TagResource, nil
+}
+
+func (s *VpcService) setInstanceTags(d *schema.ResourceData, resourceType TagResourceType) error {
+	if d.HasChange("tags") {
+		oraw, nraw := d.GetChange("tags")
+		o := oraw.(map[string]interface{})
+		n := nraw.(map[string]interface{})
+		create, remove := s.diffTags(s.tagsFromMap(o), s.tagsFromMap(n))
+
+		if len(remove) > 0 {
+			var tagKey []string
+			for _, v := range remove {
+				tagKey = append(tagKey, v.Key)
+			}
+			request := vpc.CreateUnTagResourcesRequest()
+			request.ResourceId = &[]string{d.Id()}
+			request.ResourceType = string(resourceType)
+			request.TagKey = &tagKey
+			request.RegionId = s.client.RegionId
+
+			wait := incrementalWait(2*time.Second, 1*time.Second)
+			err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+				raw, err := s.client.WithVpcClient(func(client *vpc.Client) (interface{}, error) {
+					return client.UnTagResources(request)
+				})
+				if err != nil {
+					if IsThrottling(err) {
+						wait()
+						return resource.RetryableError(err)
+
+					}
+					return resource.NonRetryableError(err)
+				}
+				addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+				return nil
+			})
+			if err != nil {
+				return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+			}
+		}
+
+		if len(create) > 0 {
+			request := vpc.CreateTagResourcesRequest()
+			request.ResourceId = &[]string{d.Id()}
+			request.Tag = &create
+			request.ResourceType = string(resourceType)
+			request.RegionId = s.client.RegionId
+
+			wait := incrementalWait(2*time.Second, 1*time.Second)
+			err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+				raw, err := s.client.WithVpcClient(func(client *vpc.Client) (interface{}, error) {
+					return client.TagResources(request)
+				})
+				if err != nil {
+					if IsThrottling(err) {
+						wait()
+						return resource.RetryableError(err)
+
+					}
+					return resource.NonRetryableError(err)
+				}
+				addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+				return nil
+			})
+			if err != nil {
+				return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+			}
+		}
+
+		d.SetPartial("tags")
+	}
+
+	return nil
+}
+
+func (s *VpcService) tagsToMap(tags []vpc.TagResource) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		if !s.ignoreTag(t) {
+			result[t.TagKey] = t.TagValue
+		}
+	}
+	return result
+}
+
+func (s *VpcService) ignoreTag(t vpc.TagResource) bool {
+	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
+	for _, v := range filter {
+		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, t.TagKey)
+		ok, _ := regexp.MatchString(v, t.TagKey)
+		if ok {
+			log.Printf("[DEBUG] Found Alibaba Cloud specific t %s (val: %s), ignoring.\n", t.TagKey, t.TagValue)
+			return true
+		}
+	}
+	return false
+}
+
+func (s *VpcService) diffTags(oldTags, newTags []vpc.TagResourcesTag) ([]vpc.TagResourcesTag, []vpc.TagResourcesTag) {
+	// First, we're creating everything we have
+	create := make(map[string]interface{})
+	for _, t := range newTags {
+		create[t.Key] = t.Value
+	}
+
+	// Build the list of what to remove
+	var remove []vpc.TagResourcesTag
+	for _, t := range oldTags {
+		old, ok := create[t.Key]
+		if !ok || old != t.Value {
+			// Delete it!
+			remove = append(remove, t)
+		}
+	}
+
+	return s.tagsFromMap(create), remove
+}
+
+func (s *VpcService) tagsFromMap(m map[string]interface{}) []vpc.TagResourcesTag {
+	result := make([]vpc.TagResourcesTag, 0, len(m))
+	for k, v := range m {
+		result = append(result, vpc.TagResourcesTag{
+			Key:   k,
+			Value: v.(string),
+		})
+	}
+
+	return result
 }

@@ -77,13 +77,13 @@ func (client *Client) RestoreTableWithCallback(request *RestoreTableRequest, cal
 type RestoreTableRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	RestoreTime          string           `position:"Query" name:"RestoreTime"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
-	BackupId             string           `position:"Query" name:"BackupId"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	TableMeta            string           `position:"Query" name:"TableMeta"`
 	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
+	RestoreTime          string           `position:"Query" name:"RestoreTime"`
+	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
+	BackupId             string           `position:"Query" name:"BackupId"`
+	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 }
 

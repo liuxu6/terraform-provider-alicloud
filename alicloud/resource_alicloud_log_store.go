@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	sls "github.com/aliyun/aliyun-log-go-sdk"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
 
 func resourceAlicloudLogStore() *schema.Resource {
@@ -36,7 +38,7 @@ func resourceAlicloudLogStore() *schema.Resource {
 				Type:         schema.TypeInt,
 				Optional:     true,
 				Default:      30,
-				ValidateFunc: validateIntegerInRange(1, 3650),
+				ValidateFunc: validation.IntBetween(1, 3650),
 			},
 			"shard_count": {
 				Type:     schema.TypeInt,
@@ -82,7 +84,7 @@ func resourceAlicloudLogStore() *schema.Resource {
 				Type:         schema.TypeInt,
 				Optional:     true,
 				Default:      0,
-				ValidateFunc: validateIntegerInRange(0, 64),
+				ValidateFunc: validation.IntBetween(0, 64),
 			},
 			"append_meta": {
 				Type:     schema.TypeBool,
@@ -117,7 +119,7 @@ func resourceAlicloudLogStoreCreate(d *schema.ResourceData, meta interface{}) er
 			return nil, slsClient.CreateLogStoreV2(d.Get("project").(string), logstore)
 		})
 		if err != nil {
-			if IsExceptedErrors(err, []string{InternalServerError, LogClientTimeout}) {
+			if IsExpectedErrors(err, []string{"InternalServerError", LogClientTimeout}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -162,7 +164,7 @@ func resourceAlicloudLogStoreRead(d *schema.ResourceData, meta interface{}) erro
 	err = resource.Retry(2*time.Minute, func() *resource.RetryError {
 		shards, err = object.ListShards()
 		if err != nil {
-			if IsExceptedError(err, InternalServerError) {
+			if IsExpectedErrors(err, []string{"InternalServerError"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -273,7 +275,7 @@ func resourceAlicloudLogStoreDelete(d *schema.ResourceData, meta interface{}) er
 	}
 	err = project.DeleteLogStore(parts[1])
 	if err != nil {
-		if IsExceptedErrors(err, []string{LogStoreNotExist}) {
+		if IsExpectedErrors(err, []string{"LogStoreNotExist"}) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "DeleteLogStore", AliyunLogGoSdkERROR)

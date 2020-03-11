@@ -13,7 +13,7 @@ import (
 
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
 func init() {
@@ -78,7 +78,7 @@ func testSweepCRNamespace(region string) error {
 				return crClient.DeleteNamespace(req)
 			})
 			if err != nil {
-				if NotFoundError(err) || IsExceptedError(err, ErrorNamespaceNotExist) {
+				if IsExpectedErrors(err, []string{"NAMESPACE_NOT_EXIST"}) {
 					return nil
 				}
 				return resource.RetryableError(WrapErrorf(err, DefaultErrorMsg, n, req.GetActionName(), AlibabaCloudSdkGoERROR))

@@ -12,8 +12,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -132,6 +132,10 @@ func TestAccAlicloudSslVpnClientCert_basic(t *testing.T) {
 					testAccCheck(map[string]string{
 						"name":              fmt.Sprintf("tf-testAccSslVpnClientCertConfig%d", rand),
 						"ssl_vpn_server_id": CHECKSET,
+						"ca_cert":           CHECKSET,
+						"client_cert":       CHECKSET,
+						"client_key":        CHECKSET,
+						"client_config":     CHECKSET,
 						"status":            "normal",
 					}),
 				),
@@ -193,6 +197,10 @@ func TestAccAlicloudSslVpnClientCert_multi(t *testing.T) {
 					testAccCheck(map[string]string{
 						"name":              fmt.Sprintf("tf-testAccSslVpnClientCertConfig%d", rand),
 						"ssl_vpn_server_id": CHECKSET,
+						"ca_cert":           CHECKSET,
+						"client_cert":       CHECKSET,
+						"client_key":        CHECKSET,
+						"client_config":     CHECKSET,
 						"status":            "normal",
 					}),
 				),

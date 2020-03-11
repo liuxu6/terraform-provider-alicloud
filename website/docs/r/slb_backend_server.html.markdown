@@ -1,4 +1,5 @@
 ---
+subcategory: "Server Load Balancer (SLB)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_slb_backend_server"
 sidebar_current: "docs-alicloud-resource-slb-backend-server"
@@ -8,7 +9,7 @@ description: |-
 
 # alicloud\_slb\_backend\_server
 
-Add a group of backend servers (ECS instance) to the Server Load Balancer or remove them from it.
+Add a group of backend servers (ECS or ENI instance) to the Server Load Balancer or remove them from it.
 
 -> **NOTE:** Available in 1.53.0+
 
@@ -28,7 +29,7 @@ data "alicloud_instance_types" "default" {
   memory_size       = 2
 }
 data "alicloud_images" "default" {
-  name_regex  = "^ubuntu_14.*_64"
+  name_regex  = "^ubuntu_18.*64"
   most_recent = true
   owners      = "system"
 }
@@ -90,6 +91,7 @@ The following arguments are supported:
 
 * `load_balancer_id` - (Required) ID of the load balancer.
 * `backend_servers` - (Required) A list of instances to added backend server in the SLB. It contains three sub-fields as `Block server` follows.
+* `delete_protection_validation` - (Optional, Available in 1.63.0+) Checking DeleteProtection of SLB instance before deleting. If true, this resource will not be deleted when its SLB instance enabled DeleteProtection. Default to false.
 
 ## Block servers
 

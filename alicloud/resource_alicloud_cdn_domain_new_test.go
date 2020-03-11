@@ -3,13 +3,14 @@ package alicloud
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cdn"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform/helper/acctest"
-	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -115,9 +116,10 @@ func TestAccAlicloudCdnDomainNew_basic(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"domain_name": name,
-					"cdn_type":    "web",
-					"scope":       "domestic",
+					"domain_name":       name,
+					"cdn_type":          "web",
+					"scope":             "domestic",
+					"resource_group_id": os.Getenv("ALICLOUD_RESOURCE_GROUP_ID"),
 					"sources": []map[string]interface{}{
 						{
 							"content": "www.aliyuntest.com",
@@ -127,7 +129,8 @@ func TestAccAlicloudCdnDomainNew_basic(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"scope": "domestic",
+						"scope":             "domestic",
+						"resource_group_id": CHECKSET,
 					}),
 				),
 			},

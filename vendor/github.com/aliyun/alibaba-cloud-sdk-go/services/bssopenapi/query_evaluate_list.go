@@ -79,15 +79,15 @@ type QueryEvaluateListRequest struct {
 	EndSearchTime   string           `position:"Query" name:"EndSearchTime"`
 	OutBizId        string           `position:"Query" name:"OutBizId"`
 	SortType        requests.Integer `position:"Query" name:"SortType"`
-	BizTypeList     *[]string        `position:"Query" name:"BizTypeList"  type:"Repeated"`
 	Type            requests.Integer `position:"Query" name:"Type"`
-	OwnerId         requests.Integer `position:"Query" name:"OwnerId"`
 	PageNum         requests.Integer `position:"Query" name:"PageNum"`
-	StartSearchTime string           `position:"Query" name:"StartSearchTime"`
-	EndBizTime      string           `position:"Query" name:"EndBizTime"`
 	PageSize        requests.Integer `position:"Query" name:"PageSize"`
 	EndAmount       requests.Integer `position:"Query" name:"EndAmount"`
 	BillCycle       string           `position:"Query" name:"BillCycle"`
+	BizTypeList     *[]string        `position:"Query" name:"BizTypeList"  type:"Repeated"`
+	OwnerId         requests.Integer `position:"Query" name:"OwnerId"`
+	StartSearchTime string           `position:"Query" name:"StartSearchTime"`
+	EndBizTime      string           `position:"Query" name:"EndBizTime"`
 	StartAmount     requests.Integer `position:"Query" name:"StartAmount"`
 	StartBizTime    string           `position:"Query" name:"StartBizTime"`
 }

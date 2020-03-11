@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -19,7 +20,7 @@ func dataSourceAlicloudOssBuckets() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 			"output_file": {
@@ -373,7 +374,7 @@ func bucketsDescriptionAttributes(d *schema.ResourceData, buckets []oss.BucketPr
 					ruleMappings = append(ruleMappings, ruleMapping)
 				}
 			}
-		} else if !IsExceptedErrors(err, []string{NoSuchCORSConfiguration}) {
+		} else if !IsExpectedErrors(err, []string{"NoSuchCORSConfiguration"}) {
 			log.Printf("[WARN] Unable to get CORS information for the bucket %s: %v", bucket.Name, err)
 		}
 		mapping["cors_rules"] = ruleMappings
@@ -397,7 +398,7 @@ func bucketsDescriptionAttributes(d *schema.ResourceData, buckets []oss.BucketPr
 				websiteMapping["error_document"] = v.Key
 			}
 			websiteMappings = append(websiteMappings, websiteMapping)
-		} else if !IsExceptedErrors(err, []string{NoSuchWebsiteConfiguration}) {
+		} else if !IsExpectedErrors(err, []string{"NoSuchWebsiteConfiguration"}) {
 			log.Printf("[WARN] Unable to get website information for the bucket %s: %v", bucket.Name, err)
 		}
 		mapping["website"] = websiteMappings

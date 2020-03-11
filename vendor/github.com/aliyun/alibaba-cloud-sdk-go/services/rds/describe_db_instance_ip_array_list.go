@@ -77,11 +77,11 @@ func (client *Client) DescribeDBInstanceIPArrayListWithCallback(request *Describ
 type DescribeDBInstanceIPArrayListRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	WhitelistNetworkType string           `position:"Query" name:"WhitelistNetworkType"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	WhitelistNetworkType string           `position:"Query" name:"WhitelistNetworkType"`
+	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 }
 
 // DescribeDBInstanceIPArrayListResponse is the response struct for api DescribeDBInstanceIPArrayList
