@@ -31,6 +31,10 @@ resource "alicloud_elasticsearch_instance" "instance" {
   version              = "5.5.3_with_X-Pack"
   description          = "description"
   zone_count           = "2"
+  tags = {
+    "key1":"value1",
+    "key2":"value2",
+  }
 }
 ```
 ## Argument Reference
@@ -38,7 +42,7 @@ resource "alicloud_elasticsearch_instance" "instance" {
 The following arguments are supported:
 
 * `description` - (Optional) The description of instance. It a string of 0 to 30 characters.
-* `instance_charge_type` - (Optional) Valid values are `PrePaid`, `PostPaid`, Default to `PostPaid`. From version 1.69.0, the Elasticsearch cluster allows you to update your instance_charge_ype from `PostPaid` to `PrePaid`, the following attributes are required: `period`. But, updating from `PostPaid` to `PrePaid` is not supported.
+* `instance_charge_type` - (Optional) Valid values are `PrePaid`, `PostPaid`. Default to `PostPaid`. From version 1.69.0, the Elasticsearch cluster allows you to update your instance_charge_ype from `PostPaid` to `PrePaid`, the following attributes are required: `period`. But, updating from `PostPaid` to `PrePaid` is not supported.
 * `period` - (Optional) The duration that you will buy Elasticsearch instance (in month). It is valid when instance_charge_type is `PrePaid`. Valid values: [1~9], 12, 24, 36. Default to 1. From version 1.69.2, when to modify this value, the resource can renewal a `PrePaid` instance.
 * `data_node_amount` - (Required) The Elasticsearch cluster's data node quantity, between 2 and 50.
 * `data_node_spec` - (Required) The data node specifications of the Elasticsearch instance.
@@ -46,15 +50,25 @@ The following arguments are supported:
   - `cloud_ssd`: An SSD disk, supports a maximum of 2048 GiB (2 TB).
   - `cloud_efficiency` An ultra disk, supports a maximum of 5120 GiB (5 TB). If the data to be stored is larger than 2048 GiB, an ultra disk can only support the following data sizes (GiB): [`2560`, `3072`, `3584`, `4096`, `4608`, `5120`].
 * `data_node_disk_type` - (Required) The data node disk type. Supported values: cloud_ssd, cloud_efficiency.
+* `data_node_disk_encrypted` - (Optional, ForceNew, Available in 1.86.0+) If encrypt the data node disk. Valid values are `true`, `false`. Default to `false`.
 * `vswitch_id` - (Required, ForceNew) The ID of VSwitch.
 * `password` - (Optional, Sensitive) The password of the instance. The password can be 8 to 30 characters in length and must contain three of the following conditions: uppercase letters, lowercase letters, numbers, and special characters (`!@#$%^&*()_+-=`).
 * `kms_encrypted_password` - (Optional, Available in 1.57.1+) An KMS encrypts password used to a instance. If the `password` is filled in, this field will be ignored, but you have to specify one of `password` and `kms_encrypted_password` fields.
 * `kms_encryption_context` - (Optional, MapString, Available in 1.57.1+) An KMS encryption context used to decrypt `kms_encrypted_password` before creating or updating instance with `kms_encrypted_password`. See [Encryption Context](https://www.alibabacloud.com/help/doc-detail/42975.htm). It is valid when `kms_encrypted_password` is set.
 * `version` - (Required, ForceNew) Elasticsearch version. Supported values: `5.5.3_with_X-Pack`, `6.3_with_X-Pack` and `6.7_with_X-Pack`.
 * `private_whitelist` - (Optional) Set the instance's IP whitelist in VPC network.
+* `public_whitelist` - (Optional) Set the instance's IP whitelist in internet network.
+* `enable_public` - (Optional, Available in v1.87.0+) Bool, default to false. When it set to true, the instance can enable public network access。
 * `kibana_whitelist` - (Optional) Set the Kibana's IP whitelist in internet network.
+* `enable_kibana_public_network` - (Optional, Available in v1.87.0+) Bool, default to true. When it set to false, the instance can enable kibana public network access。
+* `kibana_private_whitelist` - (Optional, Available in v1.87.0+) Set the Kibana's IP whitelist in private network.
+* `enable_kibana_private_network` - (Optional, Available in v1.87.0+) Bool, default to false. When it set to true, the instance can close kibana private network access。
 * `master_node_spec` - (Optional) The dedicated master node spec. If specified, dedicated master node will be created.
 * `zone_count` - (Optional, Available in 1.44.0+) The Multi-AZ supported for Elasticsearch, between 1 and 3. The `data_node_amount` value must be an integral multiple of the `zone_count` value.
+* `tags` - (Optional, Available in v1.73.0+) A mapping of tags to assign to the resource. 
+  - key: It can be up to 128 characters in length. It cannot begin with "aliyun", "acs:". It cannot contain "http://" and "https://". It cannot be a null string.
+  - value: It can be up to 128 characters in length. It cannot contain "http://" and "https://". It can be a null string.
+* `resource_group_id` - (Optional, ForceNew, Computed Available in v1.86.0+) The Id of resource group which the Elasticsearch instance belongs.
 
 ### Timeouts
 

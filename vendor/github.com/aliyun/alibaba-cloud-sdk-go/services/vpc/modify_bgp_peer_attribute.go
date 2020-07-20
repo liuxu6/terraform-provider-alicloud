@@ -99,6 +99,7 @@ func CreateModifyBgpPeerAttributeRequest() (request *ModifyBgpPeerAttributeReque
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Vpc", "2016-04-28", "ModifyBgpPeerAttribute", "vpc", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

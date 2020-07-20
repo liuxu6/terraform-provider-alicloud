@@ -84,7 +84,6 @@ func testSweepMongoDBInstances(region string) error {
 	}
 
 	sweeped := false
-	service := VpcService{client}
 	for _, v := range insts {
 		name := v.DBInstanceDescription
 		id := v.DBInstanceId
@@ -95,12 +94,7 @@ func testSweepMongoDBInstances(region string) error {
 				break
 			}
 		}
-		// If a mongoDB name is not set successfully, it should be fetched by vpc name and deleted.
-		if skip {
-			if need, err := service.needSweepVpc(v.VPCId, v.VSwitchId); err == nil {
-				skip = !need
-			}
-		}
+
 		if skip {
 			log.Printf("[INFO] Skipping MongoDB instance: %s (%s)\n", name, id)
 			continue
@@ -159,9 +153,26 @@ func TestAccAlicloudMongoDBInstance_classic(t *testing.T) {
 				),
 			},
 			{
-				ResourceName:      resourceId,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"ssl_action"},
+			},
+			{
+				Config: testMongoDBInstance_classic_ssl_action,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"ssl_status": "Open",
+					}),
+				),
+			},
+			{
+				Config: testMongoDBInstance_classic_ssl_action_update,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"ssl_status": "Closed",
+					}),
+				),
 			},
 			{
 				Config: testMongoDBInstance_classic_tags,
@@ -254,6 +265,57 @@ func TestAccAlicloudMongoDBInstance_classic(t *testing.T) {
 						"backup_time":                 "10:00Z-11:00Z",
 						"maintain_start_time":         REMOVEKEY,
 						"maintain_end_time":           REMOVEKEY,
+						"ssl_status":                  "Open",
+					}),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAlicloudMongoDBInstance_Version4(t *testing.T) {
+	var v dds.DBInstance
+	resourceId := "alicloud_mongodb_instance.default"
+	serverFunc := func() interface{} {
+		return &MongoDBService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, serverFunc, "DescribeMongoDBInstance")
+	ra := resourceAttrInit(resourceId, nil)
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheckWithRegions(t, false, connectivity.MongoDBClassicNoSupportedRegions)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  testAccCheckMongoDBInstanceDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testMongoDBInstance_classic_base4,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"engine_version":       "4.0",
+						"db_instance_storage":  "10",
+						"db_instance_class":    "dds.mongo.mid",
+						"name":                 "",
+						"storage_engine":       "WiredTiger",
+						"instance_charge_type": "PostPaid",
+						"replication_factor":   "3",
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"ssl_action"},
+			},
+			{
+				Config: testMongoDBInstance_classic_tde,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tde_status": "enabled",
 					}),
 				),
 			},
@@ -294,9 +356,10 @@ func TestAccAlicloudMongoDBInstance_vpc(t *testing.T) {
 				),
 			},
 			{
-				ResourceName:      resourceId,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"ssl_action"},
 			},
 			{
 				Config: testMongoDBInstance_vpc_name,
@@ -396,9 +459,10 @@ func TestAccAlicloudMongoDBInstance_multiAZ(t *testing.T) {
 				),
 			},
 			{
-				ResourceName:      resourceId,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"ssl_action"},
 			},
 			{
 				Config: testMongoDBInstance_multiAZ_name,
@@ -567,8 +631,43 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
+  db_instance_storage = 10
+  db_instance_class   = "dds.mongo.mid"
+}`
+
+const testMongoDBInstance_classic_ssl_action = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "MongoDB"
+}
+resource "alicloud_mongodb_instance" "default" {
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
+  engine_version      = "3.4"
+  db_instance_storage = 10
+  db_instance_class   = "dds.mongo.mid"
+  ssl_action          = "Open"
+}`
+
+const testMongoDBInstance_classic_ssl_action_update = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "MongoDB"
+}
+resource "alicloud_mongodb_instance" "default" {
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
+  engine_version      = "3.4"
+  db_instance_storage = 10
+  db_instance_class   = "dds.mongo.mid"
+  ssl_action          = "Close"
+}`
+
+const testMongoDBInstance_classic_base4 = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "MongoDB"
+}
+resource "alicloud_mongodb_instance" "default" {
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
+  engine_version      = "4.0"
   db_instance_storage = 10
   db_instance_class   = "dds.mongo.mid"
 }`
@@ -578,10 +677,11 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 10
   db_instance_class   = "dds.mongo.mid"
+  ssl_action          = "Close"
   tags = {
     Created = "TF"
     For     = "acceptance test"
@@ -593,11 +693,12 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 10
   db_instance_class   = "dds.mongo.mid"
   name                = "tf-testAccMongoDBInstance_test"
+  ssl_action          = "Close"
 }`
 
 const testMongoDBInstance_classic_configure = `
@@ -605,11 +706,12 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
   db_instance_class   = "dds.mongo.standard"
   name                = "tf-testAccMongoDBInstance_test"
+  ssl_action          = "Close"
 }`
 
 const testMongoDBInstance_classic_account_password = `
@@ -617,12 +719,25 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
   db_instance_class   = "dds.mongo.standard"
   name                = "tf-testAccMongoDBInstance_test"
   account_password    = "YourPassword_123"
+  ssl_action          = "Close"
+}`
+
+const testMongoDBInstance_classic_tde = `
+data "alicloud_zones" "default" {
+  available_resource_creation = "MongoDB"
+}
+resource "alicloud_mongodb_instance" "default" {
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
+  engine_version      = "4.0"
+  db_instance_storage = 10
+  db_instance_class   = "dds.mongo.mid"
+  tde_status    = "enabled"
 }`
 
 const testMongoDBInstance_classic_security_ip_list = `
@@ -630,13 +745,14 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
   db_instance_class   = "dds.mongo.standard"
   name                = "tf-testAccMongoDBInstance_test"
   account_password    = "YourPassword_123"
   security_ip_list    = ["10.168.1.12"]
+  ssl_action          = "Close"
 }`
 
 const testMongoDBInstance_classic_security_group_id = `
@@ -646,13 +762,14 @@ data "alicloud_zones" "default" {
 data "alicloud_security_groups" "default" {
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
   db_instance_class   = "dds.mongo.standard"
   name                = "tf-testAccMongoDBInstance_test"
   account_password    = "YourPassword_123"
   security_group_id    = "${data.alicloud_security_groups.default.groups.0.id}"
+  ssl_action          = "Close"
 }`
 
 const testMongoDBInstance_classic_backup = `
@@ -660,7 +777,7 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
   db_instance_class   = "dds.mongo.standard"
@@ -669,6 +786,7 @@ resource "alicloud_mongodb_instance" "default" {
   security_ip_list    = ["10.168.1.12"]
   backup_period       = ["Wednesday"]
   backup_time         = "11:00Z-12:00Z"
+  ssl_action          = "Close"
 }`
 
 const testMongoDBInstance_classic_maintain_time = `
@@ -676,7 +794,7 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
   db_instance_class   = "dds.mongo.standard"
@@ -687,6 +805,7 @@ resource "alicloud_mongodb_instance" "default" {
   backup_time         = "11:00Z-12:00Z"
   maintain_start_time = "02:00Z"
   maintain_end_time   = "03:00Z"
+  ssl_action          = "Close"
 }`
 
 const testMongoDBInstance_classic_together = `
@@ -694,7 +813,7 @@ data "alicloud_zones" "default" {
   available_resource_creation = "MongoDB"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
   db_instance_class   = "dds.mongo.standard"
@@ -703,6 +822,7 @@ resource "alicloud_mongodb_instance" "default" {
   security_ip_list    = ["10.168.1.12", "10.168.1.13"]
   backup_period       = ["Tuesday", "Wednesday"]
   backup_time         = "10:00Z-11:00Z"
+  ssl_action          = "Open"
 }`
 
 const testMongoDBInstance_vpc_base = `
@@ -716,7 +836,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 variable "name" {
@@ -740,7 +860,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 variable "name" {
@@ -765,7 +885,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 variable "name" {
@@ -790,7 +910,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 variable "name" {
@@ -816,7 +936,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 variable "name" {
@@ -843,7 +963,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 variable "name" {
@@ -872,7 +992,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 variable "name" {
@@ -909,7 +1029,7 @@ variable "name" {
   default = "tf-testAccMongoDBInstance_multiAZ"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   vswitch_id          = "${alicloud_vswitch.default.id}"
   engine_version      = "3.4"
   db_instance_storage = 10
@@ -935,7 +1055,7 @@ variable "name" {
   default = "tf-testAccMongoDBInstance_multiAZ"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   vswitch_id          = "${alicloud_vswitch.default.id}"
   engine_version      = "3.4"
   db_instance_storage = 10
@@ -962,7 +1082,7 @@ variable "name" {
   default = "tf-testAccMongoDBInstance_multiAZ"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   vswitch_id          = "${alicloud_vswitch.default.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
@@ -989,7 +1109,7 @@ variable "name" {
   default = "tf-testAccMongoDBInstance_multiAZ"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   vswitch_id          = "${alicloud_vswitch.default.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
@@ -1017,7 +1137,7 @@ variable "name" {
   default = "tf-testAccMongoDBInstance_multiAZ"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   vswitch_id          = "${alicloud_vswitch.default.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
@@ -1046,7 +1166,7 @@ variable "name" {
   default = "tf-testAccMongoDBInstance_multiAZ"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   vswitch_id          = "${alicloud_vswitch.default.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
@@ -1077,7 +1197,7 @@ variable "name" {
   default = "tf-testAccMongoDBInstance_multiAZ"
 }
 resource "alicloud_mongodb_instance" "default" {
-  zone_id             = "${data.alicloud_zones.default.zones.0.id}"
+  zone_id             = "${data.alicloud_zones.default.zones.1.id}"
   vswitch_id          = "${alicloud_vswitch.default.id}"
   engine_version      = "3.4"
   db_instance_storage = 30
@@ -1103,7 +1223,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 resource "alicloud_mongodb_instance" "default" {
@@ -1128,7 +1248,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 resource "alicloud_mongodb_instance" "default" {
@@ -1154,7 +1274,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 resource "alicloud_mongodb_instance" "default" {
@@ -1180,7 +1300,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 resource "alicloud_mongodb_instance" "default" {
@@ -1207,7 +1327,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 resource "alicloud_mongodb_instance" "default" {
@@ -1235,7 +1355,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 resource "alicloud_mongodb_instance" "default" {
@@ -1265,7 +1385,7 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id            = "${alicloud_vpc.default.id}"
   cidr_block        = "172.16.0.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  availability_zone = "${data.alicloud_zones.default.zones.1.id}"
   name              = "${var.name}"
 }
 resource "alicloud_mongodb_instance" "default" {

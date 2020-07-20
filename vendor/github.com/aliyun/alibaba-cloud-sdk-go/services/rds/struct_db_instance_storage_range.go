@@ -17,7 +17,9 @@ package rds
 
 // DBInstanceStorageRange is a nested struct in rds response
 type DBInstanceStorageRange struct {
-	Max  int `json:"Max" xml:"Max"`
-	Min  int `json:"Min" xml:"Min"`
-	Step int `json:"Step" xml:"Step"`
+	Step     int `json:"Step" xml:"Step"`
+	Max      int `json:"Max" xml:"Max"`
+	MinValue int `json:"MinValue" xml:"MinValue"`
+	MaxValue int `json:"MaxValue" xml:"MaxValue"`
+	Min      int `json:"Min" xml:"Min"`
 }

@@ -269,7 +269,7 @@ func resourceAliCloudImageRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("disk_device_mapping", FlattenImageDiskDeviceMappings(object.DiskDeviceMappings.DiskDeviceMapping))
 	tags := object.Tags.Tag
 	if len(tags) > 0 {
-		err = d.Set("tags", tagsToMap(tags))
+		err = d.Set("tags", ecsService.tagsToMap(tags))
 	}
 	return WrapError(err)
 }

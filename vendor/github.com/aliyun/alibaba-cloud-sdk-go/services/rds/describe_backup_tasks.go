@@ -76,7 +76,7 @@ func (client *Client) DescribeBackupTasksWithCallback(request *DescribeBackupTas
 // DescribeBackupTasksRequest is the request struct for api DescribeBackupTasks
 type DescribeBackupTasksRequest struct {
 	*requests.RpcRequest
-	BackupJobId          string           `position:"Query" name:"BackupJobId"`
+	BackupJobId          requests.Integer `position:"Query" name:"BackupJobId"`
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	Flag                 string           `position:"Query" name:"Flag"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
@@ -101,6 +101,7 @@ func CreateDescribeBackupTasksRequest() (request *DescribeBackupTasksRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Rds", "2014-08-15", "DescribeBackupTasks", "rds", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

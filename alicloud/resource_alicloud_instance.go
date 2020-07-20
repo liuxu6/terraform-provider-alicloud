@@ -157,6 +157,11 @@ func resourceAliyunInstance() *schema.Resource {
 				Optional: true,
 				Default:  40,
 			},
+			"system_disk_auto_snapshot_policy_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
 			"data_disks": {
 				Type:     schema.TypeList,
 				Optional: true,
@@ -188,7 +193,16 @@ func resourceAliyunInstance() *schema.Resource {
 							Default:  false,
 							ForceNew: true,
 						},
+						"kms_key_id": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
 						"snapshot_id": {
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+						},
+						"auto_snapshot_policy_id": {
 							Type:     schema.TypeString,
 							Optional: true,
 							ForceNew: true,
@@ -285,8 +299,10 @@ func resourceAliyunInstance() *schema.Resource {
 			},
 
 			"status": {
-				Type:     schema.TypeString,
-				Computed: true,
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{"Running", "Stopped"}, false),
+				Default:      "Running",
 			},
 
 			"user_data": {
@@ -348,7 +364,7 @@ func resourceAliyunInstance() *schema.Resource {
 				}, false),
 			},
 
-			"tags":        tagsSchema(),
+			"tags":        tagsSchemaWithIgnore(),
 			"volume_tags": tagsSchemaComputed(),
 
 			"auto_release_time": {
@@ -374,13 +390,13 @@ func resourceAliyunInstanceCreate(d *schema.ResourceData, meta interface{}) erro
 	ecsService := EcsService{client}
 
 	// Ensure instance_type is valid
-	zoneId, validZones, err := ecsService.DescribeAvailableResources(d, meta, InstanceTypeResource)
-	if err != nil {
-		return WrapError(err)
-	}
-	if err := ecsService.InstanceTypeValidation(d.Get("instance_type").(string), zoneId, validZones); err != nil {
-		return WrapError(err)
-	}
+	//zoneId, validZones, requestId, err := ecsService.DescribeAvailableResources(d, meta, InstanceTypeResource)
+	//if err != nil {
+	//	return WrapError(err)
+	//}
+	//if err := ecsService.InstanceTypeValidation(d.Get("instance_type").(string), zoneId, validZones); err != nil {
+	//	return WrapError(Error("%s. RequestId: %s", err, requestId))
+	//}
 
 	request, err := buildAliyunInstanceArgs(d, meta)
 	if err != nil {
@@ -432,18 +448,24 @@ func resourceAliyunInstanceRead(d *schema.ResourceData, meta interface{}) error 
 		}
 		return WrapError(err)
 	}
-
-	disk, err := ecsService.DescribeInstanceSystemDisk(d.Id(), instance.ResourceGroupId)
-	if err != nil {
-		if NotFoundError(err) {
-			d.SetId("")
-			return nil
+	var disk ecs.Disk
+	err = resource.Retry(2*time.Minute, func() *resource.RetryError {
+		disk, err = ecsService.DescribeInstanceSystemDisk(d.Id(), instance.ResourceGroupId)
+		if err != nil {
+			if NotFoundError(err) {
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
 		}
+		return nil
+	})
+	if err != nil {
 		return WrapError(err)
 	}
 	d.Set("system_disk_category", disk.Category)
 	d.Set("system_disk_size", disk.Size)
-	d.Set("volume_tags", tagsToMap(disk.Tags.Tag))
+	d.Set("system_disk_auto_snapshot_policy_id", disk.AutoSnapshotPolicyId)
+	d.Set("volume_tags", ecsService.tagsToMap(disk.Tags.Tag))
 
 	d.Set("instance_name", instance.InstanceName)
 	d.Set("resource_group_id", instance.ResourceGroupId)
@@ -464,7 +486,7 @@ func resourceAliyunInstanceRead(d *schema.ResourceData, meta interface{}) error 
 	d.Set("deletion_protection", instance.DeletionProtection)
 	d.Set("credit_specification", instance.CreditSpecification)
 	d.Set("auto_release_time", instance.AutoReleaseTime)
-	d.Set("tags", tagsToMap(instance.Tags.Tag))
+	d.Set("tags", ecsService.tagsToMap(instance.Tags.Tag))
 
 	if len(instance.PublicIpAddress.IpAddress) > 0 {
 		d.Set("public_ip", instance.PublicIpAddress.IpAddress[0])
@@ -606,6 +628,42 @@ func resourceAliyunInstanceUpdate(d *schema.ResourceData, meta interface{}) erro
 		}
 	}
 
+	if !d.IsNewResource() && d.HasChange("system_disk_size") {
+		diskReq := ecs.CreateDescribeDisksRequest()
+		diskReq.InstanceId = d.Id()
+		diskReq.DiskType = "system"
+		raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+			return ecsClient.DescribeDisks(diskReq)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), diskReq.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(diskReq.GetActionName(), raw, diskReq.RpcRequest, diskReq)
+		resp := raw.(*ecs.DescribeDisksResponse)
+
+		instance, errDesc := ecsService.DescribeInstance(d.Id())
+		if errDesc != nil {
+			return WrapError(errDesc)
+		}
+
+		request := ecs.CreateResizeDiskRequest()
+		request.NewSize = requests.NewInteger(d.Get("system_disk_size").(int))
+		if instance.Status == string(Stopped) {
+			request.Type = "offline"
+		} else {
+			request.Type = "online"
+		}
+		request.DiskId = resp.Disks.Disk[0].DiskId
+		_, err = client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+			return ecsClient.ResizeDisk(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("system_disk_size")
+	}
+
 	run := false
 	imageUpdate, err := modifyInstanceImage(d, meta, run)
 	if err != nil {
@@ -640,32 +698,45 @@ func resourceAliyunInstanceUpdate(d *schema.ResourceData, meta interface{}) erro
 	if err != nil {
 		return WrapError(err)
 	}
-	if imageUpdate || vpcUpdate || passwordUpdate || typeUpdate {
+	target := d.Get("status").(string)
+	statusUpdate := d.HasChange("status")
+	if d.IsNewResource() && target == string(Running) {
+		statusUpdate = false
+	}
+	if imageUpdate || vpcUpdate || passwordUpdate || typeUpdate || statusUpdate {
 		run = true
 		instance, errDesc := ecsService.DescribeInstance(d.Id())
 		if errDesc != nil {
 			return WrapError(errDesc)
 		}
-		if instance.Status == string(Running) {
+		if (statusUpdate && target == string(Stopped)) || instance.Status == string(Running) {
 			stopRequest := ecs.CreateStopInstanceRequest()
 			stopRequest.RegionId = client.RegionId
 			stopRequest.InstanceId = d.Id()
 			stopRequest.ForceStop = requests.NewBoolean(false)
-			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-				return ecsClient.StopInstance(stopRequest)
+			err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+				raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+					return ecsClient.StopInstance(stopRequest)
+				})
+				if err != nil {
+					if IsExpectedErrors(err, []string{"IncorrectInstanceStatus"}) {
+						time.Sleep(time.Second)
+						return resource.RetryableError(err)
+					}
+					return resource.NonRetryableError(err)
+				}
+				addDebug(stopRequest.GetActionName(), raw)
+				return nil
 			})
 			if err != nil {
 				return WrapErrorf(err, DefaultErrorMsg, d.Id(), stopRequest.GetActionName(), AlibabaCloudSdkGoERROR)
 			}
-			addDebug(stopRequest.GetActionName(), raw)
+			stateConf := BuildStateConf([]string{"Pending", "Running", "Stopping"}, []string{"Stopped"}, d.Timeout(schema.TimeoutUpdate), 5*time.Second, ecsService.InstanceStateRefreshFunc(d.Id(), []string{}))
+
+			if _, err = stateConf.WaitForState(); err != nil {
+				return WrapErrorf(err, IdMsg, d.Id())
+			}
 		}
-
-		stateConf := BuildStateConf([]string{"Pending", "Running", "Stopping"}, []string{"Stopped"}, d.Timeout(schema.TimeoutUpdate), 5*time.Second, ecsService.InstanceStateRefreshFunc(d.Id(), []string{}))
-
-		if _, err = stateConf.WaitForState(); err != nil {
-			return WrapErrorf(err, IdMsg, d.Id())
-		}
-
 		if _, err := modifyInstanceImage(d, meta, run); err != nil {
 			return WrapError(err)
 		}
@@ -678,40 +749,44 @@ func resourceAliyunInstanceUpdate(d *schema.ResourceData, meta interface{}) erro
 			return WrapError(err)
 		}
 
-		startRequest := ecs.CreateStartInstanceRequest()
-		startRequest.InstanceId = d.Id()
+		if target == string(Running) {
+			startRequest := ecs.CreateStartInstanceRequest()
+			startRequest.InstanceId = d.Id()
 
-		err := resource.Retry(5*time.Minute, func() *resource.RetryError {
-			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-				return ecsClient.StartInstance(startRequest)
-			})
-			if err != nil {
-				if IsExpectedErrors(err, []string{"IncorrectInstanceStatus"}) {
-					time.Sleep(time.Second)
-					return resource.RetryableError(err)
+			err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+				raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+					return ecsClient.StartInstance(startRequest)
+				})
+				if err != nil {
+					if IsExpectedErrors(err, []string{"IncorrectInstanceStatus"}) {
+						time.Sleep(time.Second)
+						return resource.RetryableError(err)
+					}
+					return resource.NonRetryableError(err)
 				}
-				return resource.NonRetryableError(err)
+				addDebug(startRequest.GetActionName(), raw)
+				return nil
+			})
+
+			if err != nil {
+				return WrapErrorf(err, DefaultErrorMsg, d.Id(), startRequest.GetActionName(), AlibabaCloudSdkGoERROR)
 			}
-			addDebug(startRequest.GetActionName(), raw)
-			return nil
-		})
+			// Start instance sometimes costs more than 8 minutes when os type is centos.
+			stateConf := &resource.StateChangeConf{
+				Pending:    []string{"Pending", "Starting", "Stopped"},
+				Target:     []string{"Running"},
+				Refresh:    ecsService.InstanceStateRefreshFunc(d.Id(), []string{}),
+				Timeout:    d.Timeout(schema.TimeoutUpdate),
+				Delay:      5 * time.Second,
+				MinTimeout: 3 * time.Second,
+			}
 
-		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, d.Id(), startRequest.GetActionName(), AlibabaCloudSdkGoERROR)
+			if _, err = stateConf.WaitForState(); err != nil {
+				return WrapErrorf(err, IdMsg, d.Id())
+			}
 		}
-
-		// Start instance sometimes costs more than 8 minutes when os type is centos.
-		stateConf = &resource.StateChangeConf{
-			Pending:    []string{"Pending", "Starting", "Stopped"},
-			Target:     []string{"Running"},
-			Refresh:    ecsService.InstanceStateRefreshFunc(d.Id(), []string{}),
-			Timeout:    d.Timeout(schema.TimeoutUpdate),
-			Delay:      5 * time.Second,
-			MinTimeout: 3 * time.Second,
-		}
-
-		if _, err = stateConf.WaitForState(); err != nil {
-			return WrapErrorf(err, IdMsg, d.Id())
+		if d.HasChange("status") {
+			d.SetPartial("status")
 		}
 	}
 
@@ -827,6 +902,10 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 
 	request.SystemDiskCategory = string(systemDiskCategory)
 	request.SystemDiskSize = strconv.Itoa(d.Get("system_disk_size").(int))
+
+	if v, ok := d.GetOk("system_disk_auto_snapshot_policy_id"); ok && v.(string) != "" {
+		request.SystemDiskAutoSnapshotPolicyId = v.(string)
+	}
 
 	if v, ok := d.GetOk("security_groups"); ok {
 		// At present, the classic network instance does not support multi sg in runInstances
@@ -958,6 +1037,9 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 				Encrypted:          strconv.FormatBool(disk["encrypted"].(bool)),
 			}
 
+			if kmsKeyId, ok := disk["kms_key_id"]; ok {
+				dataDiskRequest.KMSKeyId = kmsKeyId.(string)
+			}
 			if name, ok := disk["name"]; ok {
 				dataDiskRequest.DiskName = name.(string)
 			}
@@ -966,6 +1048,9 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 			}
 			if description, ok := disk["description"]; ok {
 				dataDiskRequest.Description = description.(string)
+			}
+			if autoSnapshotPolicyId, ok := disk["auto_snapshot_policy_id"]; ok {
+				dataDiskRequest.AutoSnapshotPolicyId = autoSnapshotPolicyId.(string)
 			}
 			dataDiskRequest.Size = fmt.Sprintf("%d", disk["size"].(int))
 			dataDiskRequest.Category = disk["category"].(string)
@@ -1047,7 +1132,7 @@ func modifyInstanceImage(d *schema.ResourceData, meta interface{}, run bool) (bo
 	client := meta.(*connectivity.AliyunClient)
 	ecsService := EcsService{client}
 	update := false
-	if d.HasChange("image_id") || d.HasChange("system_disk_size") {
+	if d.HasChange("image_id") {
 		update = true
 		if !run {
 			return update, nil
@@ -1295,24 +1380,23 @@ func modifyInstanceType(d *schema.ResourceData, meta interface{}, run bool) (boo
 			return update, nil
 		}
 		// Ensure instance_type is valid
-		zoneId, validZones, err := ecsService.DescribeAvailableResources(d, meta, InstanceTypeResource)
-		if err != nil {
-			return update, WrapError(err)
-		}
-		if err = ecsService.InstanceTypeValidation(d.Get("instance_type").(string), zoneId, validZones); err != nil {
-			return update, WrapError(err)
-		}
+		//zoneId, validZones, err := ecsService.DescribeAvailableResources(d, meta, InstanceTypeResource)
+		//if err != nil {
+		//	return update, WrapError(err)
+		//}
+		//if err = ecsService.InstanceTypeValidation(d.Get("instance_type").(string), zoneId, validZones); err != nil {
+		//	return update, WrapError(err)
+		//}
 
 		// There should use the old instance charge type to decide API method because of instance_charge_type will be updated at last step
 		oldCharge, _ := d.GetChange("instance_charge_type")
-		var raw interface{}
 		if oldCharge.(string) == string(PrePaid) {
 			request := ecs.CreateModifyPrepayInstanceSpecRequest()
 			request.InstanceId = d.Id()
 			request.InstanceType = d.Get("instance_type").(string)
 
-			err = resource.Retry(6*time.Minute, func() *resource.RetryError {
-				raw, err = client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+			err := resource.Retry(6*time.Minute, func() *resource.RetryError {
+				raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 					return ecsClient.ModifyPrepayInstanceSpec(request)
 				})
 				if err != nil {
@@ -1326,7 +1410,7 @@ func modifyInstanceType(d *schema.ResourceData, meta interface{}, run bool) (boo
 				return nil
 			})
 			if err != nil {
-				err = WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+				return update, WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 			}
 		} else {
 			//An instance that was successfully modified once cannot be modified again within 5 minutes.
@@ -1335,9 +1419,9 @@ func modifyInstanceType(d *schema.ResourceData, meta interface{}, run bool) (boo
 			request.InstanceType = d.Get("instance_type").(string)
 			request.ClientToken = buildClientToken(request.GetActionName())
 
-			err = resource.Retry(6*time.Minute, func() *resource.RetryError {
+			err := resource.Retry(6*time.Minute, func() *resource.RetryError {
 				args := *request
-				raw, err = client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+				raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 					return ecsClient.ModifyInstanceSpec(&args)
 				})
 				if err != nil {
@@ -1351,12 +1435,12 @@ func modifyInstanceType(d *schema.ResourceData, meta interface{}, run bool) (boo
 				return nil
 			})
 			if err != nil {
-				err = WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+				return update, WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 			}
 		}
-		if err != nil {
-			return update, err
-		}
+		//if err != nil {
+		//	return update, err
+		//}
 
 		// Ensure instance's type has been replaced successfully.
 		timeout := DefaultTimeoutMedium

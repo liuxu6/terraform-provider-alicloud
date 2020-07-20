@@ -91,7 +91,8 @@ func CreateDeleteUserHdfsInfoRequest() (request *DeleteUserHdfsInfoRequest) {
 	request = &DeleteUserHdfsInfoRequest{
 		RpcRequest: &requests.RpcRequest{},
 	}
-	request.InitWithApiInfo("HBase", "2019-01-01", "DeleteUserHdfsInfo", "", "")
+	request.InitWithApiInfo("HBase", "2019-01-01", "DeleteUserHdfsInfo", "hbase", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

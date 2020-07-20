@@ -87,6 +87,7 @@ type DescribeMonitorGroupsRequest struct {
 	GroupId                string                      `position:"Query" name:"GroupId"`
 	GroupName              string                      `position:"Query" name:"GroupName"`
 	InstanceId             string                      `position:"Query" name:"InstanceId"`
+	ServiceId              string                      `position:"Query" name:"ServiceId"`
 }
 
 // DescribeMonitorGroupsTag is a repeated param struct in DescribeMonitorGroupsRequest
@@ -114,6 +115,7 @@ func CreateDescribeMonitorGroupsRequest() (request *DescribeMonitorGroupsRequest
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Cms", "2019-01-01", "DescribeMonitorGroups", "cms", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

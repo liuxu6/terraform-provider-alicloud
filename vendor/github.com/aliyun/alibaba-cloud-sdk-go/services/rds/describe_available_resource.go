@@ -83,20 +83,22 @@ type DescribeAvailableResourceRequest struct {
 	DBInstanceId          string           `position:"Query" name:"DBInstanceId"`
 	DBInstanceStorageType string           `position:"Query" name:"DBInstanceStorageType"`
 	InstanceChargeType    string           `position:"Query" name:"InstanceChargeType"`
+	DispenseMode          requests.Integer `position:"Query" name:"DispenseMode"`
 	ResourceOwnerAccount  string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount          string           `position:"Query" name:"OwnerAccount"`
 	CommodityCode         string           `position:"Query" name:"CommodityCode"`
 	OwnerId               requests.Integer `position:"Query" name:"OwnerId"`
 	DBInstanceClass       string           `position:"Query" name:"DBInstanceClass"`
 	ZoneId                string           `position:"Query" name:"ZoneId"`
+	Category              string           `position:"Query" name:"Category"`
 	OrderType             string           `position:"Query" name:"OrderType"`
 }
 
 // DescribeAvailableResourceResponse is the response struct for api DescribeAvailableResource
 type DescribeAvailableResourceResponse struct {
 	*responses.BaseResponse
-	RequestId      string         `json:"RequestId" xml:"RequestId"`
-	AvailableZones AvailableZones `json:"AvailableZones" xml:"AvailableZones"`
+	RequestId      string                                    `json:"RequestId" xml:"RequestId"`
+	AvailableZones AvailableZonesInDescribeAvailableResource `json:"AvailableZones" xml:"AvailableZones"`
 }
 
 // CreateDescribeAvailableResourceRequest creates a request to invoke DescribeAvailableResource API
@@ -105,6 +107,7 @@ func CreateDescribeAvailableResourceRequest() (request *DescribeAvailableResourc
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Rds", "2014-08-15", "DescribeAvailableResource", "rds", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

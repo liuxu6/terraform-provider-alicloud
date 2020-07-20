@@ -26,8 +26,9 @@ func resourceAlicloudAdbCluster() *schema.Resource {
 		},
 
 		Timeouts: &schema.ResourceTimeout{
-			Create: schema.DefaultTimeout(30 * time.Minute),
+			Create: schema.DefaultTimeout(50 * time.Minute),
 			Delete: schema.DefaultTimeout(10 * time.Minute),
+			Update: schema.DefaultTimeout(72 * time.Hour),
 		},
 
 		Schema: map[string]*schema.Schema{
@@ -46,17 +47,14 @@ func resourceAlicloudAdbCluster() *schema.Resource {
 			},
 			"db_node_class": {
 				Type:     schema.TypeString,
-				ForceNew: true,
 				Required: true,
 			},
 			"db_node_count": {
 				Type:     schema.TypeInt,
-				ForceNew: true,
 				Required: true,
 			},
 			"db_node_storage": {
 				Type:     schema.TypeInt,
-				ForceNew: true,
 				Required: true,
 			},
 			"zone_id": {
@@ -104,7 +102,7 @@ func resourceAlicloudAdbCluster() *schema.Resource {
 			"vswitch_id": {
 				Type:     schema.TypeString,
 				ForceNew: true,
-				Optional: true,
+				Required: true,
 			},
 			"maintain_time": {
 				Type:     schema.TypeString,
@@ -238,6 +236,33 @@ func resourceAlicloudAdbClusterUpdate(d *schema.ResourceData, meta interface{}) 
 		d.SetPartial("security_ips")
 	}
 
+	if d.HasChange("db_node_class") || d.HasChange("db_node_count") || d.HasChange("db_node_storage") {
+		request := adb.CreateModifyDBClusterRequest()
+		request.RegionId = client.RegionId
+		request.DBClusterId = d.Id()
+		request.DBNodeClass = d.Get("db_node_class").(string)
+		request.DBNodeStorage = strconv.Itoa(d.Get("db_node_storage").(int))
+		request.DBNodeGroupCount = strconv.Itoa(d.Get("db_node_count").(int))
+
+		raw, err := client.WithAdbClient(func(adbClient *adb.Client) (interface{}, error) {
+			return adbClient.ModifyDBCluster(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
+		// wait cluster status change from ClassChanging to Running
+		stateConf := BuildStateConf([]string{"ClassChanging"}, []string{"Running"}, d.Timeout(schema.TimeoutUpdate), 30*time.Minute, adbService.AdbClusterStateRefreshFunc(d.Id(), []string{}))
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
+		}
+
+		d.SetPartial("db_node_class")
+		d.SetPartial("db_node_count")
+		d.SetPartial("db_node_storage")
+	}
+
 	d.Partial(false)
 	return resourceAlicloudAdbClusterRead(d, meta)
 }
@@ -281,6 +306,8 @@ func resourceAlicloudAdbClusterRead(d *schema.ResourceData, meta interface{}) er
 	d.Set("db_node_class", cluster.DBNodeClass)
 	d.Set("db_node_count", cluster.DBNodeCount)
 	d.Set("db_node_storage", cluster.DBNodeStorage)
+	d.Set("db_cluster_category", cluster.Category)
+	d.Set("db_cluster_version", cluster.DBVersion)
 	tags, err := adbService.DescribeTags(d.Id(), "cluster")
 	if err != nil {
 		return WrapError(err)
@@ -369,7 +396,6 @@ func buildAdbCreateRequest(d *schema.ResourceData, meta interface{}) (*adb.Creat
 	request.DBClusterVersion = Trim(d.Get("db_cluster_version").(string))
 	request.DBClusterCategory = Trim(d.Get("db_cluster_category").(string))
 	request.DBClusterClass = d.Get("db_node_class").(string)
-	request.DBClusterNetworkType = d.Get("db_cluster_network_type").(string)
 	request.DBNodeGroupCount = strconv.Itoa(d.Get("db_node_count").(int))
 	request.DBNodeStorage = strconv.Itoa(d.Get("db_node_storage").(int))
 	request.DBClusterDescription = d.Get("description").(string)

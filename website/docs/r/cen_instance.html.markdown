@@ -29,6 +29,7 @@ The following arguments are supported:
 
 * `name` - (Optional) The name of the CEN instance. Defaults to null. The name must be 2 to 128 characters in length and can contain letters, numbers, periods (.), underscores (_), and hyphens (-). The name must start with a letter, but cannot start with http:// or https://.
 * `description` - (Optional) The description of the CEN instance. Defaults to null. The description must be 2 to 256 characters in length. It must start with a letter, and cannot start with http:// or https://.
+* `tags` - (Optional, Available in v1.80.0+) A mapping of tags to assign to the resource.
 
 ### Timeouts
 
@@ -36,16 +37,16 @@ The following arguments are supported:
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
-* `create` - (Defaults to 5 mins) Used when creating the cen instance (until it reaches the initial `Active` status). 
-* `delete` - (Defaults to 3 mins) Used when terminating the cen instance. 
+* `create` - (Defaults to 6 mins) Used when creating the cen instance (until it reaches the initial `Active` status). 
+* `delete` - (Defaults to 6 mins) Used when terminating the cen instance. 
 
 ## Attributes Reference
 
 The following attributes are exported:
 
 * `id` - The ID of the CEN instance.
-* `name` - The name of the CEN instance.
-* `description` - The description of the CEN instance.
+* `protection_level` - (Available in 1.76.0+) Indicates the allowed level of CIDR block overlapping.
+* `status` - The Cen Instance current status.
 
 ## Import
 

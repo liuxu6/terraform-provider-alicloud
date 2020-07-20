@@ -76,11 +76,12 @@ func (client *Client) DeleteDBClusterWithCallback(request *DeleteDBClusterReques
 // DeleteDBClusterRequest is the request struct for api DeleteDBCluster
 type DeleteDBClusterRequest struct {
 	*requests.RpcRequest
-	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	DBClusterId          string           `position:"Query" name:"DBClusterId"`
-	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	ResourceOwnerId                        requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	BackupRetentionPolicyOnClusterDeletion string           `position:"Query" name:"BackupRetentionPolicyOnClusterDeletion"`
+	ResourceOwnerAccount                   string           `position:"Query" name:"ResourceOwnerAccount"`
+	DBClusterId                            string           `position:"Query" name:"DBClusterId"`
+	OwnerAccount                           string           `position:"Query" name:"OwnerAccount"`
+	OwnerId                                requests.Integer `position:"Query" name:"OwnerId"`
 }
 
 // DeleteDBClusterResponse is the response struct for api DeleteDBCluster

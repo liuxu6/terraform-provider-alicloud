@@ -92,7 +92,8 @@ func CreateUnTagResourcesRequest() (request *UnTagResourcesRequest) {
 	request = &UnTagResourcesRequest{
 		RpcRequest: &requests.RpcRequest{},
 	}
-	request.InitWithApiInfo("HBase", "2019-01-01", "UnTagResources", "", "")
+	request.InitWithApiInfo("HBase", "2019-01-01", "UnTagResources", "hbase", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

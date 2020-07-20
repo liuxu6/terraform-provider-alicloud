@@ -155,6 +155,7 @@ func TestAccAlicloudDBInstanceMysql(t *testing.T) {
 					"vswitch_id":               "${alicloud_vswitch.default.id}",
 					"monitoring_period":        "60",
 					"db_instance_storage_type": "local_ssd",
+					"resource_group_id":        "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -164,13 +165,15 @@ func TestAccAlicloudDBInstanceMysql(t *testing.T) {
 						"instance_storage":           CHECKSET,
 						"auto_upgrade_minor_version": "Auto",
 						"db_instance_storage_type":   "local_ssd",
+						"resource_group_id":          CHECKSET,
 					}),
 				),
 			},
 			{
-				ResourceName:      resourceId,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force_restart"},
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
@@ -368,6 +371,10 @@ data "alicloud_db_instance_classes" "default" {
   instance_charge_type = "PostPaid"
   engine               = "MySQL"
   engine_version       = "5.6"
+}
+
+data "alicloud_resource_manager_resource_groups" "default" {
+	status = "OK"
 }
 
 resource "alicloud_security_group" "default" {
@@ -698,7 +705,7 @@ func TestAccAlicloudDBInstancePostgreSQL(t *testing.T) {
 						"engine":               "PostgreSQL",
 						"engine_version":       "9.4",
 						"instance_type":        CHECKSET,
-						"instance_storage":     "30",
+						"instance_storage":     "25",
 						"instance_name":        "tf-testAccDBInstanceConfig",
 						"monitoring_period":    "60",
 						"zone_id":              CHECKSET,
@@ -1023,9 +1030,14 @@ func TestAccAlicloudDBInstanceClassic(t *testing.T) {
 					"zone_id":              `${lookup(data.alicloud_db_instance_classes.default.instance_classes.0.zone_ids[length(data.alicloud_db_instance_classes.default.instance_classes.0.zone_ids)-1], "id")}`,
 					"instance_name":        "${var.name}",
 					"monitoring_period":    "60",
+					"tde_status":           "Enabled",
+					"ssl_action":           "Open",
 				}),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(nil),
+					testAccCheck(map[string]string{
+						"tde_status": "Enabled",
+						"ssl_status": "Yes",
+					}),
 				),
 			},
 		},

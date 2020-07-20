@@ -65,6 +65,7 @@ type DBInstanceAttribute struct {
 	GuardDBInstanceId                 string                                             `json:"GuardDBInstanceId" xml:"GuardDBInstanceId"`
 	DBInstanceDescription             string                                             `json:"DBInstanceDescription" xml:"DBInstanceDescription"`
 	AccountType                       string                                             `json:"AccountType" xml:"AccountType"`
+	SuperPermissionMode               string                                             `json:"SuperPermissionMode" xml:"SuperPermissionMode"`
 	GuardDBInstanceName               string                                             `json:"GuardDBInstanceName" xml:"GuardDBInstanceName"`
 	RegionId                          string                                             `json:"RegionId" xml:"RegionId"`
 	ResourceGroupId                   string                                             `json:"ResourceGroupId" xml:"ResourceGroupId"`

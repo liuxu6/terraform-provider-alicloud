@@ -92,7 +92,8 @@ func CreateXpackRelateDBRequest() (request *XpackRelateDBRequest) {
 	request = &XpackRelateDBRequest{
 		RpcRequest: &requests.RpcRequest{},
 	}
-	request.InitWithApiInfo("HBase", "2019-01-01", "XpackRelateDB", "", "")
+	request.InitWithApiInfo("HBase", "2019-01-01", "XpackRelateDB", "hbase", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

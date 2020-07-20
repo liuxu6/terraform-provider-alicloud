@@ -20,14 +20,17 @@ type Backup struct {
 	MetaStatus                string `json:"MetaStatus" xml:"MetaStatus"`
 	BackupExtractionStatus    string `json:"BackupExtractionStatus" xml:"BackupExtractionStatus"`
 	HostInstanceID            string `json:"HostInstanceID" xml:"HostInstanceID"`
+	CopyOnlyBackup            string `json:"CopyOnlyBackup" xml:"CopyOnlyBackup"`
 	BackupMode                string `json:"BackupMode" xml:"BackupMode"`
 	BackupIntranetDownloadURL string `json:"BackupIntranetDownloadURL" xml:"BackupIntranetDownloadURL"`
 	BackupEndTime             string `json:"BackupEndTime" xml:"BackupEndTime"`
 	BackupMethod              string `json:"BackupMethod" xml:"BackupMethod"`
 	BackupDBNames             string `json:"BackupDBNames" xml:"BackupDBNames"`
 	BackupType                string `json:"BackupType" xml:"BackupType"`
+	StorageClass              string `json:"StorageClass" xml:"StorageClass"`
 	TotalBackupSize           int64  `json:"TotalBackupSize" xml:"TotalBackupSize"`
 	BackupSize                int64  `json:"BackupSize" xml:"BackupSize"`
+	BackupInitiator           string `json:"BackupInitiator" xml:"BackupInitiator"`
 	BackupStatus              string `json:"BackupStatus" xml:"BackupStatus"`
 	StoreStatus               string `json:"StoreStatus" xml:"StoreStatus"`
 	BackupStartTime           string `json:"BackupStartTime" xml:"BackupStartTime"`

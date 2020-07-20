@@ -3,6 +3,8 @@ package alicloud
 import (
 	"log"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/gpdb"
@@ -13,7 +15,9 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cdn"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/elasticsearch"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/kms"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ots"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
@@ -41,6 +45,17 @@ func tagsSchemaComputed() *schema.Schema {
 	}
 }
 
+func tagsSchemaWithIgnore() *schema.Schema {
+	return &schema.Schema{
+		Type:     schema.TypeMap,
+		Optional: true,
+		Elem: &schema.Schema{
+			Type:         schema.TypeString,
+			ValidateFunc: validation.StringDoesNotMatch(regexp.MustCompile(`(^acs:.*)|(^aliyun.*)|(/.*http://.*\.\w+/gm)|(/.*https://.*\.\w+/gm)`), "It cannot begin with \"aliyun\", \"acs:\"; without \"http://\", and \"https://\"."),
+		},
+	}
+}
+
 // setTags is a helper to set the tags for a resource. It expects the
 // tags field to be named "tags"
 func setTags(client *connectivity.AliyunClient, resourceType TagResourceType, d *schema.ResourceData) error {
@@ -62,6 +77,7 @@ func setCdnTags(client *connectivity.AliyunClient, resourceType TagResourceType,
 }
 
 func setVolumeTags(client *connectivity.AliyunClient, resourceType TagResourceType, d *schema.ResourceData) error {
+	ecsService := EcsService{client}
 	if d.HasChange("volume_tags") {
 		request := ecs.CreateDescribeDisksRequest()
 		request.InstanceId = d.Id()
@@ -97,7 +113,7 @@ func setVolumeTags(client *connectivity.AliyunClient, resourceType TagResourceTy
 			ids = append(ids, disk.DiskId)
 			if disk.Type == "system" {
 				for _, t := range disk.Tags.Tag {
-					if !ecsTagIgnored(t) {
+					if !ecsService.ecsTagIgnored(t) {
 						systemDiskTag[t.TagKey] = t.TagValue
 					}
 				}
@@ -336,6 +352,15 @@ func tagsToMap(tags []ecs.Tag) map[string]string {
 	return result
 }
 
+func elasticsearchTagsToMap(tags []elasticsearch.Tag) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		result[t.TagKey] = t.TagValue
+	}
+
+	return result
+}
+
 func vpcTagsToMap(tags []vpc.Tag) map[string]string {
 	result := make(map[string]string)
 	for _, t := range tags {
@@ -388,6 +413,14 @@ func otsTagsToMap(tags []ots.TagInfo) map[string]string {
 	return result
 }
 
+func kmsTagsToMap(tags []kms.Tag) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		result[t.TagKey] = t.TagValue
+	}
+
+	return result
+}
 func tagsMapEqual(expectMap map[string]interface{}, compareMap map[string]string) bool {
 	if len(expectMap) != len(compareMap) {
 		return false

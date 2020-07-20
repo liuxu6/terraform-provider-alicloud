@@ -85,6 +85,22 @@ const (
 	Vpc             = NetworkType("Vpc")
 	ClassicInternet = NetworkType("classic_internet")
 	ClassicIntranet = NetworkType("classic_intranet")
+	PUBLIC          = NetworkType("PUBLIC")
+	PRIVATE         = NetworkType("PRIVATE")
+)
+
+type NodeType string
+
+const (
+	WORKER = NodeType("WORKER")
+	KIBANA = NodeType("KIBANA")
+)
+
+type ActionType string
+
+const (
+	OPEN  = ActionType("OPEN")
+	CLOSE = ActionType("CLOSE")
 )
 
 type TimeType string
@@ -177,6 +193,7 @@ const (
 	ResourceTypeGpdb          = ResourceType("Gpdb")
 	ResourceTypeHBase         = ResourceType("HBase")
 	ResourceTypeAdb           = ResourceType("ADB")
+	ResourceTypeCassandra     = ResourceType("Cassandra")
 )
 
 type InternetChargeType string
@@ -206,7 +223,7 @@ const (
 
 // timeout for common product, ecs e.g.
 const DefaultTimeout = 120
-
+const Timeout5Minute = 300
 const DefaultTimeoutMedium = 500
 
 // timeout for long time progerss product, rds e.g.
@@ -315,6 +332,22 @@ func convertListToJsonString(configured []interface{}) string {
 	return result
 }
 
+// Convert the result for an array and returns a comma separate
+func convertListToCommaSeparate(configured []interface{}) string {
+	if len(configured) < 1 {
+		return ""
+	}
+	result := ""
+	for i, v := range configured {
+		rail := ","
+		if i == len(configured)-1 {
+			rail = ""
+		}
+		result += v.(string) + rail
+	}
+	return result
+}
+
 func convertJsonStringToList(configured string) ([]interface{}, error) {
 	result := make([]interface{}, 0)
 	if err := json.Unmarshal([]byte(configured), &result); err != nil {
@@ -388,6 +421,7 @@ const (
 	TagResourceApp           = TagResourceType("app")
 	TagResourceTopic         = TagResourceType("topic")
 	TagResourceConsumerGroup = TagResourceType("consumergroup")
+	TagResourceCluster       = TagResourceType("cluster")
 )
 
 type KubernetesNodeType string
@@ -444,18 +478,6 @@ func GetUserHomeDir() (string, error) {
 }
 
 func writeToFile(filePath string, data interface{}) error {
-	if strings.HasPrefix(filePath, "~") {
-		home, err := GetUserHomeDir()
-		if err != nil {
-			return err
-		}
-		if home != "" {
-			filePath = strings.Replace(filePath, "~", home, 1)
-		}
-	}
-
-	os.Remove(filePath)
-
 	var out string
 	switch data.(type) {
 	case string:
@@ -471,8 +493,23 @@ func writeToFile(filePath string, data interface{}) error {
 		out = string(bs)
 	}
 
-	ioutil.WriteFile(filePath, []byte(out), 422)
-	return nil
+	if strings.HasPrefix(filePath, "~") {
+		home, err := GetUserHomeDir()
+		if err != nil {
+			return err
+		}
+		if home != "" {
+			filePath = strings.Replace(filePath, "~", home, 1)
+		}
+	}
+
+	if _, err := os.Stat(filePath); err == nil {
+		if err := os.Remove(filePath); err != nil {
+			return err
+		}
+	}
+
+	return ioutil.WriteFile(filePath, []byte(out), 422)
 }
 
 type Invoker struct {

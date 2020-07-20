@@ -34,7 +34,7 @@ func dataSourceAlicloudKeyPairs() *schema.Resource {
 			},
 			"tags": tagsSchema(),
 			"finger_print": {
-				Type:     schema.TypeBool,
+				Type:     schema.TypeString,
 				Optional: true,
 				Computed: true,
 			},
@@ -214,6 +214,8 @@ func dataSourceAlicloudKeyPairsRead(d *schema.ResourceData, meta interface{}) er
 }
 
 func keyPairsDescriptionAttributes(d *schema.ResourceData, keyPairs []ecs.KeyPair, keyPairsAttach map[string][]map[string]interface{}, meta interface{}) error {
+	client := meta.(*connectivity.AliyunClient)
+	ecsService := EcsService{client}
 	var names []string
 	var ids []string
 	var s []map[string]interface{}
@@ -224,7 +226,7 @@ func keyPairsDescriptionAttributes(d *schema.ResourceData, keyPairs []ecs.KeyPai
 			"finger_print":      key.KeyPairFingerPrint,
 			"resource_group_id": key.ResourceGroupId,
 			"instances":         keyPairsAttach[key.KeyPairName],
-			"tags":              tagsToMap(key.Tags.Tag),
+			"tags":              ecsService.tagsToMap(key.Tags.Tag),
 		}
 
 		names = append(names, string(key.KeyPairName))

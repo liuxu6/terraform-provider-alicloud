@@ -304,6 +304,43 @@ func (s *MongoDBService) DescribeMongoDBBackupPolicy(id string) (*dds.DescribeBa
 	return response, nil
 }
 
+func (s *MongoDBService) DescribeMongoDBTDEInfo(id string) (*dds.DescribeDBInstanceTDEInfoResponse, error) {
+
+	response := &dds.DescribeDBInstanceTDEInfoResponse{}
+	request := dds.CreateDescribeDBInstanceTDEInfoRequest()
+	request.RegionId = s.client.RegionId
+	request.DBInstanceId = id
+	statErr := s.WaitForMongoDBInstance(id, Running, DefaultLongTimeout)
+	if statErr != nil {
+		return response, WrapError(statErr)
+	}
+	raw, err := s.client.WithDdsClient(func(ddsClient *dds.Client) (interface{}, error) {
+		return ddsClient.DescribeDBInstanceTDEInfo(request)
+	})
+	if err != nil {
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	response, _ = raw.(*dds.DescribeDBInstanceTDEInfoResponse)
+	return response, nil
+}
+
+func (s *MongoDBService) DescribeDBInstanceSSL(id string) (*dds.DescribeDBInstanceSSLResponse, error) {
+	response := &dds.DescribeDBInstanceSSLResponse{}
+	request := dds.CreateDescribeDBInstanceSSLRequest()
+	request.RegionId = s.client.RegionId
+	request.DBInstanceId = id
+	raw, err := s.client.WithDdsClient(func(ddsClient *dds.Client) (interface{}, error) {
+		return ddsClient.DescribeDBInstanceSSL(request)
+	})
+	if err != nil {
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	response, _ = raw.(*dds.DescribeDBInstanceSSLResponse)
+	return response, nil
+}
+
 func (s *MongoDBService) MotifyMongoDBBackupPolicy(d *schema.ResourceData) error {
 	if err := s.WaitForMongoDBInstance(d.Id(), Running, DefaultTimeoutMedium); err != nil {
 		return WrapError(err)
@@ -402,6 +439,29 @@ func (s *MongoDBService) tagsToMap(tags []dds.Tag) map[string]string {
 }
 
 func (s *MongoDBService) ignoreTag(t dds.Tag) bool {
+	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
+	for _, v := range filter {
+		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, t.Key)
+		ok, _ := regexp.MatchString(v, t.Key)
+		if ok {
+			log.Printf("[DEBUG] Found Alibaba Cloud specific t %s (val: %s), ignoring.\n", t.Key, t.Value)
+			return true
+		}
+	}
+	return false
+}
+
+func (s *MongoDBService) tagsInAttributeToMap(tags []dds.Tag) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		if !s.ignoreTagInAttribute(t) {
+			result[t.Key] = t.Value
+		}
+	}
+	return result
+}
+
+func (s *MongoDBService) ignoreTagInAttribute(t dds.Tag) bool {
 	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
 	for _, v := range filter {
 		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, t.Key)

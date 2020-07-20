@@ -15,12 +15,14 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cloudapi"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cms"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/cr"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/cr_ee"
 	officalCS "github.com/aliyun/alibaba-cloud-sdk-go/services/cs"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ddosbgp"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ddoscoo"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/dds"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/drds"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/edas"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/elasticsearch"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/emr"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
@@ -29,18 +31,21 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/kms"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/location"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/market"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/maxcompute"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/nas"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ons"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ots"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/polardb"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/pvtz"
-	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r_kvstore"
+	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r-kvstore"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ram"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
+	slsPop "github.com/aliyun/alibaba-cloud-sdk-go/services/sls"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/smartag"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
+	waf_openapi "github.com/aliyun/alibaba-cloud-sdk-go/services/waf-openapi"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/yundun_bastionhost"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/yundun_dbaudit"
 	"github.com/aliyun/aliyun-datahub-sdk-go/datahub"
@@ -63,6 +68,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/cassandra"
+	dms_enterprise "github.com/aliyun/alibaba-cloud-sdk-go/services/dms-enterprise"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/eci"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/resourcemanager"
 )
 
 type AliyunClient struct {
@@ -91,6 +101,7 @@ type AliyunClient struct {
 	officalCSConn                *officalCS.Client
 	cdnconn_new                  *cdn_new.Client
 	crconn                       *cr.Client
+	creeconn                     *cr_ee.Client
 	cdnconn                      *cdn.CdnClient
 	kmsconn                      *kms.Client
 	otsconn                      *ots.Client
@@ -98,6 +109,7 @@ type AliyunClient struct {
 	logconn                      *sls.Client
 	fcconn                       *fc.Client
 	cenconn                      *cbn.Client
+	logpopconn                   *slsPop.Client
 	pvtzconn                     *pvtz.Client
 	ddsconn                      *dds.Client
 	gpdbconn                     *gpdb.Client
@@ -124,6 +136,18 @@ type AliyunClient struct {
 	hbaseconn                    *hbase.Client
 	adbconn                      *adb.Client
 	cbnConn                      *cbn.Client
+	kmsConn                      *kms.Client
+	maxcomputeconn               *maxcompute.Client
+	dnsConn                      *alidns.Client
+	edasconn                     *edas.Client
+	dms_enterpriseConn           *dms_enterprise.Client
+	waf_openapiConn              *waf_openapi.Client
+	resourcemanagerConn          *resourcemanager.Client
+	bssopenapiConn               *bssopenapi.Client
+	alidnsConn                   *alidns.Client
+	ddoscooConn                  *ddoscoo.Client
+	cassandraConn                *cassandra.Client
+	eciConn                      *eci.Client
 }
 
 type ApiVersion string
@@ -150,7 +174,7 @@ const Module = "Terraform-Module"
 
 var goSdkMutex = sync.RWMutex{} // The Go SDK is not thread-safe
 // The main version number that is being run at the moment.
-var providerVersion = "1.72.0"
+var providerVersion = "1.90.1"
 var terraformVersion = strings.TrimSuffix(schema.Provider{}.TerraformVersion, "-dev")
 
 // Client for AliyunClient
@@ -437,9 +461,15 @@ func (client *AliyunClient) WithOssClient(do func(*oss.Client) (interface{}, err
 
 		clientOptions := []oss.ClientOption{oss.UserAgent(client.getUserAgent()),
 			oss.SecurityToken(client.config.SecurityToken)}
-		proxyUrl := client.getHttpProxyUrl()
-		if proxyUrl != nil {
-			clientOptions = append(clientOptions, oss.Proxy(proxyUrl.String()))
+		proxy, err := client.getHttpProxy()
+		if proxy != nil {
+			skip, err := client.skipProxy(endpoint)
+			if err != nil {
+				return nil, err
+			}
+			if !skip {
+				clientOptions = append(clientOptions, oss.Proxy(proxy.String()))
+			}
 		}
 
 		ossconn, err := oss.New(endpoint, client.config.AccessKey, client.config.SecretKey, clientOptions...)
@@ -562,6 +592,32 @@ func (client *AliyunClient) WithCrClient(do func(*cr.Client) (interface{}, error
 	}
 
 	return do(client.crconn)
+}
+
+func (client *AliyunClient) WithCrEEClient(do func(*cr_ee.Client) (interface{}, error)) (interface{}, error) {
+	// Initialize the CR EE client if necessary
+	if client.creeconn == nil {
+		endpoint := client.config.CrEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, CRCode)
+			if endpoint == "" {
+				endpoint = fmt.Sprintf("cr.%s.aliyuncs.com", client.config.RegionId)
+			}
+		}
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.config.RegionId, string(CRCode), endpoint)
+		}
+		creeconn, err := cr_ee.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the CR EE client: %#v", err)
+		}
+		creeconn.AppendUserAgent(Terraform, terraformVersion)
+		creeconn.AppendUserAgent(Provider, providerVersion)
+		creeconn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.creeconn = creeconn
+	}
+
+	return do(client.creeconn)
 }
 
 func (client *AliyunClient) WithCdnClient(do func(*cdn.CdnClient) (interface{}, error)) (interface{}, error) {
@@ -730,6 +786,31 @@ func (client *AliyunClient) WithStsClient(do func(*sts.Client) (interface{}, err
 	}
 
 	return do(client.stsconn)
+}
+
+func (client *AliyunClient) WithLogPopClient(do func(*slsPop.Client) (interface{}, error)) (interface{}, error) {
+	// Initialize the HBase client if necessary
+	if client.logpopconn == nil {
+		endpoint := client.config.LogEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, LOGCode)
+		}
+		if endpoint != "" {
+			endpoint = fmt.Sprintf("%s.log.aliyuncs.com", client.config.RegionId)
+		}
+		logpopconn, err := slsPop.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the sls client: %#v", err)
+		}
+
+		logpopconn.AppendUserAgent(Terraform, terraformVersion)
+		logpopconn.AppendUserAgent(Provider, providerVersion)
+		logpopconn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.logpopconn = logpopconn
+	}
+
+	return do(client.logpopconn)
 }
 
 func (client *AliyunClient) WithLogClient(do func(*sls.Client) (interface{}, error)) (interface{}, error) {
@@ -975,7 +1056,16 @@ func (client *AliyunClient) WithMnsClient(do func(*ali_mns.MNSClient) (interface
 		mnsUrl := fmt.Sprintf("https://%s.mns.%s", accountId, endpoint)
 
 		mnsClient := ali_mns.NewAliMNSClientWithToken(mnsUrl, client.config.AccessKey, client.config.SecretKey, client.config.SecurityToken)
-
+		proxy, err := client.getHttpProxy()
+		if proxy != nil {
+			skip, err := client.skipProxy(endpoint)
+			if err != nil {
+				return nil, err
+			}
+			if !skip {
+				mnsClient.SetProxy(proxy.String())
+			}
+		}
 		client.mnsconn = &mnsClient
 	}
 
@@ -1144,29 +1234,46 @@ func (client *AliyunClient) getTransport() *http.Transport {
 	transport := &http.Transport{}
 	transport.TLSHandshakeTimeout = time.Duration(handshakeTimeout) * time.Second
 
-	// After building a new transport and it need to set http proxy to support proxy.
-	proxyUrl := client.getHttpProxyUrl()
-	if proxyUrl != nil {
-		transport.Proxy = http.ProxyURL(proxyUrl)
-	}
 	return transport
 }
 
-func (client *AliyunClient) getHttpProxyUrl() *url.URL {
-	for _, v := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
-		value := strings.Trim(os.Getenv(v), " ")
-		if value != "" {
-			if !regexp.MustCompile(`^http(s)?://`).MatchString(value) {
-				value = fmt.Sprintf("https://%s", value)
-			}
-			proxyUrl, err := url.Parse(value)
-			if err == nil {
-				return proxyUrl
-			}
-			break
+func (client *AliyunClient) getHttpProxy() (proxy *url.URL, err error) {
+	if client.config.Protocol == "HTTPS" {
+		if rawurl := os.Getenv("HTTPS_PROXY"); rawurl != "" {
+			proxy, err = url.Parse(rawurl)
+		} else if rawurl := os.Getenv("https_proxy"); rawurl != "" {
+			proxy, err = url.Parse(rawurl)
+		}
+	} else {
+		if rawurl := os.Getenv("HTTP_PROXY"); rawurl != "" {
+			proxy, err = url.Parse(rawurl)
+		} else if rawurl := os.Getenv("http_proxy"); rawurl != "" {
+			proxy, err = url.Parse(rawurl)
 		}
 	}
-	return nil
+	return proxy, err
+}
+
+func (client *AliyunClient) skipProxy(endpoint string) (bool, error) {
+	var urls []string
+	if rawurl := os.Getenv("NO_PROXY"); rawurl != "" {
+		urls = strings.Split(rawurl, ",")
+	} else if rawurl := os.Getenv("no_proxy"); rawurl != "" {
+		urls = strings.Split(rawurl, ",")
+	}
+	for _, value := range urls {
+		if strings.HasPrefix(value, "*") {
+			value = fmt.Sprintf(".%s", value)
+		}
+		noProxyReg, err := regexp.Compile(value)
+		if err != nil {
+			return false, err
+		}
+		if noProxyReg.MatchString(endpoint) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (client *AliyunClient) describeEndpointForService(serviceCode string) (*location.Endpoint, error) {
@@ -1577,4 +1684,205 @@ func (client *AliyunClient) WithCbnClient(do func(*cbn.Client) (interface{}, err
 		client.cbnConn = cbnConn
 	}
 	return do(client.cbnConn)
+}
+
+func (client *AliyunClient) WithMaxComputeClient(do func(*maxcompute.Client) (interface{}, error)) (interface{}, error) {
+	goSdkMutex.Lock()
+	defer goSdkMutex.Unlock()
+
+	// Initialize the MaxCompute client if necessary
+	if client.maxcomputeconn == nil {
+		endpoint := client.config.MaxComputeEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, MAXCOMPUTECode)
+		}
+		if strings.HasPrefix(endpoint, "http") {
+			endpoint = fmt.Sprintf("https://%s", strings.TrimPrefix(endpoint, "http://"))
+		}
+		if endpoint == "" {
+			endpoint = "maxcompute.aliyuncs.com"
+		}
+
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.config.RegionId, string(MAXCOMPUTECode), endpoint)
+		}
+		maxcomputeconn, err := maxcompute.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(false))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the MaxCompute client: %#v", err)
+		}
+
+		maxcomputeconn.AppendUserAgent(Terraform, terraformVersion)
+		maxcomputeconn.AppendUserAgent(Provider, providerVersion)
+		maxcomputeconn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.maxcomputeconn = maxcomputeconn
+	}
+
+	return do(client.maxcomputeconn)
+}
+
+func (client *AliyunClient) WithEdasClient(do func(*edas.Client) (interface{}, error)) (interface{}, error) {
+	// Initialize the edas client if necessary
+	if client.edasconn == nil {
+		endpoint := client.config.edasEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, EDASCode)
+		}
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.config.RegionId, string(EDASCode), endpoint)
+		}
+		edasconn, err := edas.NewClientWithOptions(client.config.RegionId, client.getSdkConfig().WithTimeout(time.Duration(60)*time.Second), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the ALIKAFKA client: %#v", err)
+		}
+		edasconn.AppendUserAgent(Terraform, terraformVersion)
+		edasconn.AppendUserAgent(Provider, providerVersion)
+		edasconn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.edasconn = edasconn
+	}
+
+	return do(client.edasconn)
+}
+
+func (client *AliyunClient) WithDmsEnterpriseClient(do func(*dms_enterprise.Client) (interface{}, error)) (interface{}, error) {
+	if client.dms_enterpriseConn == nil {
+		endpoint := client.config.DmsEnterpriseEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, DmsEnterpriseCode)
+		}
+		if strings.HasPrefix(endpoint, "http") {
+			endpoint = fmt.Sprintf("https://%s", strings.TrimPrefix(endpoint, "http://"))
+		}
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.config.RegionId, string(DmsEnterpriseCode), endpoint)
+		}
+
+		dms_enterpriseConn, err := dms_enterprise.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the DmsEnterpriseclient: %#v", err)
+		}
+		dms_enterpriseConn.AppendUserAgent(Terraform, terraformVersion)
+		dms_enterpriseConn.AppendUserAgent(Provider, providerVersion)
+		dms_enterpriseConn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.dms_enterpriseConn = dms_enterpriseConn
+	}
+	return do(client.dms_enterpriseConn)
+}
+
+func (client *AliyunClient) WithWafOpenapiClient(do func(*waf_openapi.Client) (interface{}, error)) (interface{}, error) {
+	if client.waf_openapiConn == nil {
+		endpoint := client.config.WafOpenapiEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, WafOpenapiCode)
+		}
+		if strings.HasPrefix(endpoint, "http") {
+			endpoint = fmt.Sprintf("https://%s", strings.TrimPrefix(endpoint, "http://"))
+		}
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.config.RegionId, string(WafOpenapiCode), endpoint)
+		}
+
+		waf_openapiConn, err := waf_openapi.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the WafOpenapiclient: %#v", err)
+		}
+		waf_openapiConn.AppendUserAgent(Terraform, terraformVersion)
+		waf_openapiConn.AppendUserAgent(Provider, providerVersion)
+		waf_openapiConn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.waf_openapiConn = waf_openapiConn
+	}
+	return do(client.waf_openapiConn)
+}
+
+func (client *AliyunClient) WithResourcemanagerClient(do func(*resourcemanager.Client) (interface{}, error)) (interface{}, error) {
+	if client.resourcemanagerConn == nil {
+		endpoint := client.config.ResourcemanagerEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, ResourcemanagerCode)
+		}
+		if strings.HasPrefix(endpoint, "http") {
+			endpoint = fmt.Sprintf("https://%s", strings.TrimPrefix(endpoint, "http://"))
+		}
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.config.RegionId, string(ResourcemanagerCode), endpoint)
+		}
+
+		resourcemanagerConn, err := resourcemanager.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the Resourcemanagerclient: %#v", err)
+		}
+		resourcemanagerConn.AppendUserAgent(Terraform, terraformVersion)
+		resourcemanagerConn.AppendUserAgent(Provider, providerVersion)
+		resourcemanagerConn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.resourcemanagerConn = resourcemanagerConn
+	}
+	return do(client.resourcemanagerConn)
+}
+
+func (client *AliyunClient) WithAlidnsClient(do func(*alidns.Client) (interface{}, error)) (interface{}, error) {
+	if client.alidnsConn == nil {
+		endpoint := client.config.AlidnsEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, AlidnsCode)
+		}
+		if strings.HasPrefix(endpoint, "http") {
+			endpoint = fmt.Sprintf("https://%s", strings.TrimPrefix(endpoint, "http://"))
+		}
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.config.RegionId, string(AlidnsCode), endpoint)
+		}
+
+		alidnsConn, err := alidns.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the Alidnsclient: %#v", err)
+		}
+		alidnsConn.AppendUserAgent(Terraform, terraformVersion)
+		alidnsConn.AppendUserAgent(Provider, providerVersion)
+		alidnsConn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.alidnsConn = alidnsConn
+	}
+	return do(client.alidnsConn)
+}
+
+func (client *AliyunClient) WithCassandraClient(do func(*cassandra.Client) (interface{}, error)) (interface{}, error) {
+	if client.cassandraConn == nil {
+		endpoint := client.config.CassandraEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, CassandraCode)
+			endpoints.AddEndpointMapping(client.config.RegionId, string(CassandraCode), endpoint)
+		}
+		cassandraConn, err := cassandra.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the Cassandraclient: %#v", err)
+		}
+		cassandraConn.AppendUserAgent(Terraform, terraformVersion)
+		cassandraConn.AppendUserAgent(Provider, providerVersion)
+		cassandraConn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.cassandraConn = cassandraConn
+	}
+	return do(client.cassandraConn)
+}
+
+func (client *AliyunClient) WithEciClient(do func(*eci.Client) (interface{}, error)) (interface{}, error) {
+	if client.eciConn == nil {
+		endpoint := client.config.EciEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.config.RegionId, EciCode)
+		}
+		if strings.HasPrefix(endpoint, "http") {
+			endpoint = fmt.Sprintf("https://%s", strings.TrimPrefix(endpoint, "http://"))
+		}
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.config.RegionId, string(EciCode), endpoint)
+		}
+
+		eciConn, err := eci.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the Eciclient: %#v", err)
+		}
+		eciConn.AppendUserAgent(Terraform, terraformVersion)
+		eciConn.AppendUserAgent(Provider, providerVersion)
+		eciConn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.eciConn = eciConn
+	}
+	return do(client.eciConn)
 }

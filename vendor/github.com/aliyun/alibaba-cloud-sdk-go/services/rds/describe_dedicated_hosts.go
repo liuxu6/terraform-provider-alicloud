@@ -77,10 +77,15 @@ func (client *Client) DescribeDedicatedHostsWithCallback(request *DescribeDedica
 type DescribeDedicatedHostsRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	HostType             string           `position:"Query" name:"HostType"`
+	HostStatus           string           `position:"Query" name:"HostStatus"`
+	AllocationStatus     string           `position:"Query" name:"AllocationStatus"`
+	DedicatedHostGroupId string           `position:"Query" name:"DedicatedHostGroupId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OrderId              requests.Integer `position:"Query" name:"OrderId"`
+	DedicatedHostId      string           `position:"Query" name:"DedicatedHostId"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	DedicatedHostGroupId string           `position:"Query" name:"DedicatedHostGroupId"`
+	ZoneId               string           `position:"Query" name:"ZoneId"`
 }
 
 // DescribeDedicatedHostsResponse is the response struct for api DescribeDedicatedHosts
@@ -97,6 +102,7 @@ func CreateDescribeDedicatedHostsRequest() (request *DescribeDedicatedHostsReque
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Rds", "2014-08-15", "DescribeDedicatedHosts", "rds", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

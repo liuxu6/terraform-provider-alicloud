@@ -162,7 +162,11 @@ func resourceAlicloudDBInstance() *schema.Resource {
 				Optional: true,
 				Computed: true,
 			},
-
+			"force_restart": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
 			"tags": tagsSchema(),
 
 			"maintain_time": {
@@ -197,6 +201,28 @@ func resourceAlicloudDBInstance() *schema.Resource {
 				Optional:     true,
 				ValidateFunc: validation.IntInSlice([]int{30, 180, 365, 1095, 1825}),
 				Default:      30,
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				Computed: true,
+			},
+			"ssl_action": {
+				Type:         schema.TypeString,
+				ValidateFunc: validation.StringInSlice([]string{"Open", "Close", "Update"}, false),
+				Optional:     true,
+				Computed:     true,
+			},
+			"tde_status": {
+				Type:         schema.TypeString,
+				ValidateFunc: validation.StringInSlice([]string{"Enabled"}, false),
+				Optional:     true,
+				ForceNew:     true,
+			},
+			"ssl_status": {
+				Type:     schema.TypeString,
+				Computed: true,
 			},
 		},
 	}
@@ -240,7 +266,7 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 	client := meta.(*connectivity.AliyunClient)
 	rdsService := RdsService{client}
 	d.Partial(true)
-	stateConf := BuildStateConf([]string{"DBInstanceClassChanging", "DBInstanceNetTypeChanging"}, []string{"Running"}, d.Timeout(schema.TimeoutUpdate), 10*time.Minute, rdsService.RdsDBInstanceStateRefreshFunc(d.Id(), []string{"Deleting"}))
+	stateConf := BuildStateConf([]string{"DBInstanceClassChanging", "DBInstanceNetTypeChanging", "CONFIG_ENCRYPTING", "SSL_MODIFYING"}, []string{"Running"}, d.Timeout(schema.TimeoutUpdate), 5*time.Minute, rdsService.RdsDBInstanceStateRefreshFunc(d.Id(), []string{"Deleting"}))
 
 	if d.HasChange("parameters") {
 		if err := rdsService.ModifyParameters(d, "parameters"); err != nil {
@@ -368,6 +394,115 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 		d.SetPartial("auto_upgrade_minor_version")
 	}
 
+	if d.HasChange("security_ip_mode") && d.Get("security_ip_mode").(string) == SafetyMode {
+		request := rds.CreateMigrateSecurityIPModeRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+			return rdsClient.MigrateSecurityIPMode(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("security_ip_mode")
+	}
+
+	if d.HasChange("sql_collector_status") {
+		request := rds.CreateModifySQLCollectorPolicyRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		if d.Get("sql_collector_status").(string) == "Enabled" {
+			request.SQLCollectorStatus = "Enable"
+		} else {
+			request.SQLCollectorStatus = d.Get("sql_collector_status").(string)
+		}
+		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+			return rdsClient.ModifySQLCollectorPolicy(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("sql_collector_status")
+	}
+
+	if d.Get("sql_collector_status").(string) == "Enabled" && d.HasChange("sql_collector_config_value") {
+		request := rds.CreateModifySQLCollectorRetentionRequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		request.ConfigValue = strconv.Itoa(d.Get("sql_collector_config_value").(int))
+		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+			return rdsClient.ModifySQLCollectorRetention(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("sql_collector_config_value")
+	}
+
+	if d.HasChange("ssl_action") {
+		request := rds.CreateModifyDBInstanceSSLRequest()
+		request.DBInstanceId = d.Id()
+		request.RegionId = client.RegionId
+		sslAction := d.Get("ssl_action").(string)
+		if sslAction == "Close" {
+			request.SSLEnabled = requests.NewInteger(0)
+		}
+		if sslAction == "Open" {
+			request.SSLEnabled = requests.NewInteger(1)
+		}
+		if sslAction == "Update" {
+			request.SSLEnabled = requests.NewInteger(2)
+		}
+
+		instance, err := rdsService.DescribeDBInstance(d.Id())
+		if err != nil {
+			if NotFoundError(err) {
+				d.SetId("")
+				return nil
+			}
+			return WrapError(err)
+		}
+		request.ConnectionString = instance.ConnectionString
+
+		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+			return rdsClient.ModifyDBInstanceSSL(request)
+		})
+
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("ssl_action")
+
+		// wait instance status is running after modifying
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
+		}
+	}
+
+	if d.HasChange("tde_status") {
+		request := rds.CreateModifyDBInstanceTDERequest()
+		request.RegionId = client.RegionId
+		request.DBInstanceId = d.Id()
+		request.TDEStatus = d.Get("tde_status").(string)
+		raw, err := client.WithRdsClient(func(client *rds.Client) (interface{}, error) {
+			return client.ModifyDBInstanceTDE(request)
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		d.SetPartial("tde_status")
+
+		// wait instance status is running after modifying
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
+		}
+	}
+
 	if d.IsNewResource() {
 		d.Partial(false)
 		return resourceAlicloudDBInstanceRead(d, meta)
@@ -402,54 +537,6 @@ func resourceAlicloudDBInstanceUpdate(d *schema.ResourceData, meta interface{}) 
 			return WrapError(err)
 		}
 		d.SetPartial("security_ips")
-	}
-
-	if d.HasChange("security_ip_mode") && d.Get("security_ip_mode").(string) == SafetyMode {
-		request := rds.CreateMigrateSecurityIPModeRequest()
-		request.RegionId = client.RegionId
-		request.DBInstanceId = d.Id()
-		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
-			return rdsClient.MigrateSecurityIPMode(request)
-		})
-		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
-		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-		d.SetPartial("security_ip_mode")
-	}
-
-	if d.HasChange("sql_collector_status") {
-		request := rds.CreateModifySQLCollectorPolicyRequest()
-		request.RegionId = client.RegionId
-		request.DBInstanceId = d.Id()
-		if d.Get("sql_collector_status").(string) == "Enabled" {
-			request.SQLCollectorStatus = "Enable"
-		} else {
-			request.SQLCollectorStatus = d.Get("sql_collector_status").(string)
-		}
-		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
-			return rdsClient.ModifySQLCollectorPolicy(request)
-		})
-		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
-		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-		d.SetPartial("sql_collector_status")
-	}
-
-	if d.Get("sql_collector_status").(string) == "Enabled" && d.HasChange("sql_collector_config_value") && d.Get("sql_collector_config_value").(string) != "1" {
-		request := rds.CreateModifySQLCollectorRetentionRequest()
-		request.RegionId = client.RegionId
-		request.DBInstanceId = d.Id()
-		request.ConfigValue = strconv.Itoa(d.Get("sql_collector_config_value").(int))
-		raw, err := client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
-			return rdsClient.ModifySQLCollectorRetention(request)
-		})
-		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
-		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-		d.SetPartial("sql_collector_config_value")
 	}
 
 	update := false
@@ -548,6 +635,7 @@ func resourceAlicloudDBInstanceRead(d *schema.ResourceData, meta interface{}) er
 		return WrapError(err)
 	}
 
+	d.Set("resource_group_id", instance.ResourceGroupId)
 	d.Set("monitoring_period", monitoringPeriod)
 
 	d.Set("security_ips", ips)
@@ -614,6 +702,19 @@ func resourceAlicloudDBInstanceRead(d *schema.ResourceData, meta interface{}) er
 	d.Set("security_group_id", strings.Join(groups, COMMA_SEPARATED))
 	d.Set("security_group_ids", groups)
 
+	sslAction, err := rdsService.DescribeDBInstanceSSL(d.Id())
+	if err != nil && !IsExpectedErrors(err, []string{"InvaildEngineInRegion.ValueNotSupported", "InstanceEngineType.NotSupport", "OperationDenied.DBInstanceType"}) {
+		return WrapError(err)
+	}
+	d.Set("ssl_status", sslAction.RequireUpdate)
+	d.Set("ssl_action", d.Get("ssl_action"))
+
+	tdeInfo, err := rdsService.DescribeRdsTDEInfo(d.Id())
+	if err != nil && !IsExpectedErrors(err, []string{"InvaildEngineInRegion.ValueNotSupported", "InstanceEngineType.NotSupport", "OperationDenied.DBInstanceType"}) {
+		return WrapError(err)
+	}
+	d.Set("tde_Status", tdeInfo.TDEStatus)
+
 	return nil
 }
 
@@ -656,7 +757,7 @@ func resourceAlicloudDBInstanceDelete(d *schema.ResourceData, meta interface{}) 
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 
-	stateConf := BuildStateConf([]string{"Creating", "Running", "Deleting"}, []string{}, d.Timeout(schema.TimeoutDelete), 1*time.Minute, rdsService.RdsDBInstanceStateRefreshFunc(d.Id(), []string{}))
+	stateConf := BuildStateConf([]string{"Processing", "Pending", "NoStart", "Failed", "Default"}, []string{}, d.Timeout(schema.TimeoutDelete), 1*time.Minute, rdsService.RdsTaskStateRefreshFunc(d.Id(), "DeleteDBInstance"))
 	if _, err = stateConf.WaitForState(); err != nil {
 		return WrapErrorf(err, IdMsg, d.Id())
 	}
@@ -676,6 +777,10 @@ func buildDBCreateRequest(d *schema.ResourceData, meta interface{}) (*rds.Create
 	request.DBInstanceDescription = d.Get("instance_name").(string)
 	request.DBInstanceStorageType = d.Get("db_instance_storage_type").(string)
 
+	if v, ok := d.GetOk("resource_group_id"); ok && v.(string) != "" {
+		request.ResourceGroupId = v.(string)
+	}
+
 	if zone, ok := d.GetOk("zone_id"); ok && Trim(zone.(string)) != "" {
 		request.ZoneId = Trim(zone.(string))
 	}
@@ -689,23 +794,29 @@ func buildDBCreateRequest(d *schema.ResourceData, meta interface{}) (*rds.Create
 		request.InstanceNetworkType = strings.ToUpper(string(Vpc))
 
 		// check vswitchId in zone
-		vsw, err := vpcService.DescribeVSwitch(vswitchId)
+		v := strings.Split(vswitchId, COMMA_SEPARATED)[0]
+
+		vsw, err := vpcService.DescribeVSwitch(v)
 		if err != nil {
 			return nil, WrapError(err)
 		}
 
 		if request.ZoneId == "" {
 			request.ZoneId = vsw.ZoneId
-		} else if strings.Contains(request.ZoneId, MULTI_IZ_SYMBOL) {
-			zonestr := strings.Split(strings.SplitAfter(request.ZoneId, "(")[1], ")")[0]
-			if !strings.Contains(zonestr, string([]byte(vsw.ZoneId)[len(vsw.ZoneId)-1])) {
-				return nil, WrapError(Error("The specified vswitch %s isn't in the multi zone %s.", vsw.VSwitchId, request.ZoneId))
-			}
-		} else if request.ZoneId != vsw.ZoneId {
-			return nil, WrapError(Error("The specified vswitch %s isn't in the zone %s.", vsw.VSwitchId, request.ZoneId))
 		}
 
-		request.VPCId = vsw.VpcId
+		if request.VPCId == "" {
+			request.VPCId = vsw.VpcId
+		}
+
+		//else if strings.Contains(request.ZoneId, MULTI_IZ_SYMBOL) {
+		//	zonestr := strings.Split(strings.SplitAfter(request.ZoneId, "(")[1], ")")[0]
+		//	if !strings.Contains(zonestr, string([]byte(vsw.ZoneId)[len(vsw.ZoneId)-1])) {
+		//		return nil, WrapError(Error("The specified vswitch %s isn't in the multi zone %s.", vsw.VSwitchId, request.ZoneId))
+		//	}
+		//} else if request.ZoneId != vsw.ZoneId {
+		//	return nil, WrapError(Error("The specified vswitch %s isn't in the zone %s.", vsw.VSwitchId, request.ZoneId))
+		//}
 	}
 
 	request.PayType = Trim(d.Get("instance_charge_type").(string))

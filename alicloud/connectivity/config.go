@@ -76,10 +76,19 @@ type Config struct {
 	MarketEndpoint        string
 	HBaseEndpoint         string
 	AdbEndpoint           string
+	MaxComputeEndpoint    string
 
-	SkipRegionValidation bool
-	ConfigurationSource  string
-	CbnEndpoint          string
+	edasEndpoint            string
+	SkipRegionValidation    bool
+	ConfigurationSource     string
+	CbnEndpoint             string
+	DmsEnterpriseEndpoint   string
+	WafOpenapiEndpoint      string
+	ResourcemanagerEndpoint string
+	BssopenapiEndpoint      string
+	AlidnsEndpoint          string
+	CassandraEndpoint       string
+	EciEndpoint             string
 }
 
 func (c *Config) loadAndValidate() error {

@@ -85,6 +85,7 @@ type CreateScalingConfigurationRequest struct {
 	Password                       string                                      `position:"Query" name:"Password"`
 	InstanceDescription            string                                      `position:"Query" name:"InstanceDescription"`
 	SystemDiskAutoSnapshotPolicyId string                                      `position:"Query" name:"SystemDisk.AutoSnapshotPolicyId"`
+	Ipv6AddressCount               requests.Integer                            `position:"Query" name:"Ipv6AddressCount"`
 	Cpu                            requests.Integer                            `position:"Query" name:"Cpu"`
 	OwnerId                        requests.Integer                            `position:"Query" name:"OwnerId"`
 	ScalingConfigurationName       string                                      `position:"Query" name:"ScalingConfigurationName"`
@@ -111,10 +112,12 @@ type CreateScalingConfigurationRequest struct {
 	OwnerAccount                   string                                      `position:"Query" name:"OwnerAccount"`
 	SystemDiskDiskName             string                                      `position:"Query" name:"SystemDisk.DiskName"`
 	RamRoleName                    string                                      `position:"Query" name:"RamRoleName"`
+	CreditSpecification            string                                      `position:"Query" name:"CreditSpecification"`
 	SecurityGroupIds               *[]string                                   `position:"Query" name:"SecurityGroupIds"  type:"Repeated"`
 	DataDisk                       *[]CreateScalingConfigurationDataDisk       `position:"Query" name:"DataDisk"  type:"Repeated"`
 	LoadBalancerWeight             requests.Integer                            `position:"Query" name:"LoadBalancerWeight"`
 	SystemDiskSize                 requests.Integer                            `position:"Query" name:"SystemDisk.Size"`
+	ImageFamily                    string                                      `position:"Query" name:"ImageFamily"`
 	SystemDiskDescription          string                                      `position:"Query" name:"SystemDisk.Description"`
 }
 

@@ -11,6 +11,8 @@ import (
 
 	"encoding/base64"
 
+	"encoding/json"
+
 	"github.com/denverdino/aliyungo/cs"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
@@ -41,6 +43,7 @@ const (
 var (
 	ATTACH_SCRIPT_WITH_VERSION = `#!/bin/sh
 curl http://aliacs-k8s-%s.oss-%s.aliyuncs.com/public/pkg/run/attach/%s/attach_node.sh | bash -s -- --openapi-token %s --ess true `
+	NETWORK_ADDON_NAMES = []string{"terway", "kube-flannel-ds", "terway-eni", "terway-eniip"}
 )
 
 func (s *CsService) GetContainerClusterByName(name string) (cluster cs.ClusterType, err error) {
@@ -144,7 +147,7 @@ func (s *CsService) WaitForContainerApplication(clusterName, appName string, sta
 	return nil
 }
 
-func (s *CsService) DescribeCsKubernetes(id string) (cluster cs.KubernetesCluster, err error) {
+func (s *CsService) DescribeCsKubernetes(id string) (cluster *cs.KubernetesClusterDetail, err error) {
 	invoker := NewInvoker()
 	var requestInfo *cs.Client
 	var response interface{}
@@ -152,7 +155,7 @@ func (s *CsService) DescribeCsKubernetes(id string) (cluster cs.KubernetesCluste
 	if err := invoker.Run(func() error {
 		raw, err := s.client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
 			requestInfo = csClient
-			return csClient.DescribeKubernetesCluster(id)
+			return csClient.DescribeKubernetesClusterDetail(id)
 		})
 		response = raw
 		return err
@@ -167,8 +170,8 @@ func (s *CsService) DescribeCsKubernetes(id string) (cluster cs.KubernetesCluste
 		requestMap["ClusterId"] = id
 		addDebug("DescribeKubernetesCluster", response, requestInfo, requestMap)
 	}
-	cluster, _ = response.(cs.KubernetesCluster)
-	if cluster.ClusterID != id {
+	cluster, _ = response.(*cs.KubernetesClusterDetail)
+	if cluster.ClusterId != id {
 		return cluster, WrapErrorf(Error(GetNotFoundMessage("CsKubernetes", id)), NotFoundMsg, ProviderERROR)
 	}
 	return
@@ -188,18 +191,18 @@ func (s *CsService) WaitForCsKubernetes(id string, status Status, timeout int) e
 				return WrapError(err)
 			}
 		}
-		if object.ClusterID == id && status != Deleted {
+		if object.ClusterId == id && status != Deleted {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object.ClusterID, id, ProviderERROR)
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object.ClusterId, id, ProviderERROR)
 		}
 		time.Sleep(DefaultIntervalShort * time.Second)
 
 	}
 }
 
-func (s *CsService) DescribeCsManagedKubernetes(id string) (cluster cs.KubernetesCluster, err error) {
+func (s *CsService) DescribeCsManagedKubernetes(id string) (cluster *cs.KubernetesClusterDetail, err error) {
 	var requestInfo *cs.Client
 	invoker := NewInvoker()
 	var response interface{}
@@ -207,7 +210,7 @@ func (s *CsService) DescribeCsManagedKubernetes(id string) (cluster cs.Kubernete
 	if err := invoker.Run(func() error {
 		raw, err := s.client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
 			requestInfo = csClient
-			return csClient.DescribeKubernetesCluster(id)
+			return csClient.DescribeKubernetesClusterDetail(id)
 		})
 		response = raw
 		return err
@@ -222,8 +225,8 @@ func (s *CsService) DescribeCsManagedKubernetes(id string) (cluster cs.Kubernete
 		requestMap["Id"] = id
 		addDebug("DescribeKubernetesCluster", response, requestInfo, requestMap, map[string]interface{}{"Id": id})
 	}
-	cluster, _ = response.(cs.KubernetesCluster)
-	if cluster.ClusterID != id {
+	cluster, _ = response.(*cs.KubernetesClusterDetail)
+	if cluster.ClusterId != id {
 		return cluster, WrapErrorf(Error(GetNotFoundMessage("CSManagedKubernetes", id)), NotFoundMsg, ProviderERROR)
 	}
 	return
@@ -244,11 +247,11 @@ func (s *CsService) WaitForCSManagedKubernetes(id string, status Status, timeout
 				return WrapError(err)
 			}
 		}
-		if object.ClusterID == id && status != Deleted {
+		if object.ClusterId == id && status != Deleted {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object.ClusterID, id, ProviderERROR)
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object.ClusterId, id, ProviderERROR)
 		}
 		time.Sleep(DefaultIntervalShort * time.Second)
 
@@ -450,9 +453,9 @@ func (s *CsService) GetUserData(clusterId string, labels string, taints string) 
 	}
 
 	if labels == "" {
-		labels = fmt.Sprintf("%s=true", DefaultAutoscalerTag)
+		labels = fmt.Sprintf("%s=true", DefaultECSTag)
 	} else {
-		labels = fmt.Sprintf("%s,%s=true", labels, DefaultAutoscalerTag)
+		labels = fmt.Sprintf("%s,%s=true", labels, DefaultECSTag)
 	}
 
 	cluster, err := s.DescribeCsKubernetes(clusterId)
@@ -474,10 +477,14 @@ func (s *CsService) GetUserData(clusterId string, labels string, taints string) 
 		}
 	}
 
+	if network, err := GetKubernetesNetworkName(cluster); err == nil && network != "" {
+		extra_options = append(extra_options, fmt.Sprintf("--network %s", network))
+	}
+
 	extra_options_in_line := strings.Join(extra_options, " ")
 
 	version := cluster.CurrentVersion
-	region := cluster.RegionID
+	region := cluster.RegionId
 
 	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf(ATTACH_SCRIPT_WITH_VERSION+extra_options_in_line, region, region, version, token))), nil
 }
@@ -555,4 +562,19 @@ func (s *CsService) WaitForUpgradeCluster(clusterId string, action string) (stri
 	}
 
 	return cs.Task_Status_Failed, WrapError(err)
+}
+
+func GetKubernetesNetworkName(cluster *cs.KubernetesClusterDetail) (network string, err error) {
+
+	metadata := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(cluster.MetaData), &metadata); err != nil {
+		return "", fmt.Errorf("unmarshal metaData failed. error: %s", err)
+	}
+
+	for _, name := range NETWORK_ADDON_NAMES {
+		if _, ok := metadata[fmt.Sprintf("%s%s", name, "Version")]; ok {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("no network addon found")
 }

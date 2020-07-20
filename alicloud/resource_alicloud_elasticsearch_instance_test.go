@@ -153,6 +153,7 @@ func TestAccAlicloudElasticsearchInstance_basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
+			testAccPreCheckWithNoDefaultVpc(t)
 		},
 		// module name
 		IDRefreshName: resourceId,
@@ -162,7 +163,7 @@ func TestAccAlicloudElasticsearchInstance_basic(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"description":          name,
-					"vswitch_id":           "${alicloud_vswitch.default.id}",
+					"vswitch_id":           "${data.alicloud_vswitches.default.ids[0]}",
 					"version":              "5.5.3_with_X-Pack",
 					"password":             "Yourpassword1234",
 					"data_node_spec":       DataNodeSpec,
@@ -236,6 +237,16 @@ func TestAccAlicloudElasticsearchInstance_basic(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
+					"master_node_spec": MasterNodeSpec,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"master_node_spec": MasterNodeSpec,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
 					"private_whitelist": []string{"192.168.0.0/24", "127.0.0.1"},
 				}),
 				Check: resource.ComposeTestCheckFunc(
@@ -246,25 +257,78 @@ func TestAccAlicloudElasticsearchInstance_basic(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"master_node_spec": MasterNodeSpec,
+					"enable_public": "true",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"enable_public": "true",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"public_whitelist": []string{"192.168.0.0/24", "127.0.0.1"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"public_whitelist.#": "2",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
 					"kibana_whitelist": []string{"192.168.0.0/24", "127.0.0.1"},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"master_node_spec":   MasterNodeSpec,
 						"kibana_whitelist.#": "2",
 					}),
 				),
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"master_node_spec":  MasterNodeSpecForUpdate,
-					"private_whitelist": []string{"192.168.0.0/24", "127.0.0.1"},
+					"enable_kibana_private_network": "true",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"master_node_spec":    MasterNodeSpecForUpdate,
-						"private_whitelist.#": "2",
+						"enable_kibana_private_network": "true",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"kibana_private_whitelist": []string{"192.168.0.0/24", "127.0.0.1"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"kibana_private_whitelist.#": "2",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "acceptance Test",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "acceptance Test",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": REMOVEKEY,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       REMOVEKEY,
+						"tags.Created": REMOVEKEY,
+						"tags.For":     REMOVEKEY,
 					}),
 				),
 			},
@@ -296,6 +360,7 @@ func TestAccAlicloudElasticsearchInstance_multizone(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
+			testAccPreCheckWithNoDefaultVpc(t)
 		},
 		// module name
 		IDRefreshName: resourceId,
@@ -305,7 +370,7 @@ func TestAccAlicloudElasticsearchInstance_multizone(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"description":          name,
-					"vswitch_id":           "${alicloud_vswitch.default.id}",
+					"vswitch_id":           "${data.alicloud_vswitches.default.ids[0]}",
 					"version":              "5.5.3_with_X-Pack",
 					"password":             "Yourpassword1234",
 					"data_node_spec":       DataNodeSpec,
@@ -354,6 +419,7 @@ func TestAccAlicloudElasticsearchInstance_version(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
+			testAccPreCheckWithNoDefaultVpc(t)
 		},
 		// module name
 		IDRefreshName: resourceId,
@@ -363,7 +429,7 @@ func TestAccAlicloudElasticsearchInstance_version(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"description":          name,
-					"vswitch_id":           "${alicloud_vswitch.default.id}",
+					"vswitch_id":           "${data.alicloud_vswitches.default.ids[0]}",
 					"version":              "6.3_with_X-Pack",
 					"password":             "Yourpassword1234",
 					"data_node_spec":       DataNodeSpec,
@@ -417,6 +483,7 @@ func TestAccAlicloudElasticsearchInstance_multi(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
+			testAccPreCheckWithNoDefaultVpc(t)
 		},
 		// module name
 		IDRefreshName: resourceId,
@@ -444,24 +511,89 @@ func TestAccAlicloudElasticsearchInstance_multi(t *testing.T) {
 	})
 }
 
+func TestAccAlicloudElasticsearchInstance_encrypt_disk(t *testing.T) {
+	var instance *elasticsearch.DescribeInstanceResponse
+
+	resourceId := "alicloud_elasticsearch_instance.default"
+	ra := resourceAttrInit(resourceId, elasticsearchMap)
+
+	serviceFunc := func() interface{} {
+		return &ElasticsearchService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInit(resourceId, &instance, serviceFunc)
+
+	rac := resourceAttrCheckInit(rc, ra)
+
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandInt()
+	name := fmt.Sprintf("tf-testAccES%s%d", defaultRegionToTest, rand)
+	if len(name) > 30 {
+		name = name[:30]
+	}
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceElasticsearchInstanceConfigDependence)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithNoDefaultVpc(t)
+		},
+		// module name
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"description":              name,
+					"vswitch_id":               "${data.alicloud_vswitches.default.ids[0]}",
+					"version":                  "5.5.3_with_X-Pack",
+					"password":                 "Yourpassword1234",
+					"data_node_spec":           DataNodeSpec,
+					"data_node_amount":         DataNodeAmountForMultiZone,
+					"data_node_disk_size":      DataNodeDisk,
+					"data_node_disk_type":      DataNodeDiskType,
+					"data_node_disk_encrypted": "true",
+					"instance_charge_type":     string(PostPaid),
+					"master_node_spec":         MasterNodeSpec,
+					"zone_count":               DefaultZoneAmount,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"description":              name,
+						"version":                  "5.5.3_with_X-Pack",
+						"data_node_amount":         DataNodeAmountForMultiZone,
+						"data_node_disk_encrypted": "true",
+						"master_node_spec":         MasterNodeSpec,
+						"zone_count":               DefaultZoneAmount,
+					}),
+				),
+			},
+		},
+	})
+}
+
 var elasticsearchMap = map[string]string{
-	"description":          CHECKSET,
-	"data_node_spec":       DataNodeSpec,
-	"data_node_amount":     DataNodeAmount,
-	"data_node_disk_size":  DataNodeDisk,
-	"data_node_disk_type":  DataNodeDiskType,
-	"instance_charge_type": string(PostPaid),
-	"status":               "active",
-	"kibana_whitelist.#":   "0",
-	"private_whitelist.#":  "0",
-	"public_whitelist.#":   "0",
-	"master_node_spec":     "",
-	"id":                   CHECKSET,
-	"domain":               CHECKSET,
-	"port":                 CHECKSET,
-	"kibana_domain":        CHECKSET,
-	"kibana_port":          CHECKSET,
-	"vswitch_id":           CHECKSET,
+	"description":                   CHECKSET,
+	"data_node_spec":                DataNodeSpec,
+	"data_node_amount":              DataNodeAmount,
+	"data_node_disk_size":           DataNodeDisk,
+	"data_node_disk_type":           DataNodeDiskType,
+	"instance_charge_type":          string(PostPaid),
+	"status":                        "active",
+	"private_whitelist.#":           "0",
+	"public_whitelist.#":            "0",
+	"enable_public":                 "false",
+	"kibana_whitelist.#":            "0",
+	"enable_kibana_public_network":  "true",
+	"kibana_private_whitelist.#":    "0",
+	"enable_kibana_private_network": "false",
+	"master_node_spec":              "",
+	"id":                            CHECKSET,
+	"domain":                        CHECKSET,
+	"port":                          CHECKSET,
+	"kibana_domain":                 CHECKSET,
+	"kibana_port":                   CHECKSET,
+	"vswitch_id":                    CHECKSET,
 }
 
 func resourceElasticsearchInstanceConfigDependence(name string) string {

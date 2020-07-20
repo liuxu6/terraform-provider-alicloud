@@ -95,6 +95,7 @@ type CreateNodeResponse struct {
 	*responses.BaseResponse
 	RequestId string `json:"RequestId" xml:"RequestId"`
 	OrderId   string `json:"OrderId" xml:"OrderId"`
+	NodeId    string `json:"NodeId" xml:"NodeId"`
 }
 
 // CreateCreateNodeRequest creates a request to invoke CreateNode API
@@ -102,7 +103,8 @@ func CreateCreateNodeRequest() (request *CreateNodeRequest) {
 	request = &CreateNodeRequest{
 		RpcRequest: &requests.RpcRequest{},
 	}
-	request.InitWithApiInfo("Dds", "2015-12-01", "CreateNode", "dds", "openAPI")
+	request.InitWithApiInfo("Dds", "2015-12-01", "CreateNode", "Dds", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

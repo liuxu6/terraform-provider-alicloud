@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
 	"github.com/denverdino/aliyungo/common"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
@@ -57,6 +58,25 @@ func (s *RdsService) DescribeDBInstance(id string) (*rds.DBInstanceAttribute, er
 	}
 
 	return &response.Items.DBInstanceAttribute[0], nil
+}
+
+func (s *RdsService) DescribeTasks(id string) (task *rds.DescribeTasksResponse, err error) {
+	request := rds.CreateDescribeTasksRequest()
+	request.RegionId = s.client.RegionId
+	request.DBInstanceId = id
+	raw, err := s.client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+		return rdsClient.DescribeTasks(request)
+	})
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidDBInstanceId.NotFound"}) {
+			return task, WrapErrorf(err, NotFoundMsg, ProviderERROR)
+		}
+		return task, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	response, _ := raw.(*rds.DescribeTasksResponse)
+
+	return response, nil
 }
 
 func (s *RdsService) DescribeDBReadonlyInstance(id string) (*rds.DBInstanceAttribute, error) {
@@ -268,10 +288,14 @@ func (s *RdsService) ModifyParameters(d *schema.ResourceData, attribute string) 
 	request := rds.CreateModifyParameterRequest()
 	request.RegionId = s.client.RegionId
 	request.DBInstanceId = d.Id()
+	request.Forcerestart = requests.NewBoolean(d.Get("force_restart").(bool))
 	config := make(map[string]string)
-	documented := d.Get(attribute).(*schema.Set).List()
-	if len(documented) > 0 {
-		for _, i := range documented {
+	allConfig := make(map[string]string)
+	o, n := d.GetChange(attribute)
+	os, ns := o.(*schema.Set), n.(*schema.Set)
+	add := ns.Difference(os).List()
+	if len(add) > 0 {
+		for _, i := range add {
 			key := i.(map[string]interface{})["name"].(string)
 			value := i.(map[string]interface{})["value"].(string)
 			config[key] = value
@@ -282,6 +306,35 @@ func (s *RdsService) ModifyParameters(d *schema.ResourceData, attribute string) 
 		if err := s.WaitForDBInstance(d.Id(), Running, DefaultLongTimeout); err != nil {
 			return WrapError(err)
 		}
+		// Need to check whether some parameter needs restart
+		if !d.Get("force_restart").(bool) {
+			req := rds.CreateDescribeParameterTemplatesRequest()
+			req.RegionId = s.client.RegionId
+			req.DBInstanceId = d.Id()
+			req.Engine = d.Get("engine").(string)
+			req.EngineVersion = d.Get("engine_version").(string)
+			req.ClientToken = buildClientToken(req.GetActionName())
+			forceRestartMap := make(map[string]string)
+			raw, err := s.client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+				return rdsClient.DescribeParameterTemplates(req)
+			})
+			if err != nil {
+				return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+			}
+			response, _ := raw.(*rds.DescribeParameterTemplatesResponse)
+			for _, para := range response.Parameters.TemplateRecord {
+				if para.ForceRestart == "true" {
+					forceRestartMap[para.ParameterName] = para.ForceRestart
+				}
+			}
+			if len(forceRestartMap) > 0 {
+				for key, _ := range config {
+					if _, ok := forceRestartMap[key]; ok {
+						return WrapError(fmt.Errorf("Modifying RDS instance's parameter '%s' requires setting 'force_restart = true'.", key))
+					}
+				}
+			}
+		}
 		raw, err := s.client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
 			return rdsClient.ModifyParameter(request)
 		})
@@ -291,7 +344,12 @@ func (s *RdsService) ModifyParameters(d *schema.ResourceData, attribute string) 
 
 		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 		// wait instance parameter expect after modifying
-		if err := s.WaitForDBParameter(d.Id(), DefaultTimeoutMedium, config); err != nil {
+		for _, i := range ns.List() {
+			key := i.(map[string]interface{})["name"].(string)
+			value := i.(map[string]interface{})["value"].(string)
+			allConfig[key] = value
+		}
+		if err := s.WaitForDBParameter(d.Id(), DefaultTimeoutMedium, allConfig); err != nil {
 			return WrapError(err)
 		}
 	}
@@ -707,6 +765,43 @@ func (s *RdsService) DescribeSecurityGroupConfiguration(id string) ([]string, er
 	return groupIds, nil
 }
 
+func (s *RdsService) DescribeDBInstanceSSL(id string) (*rds.DescribeDBInstanceSSLResponse, error) {
+	response := &rds.DescribeDBInstanceSSLResponse{}
+	request := rds.CreateDescribeDBInstanceSSLRequest()
+	request.RegionId = s.client.RegionId
+	request.DBInstanceId = id
+	raw, err := s.client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+		return rdsClient.DescribeDBInstanceSSL(request)
+	})
+	if err != nil {
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	response, _ = raw.(*rds.DescribeDBInstanceSSLResponse)
+	return response, nil
+}
+
+func (s *RdsService) DescribeRdsTDEInfo(id string) (*rds.DescribeDBInstanceTDEResponse, error) {
+
+	response := &rds.DescribeDBInstanceTDEResponse{}
+	request := rds.CreateDescribeDBInstanceTDERequest()
+	request.RegionId = s.client.RegionId
+	request.DBInstanceId = id
+	statErr := s.WaitForDBInstance(id, Running, DefaultLongTimeout)
+	if statErr != nil {
+		return response, WrapError(statErr)
+	}
+	raw, err := s.client.WithRdsClient(func(rdsClient *rds.Client) (interface{}, error) {
+		return rdsClient.DescribeDBInstanceTDE(request)
+	})
+	if err != nil {
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	response, _ = raw.(*rds.DescribeDBInstanceTDEResponse)
+	return response, nil
+}
+
 func (s *RdsService) ModifySecurityGroupConfiguration(id string, groupid string) error {
 	request := rds.CreateModifySecurityGroupConfigurationRequest()
 	request.RegionId = s.client.RegionId
@@ -875,6 +970,28 @@ func (s *RdsService) RdsDBInstanceStateRefreshFunc(id string, failStates []strin
 			}
 		}
 		return object, object.DBInstanceStatus, nil
+	}
+}
+
+func (s *RdsService) RdsTaskStateRefreshFunc(id string, taskAction string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeTasks(id)
+		if err != nil {
+
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, t := range object.Items.TaskProgressInfo {
+			if t.TaskAction == taskAction {
+				return object, t.Status, nil
+			}
+		}
+
+		return object, "Pending", nil
 	}
 }
 

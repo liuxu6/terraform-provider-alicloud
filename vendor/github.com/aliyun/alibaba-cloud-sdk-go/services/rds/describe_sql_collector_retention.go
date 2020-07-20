@@ -77,6 +77,7 @@ func (client *Client) DescribeSQLCollectorRetentionWithCallback(request *Describ
 type DescribeSQLCollectorRetentionRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	ResourceGroupId      string           `position:"Query" name:"ResourceGroupId"`
 	SecurityToken        string           `position:"Query" name:"SecurityToken"`
 	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
@@ -87,10 +88,8 @@ type DescribeSQLCollectorRetentionRequest struct {
 // DescribeSQLCollectorRetentionResponse is the response struct for api DescribeSQLCollectorRetention
 type DescribeSQLCollectorRetentionResponse struct {
 	*responses.BaseResponse
-	RequestId      string `json:"RequestId" xml:"RequestId"`
-	DBInstanceID   int    `json:"DBInstanceID" xml:"DBInstanceID"`
-	DBInstanceName string `json:"DBInstanceName" xml:"DBInstanceName"`
-	ConfigValue    string `json:"ConfigValue" xml:"ConfigValue"`
+	RequestId   string `json:"RequestId" xml:"RequestId"`
+	ConfigValue string `json:"ConfigValue" xml:"ConfigValue"`
 }
 
 // CreateDescribeSQLCollectorRetentionRequest creates a request to invoke DescribeSQLCollectorRetention API
@@ -99,6 +98,7 @@ func CreateDescribeSQLCollectorRetentionRequest() (request *DescribeSQLCollector
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Rds", "2014-08-15", "DescribeSQLCollectorRetention", "rds", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

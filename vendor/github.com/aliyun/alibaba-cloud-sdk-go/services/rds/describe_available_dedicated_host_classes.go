@@ -79,6 +79,7 @@ type DescribeAvailableDedicatedHostClassesRequest struct {
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	StorageType          string           `position:"Query" name:"StorageType"`
 	ZoneId               string           `position:"Query" name:"ZoneId"`
 }
 
@@ -95,6 +96,7 @@ func CreateDescribeAvailableDedicatedHostClassesRequest() (request *DescribeAvai
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Rds", "2014-08-15", "DescribeAvailableDedicatedHostClasses", "rds", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

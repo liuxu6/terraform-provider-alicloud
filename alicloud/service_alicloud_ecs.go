@@ -2,6 +2,8 @@ package alicloud
 
 import (
 	"fmt"
+	"log"
+	"regexp"
 	"strings"
 
 	"time"
@@ -161,7 +163,8 @@ func (s *EcsService) DescribeInstanceSystemDisk(id, rg string) (disk ecs.Disk, e
 	request.InstanceId = id
 	request.DiskType = string(DiskTypeSystem)
 	request.RegionId = s.client.RegionId
-	request.ResourceGroupId = rg
+	// resource_group_id may cause failure to query the system disk of the instance, because the newly created instance may fail to query through the resource_group_id parameter, so temporarily remove this parameter.
+	// request.ResourceGroupId = rg
 	var response *ecs.DescribeDisksResponse
 	wait := incrementalWait(1*time.Second, 1*time.Second)
 	err = resource.Retry(10*time.Minute, func() *resource.RetryError {
@@ -184,7 +187,7 @@ func (s *EcsService) DescribeInstanceSystemDisk(id, rg string) (disk ecs.Disk, e
 		return disk, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	if len(response.Disks.Disk) < 1 || response.Disks.Disk[0].InstanceId != id {
-		return disk, WrapErrorf(Error(GetNotFoundMessage("Instance", id)), NotFoundMsg, ProviderERROR)
+		return disk, WrapErrorf(Error(GetNotFoundMessage("Instance", id)), NotFoundMsg, ProviderERROR, response.RequestId)
 	}
 	return response.Disks.Disk[0], nil
 }
@@ -319,7 +322,7 @@ func (s *EcsService) DescribeSecurityGroupRule(id string) (rule ecs.Permission, 
 
 }
 
-func (s *EcsService) DescribeAvailableResources(d *schema.ResourceData, meta interface{}, destination DestinationResource) (zoneId string, validZones []ecs.AvailableZone, err error) {
+func (s *EcsService) DescribeAvailableResources(d *schema.ResourceData, meta interface{}, destination DestinationResource) (zoneId string, validZones []ecs.AvailableZone, requestId string, err error) {
 	client := meta.(*connectivity.AliyunClient)
 	// Before creating resources, check input parameters validity according available zone.
 	// If availability zone is nil, it will return all of supported resources in the current.
@@ -357,13 +360,14 @@ func (s *EcsService) DescribeAvailableResources(d *schema.ResourceData, meta int
 		return ecsClient.DescribeAvailableResource(request)
 	})
 	if err != nil {
-		return "", nil, WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return "", nil, "", WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	response, _ := raw.(*ecs.DescribeAvailableResourceResponse)
+	requestId = response.RequestId
 
 	if len(response.AvailableZones.AvailableZone) < 1 {
-		err = WrapError(Error("There are no availability resources in the region: %s.", client.RegionId))
+		err = WrapError(Error("There are no availability resources in the region: %s. RequestId: %s.", client.RegionId, requestId))
 		return
 	}
 
@@ -387,19 +391,19 @@ func (s *EcsService) DescribeAvailableResources(d *schema.ResourceData, meta int
 	}
 	if zoneId != "" {
 		if !valid {
-			err = WrapError(Error("Availability zone %s status is not available in the region %s. Expected availability zones: %s.",
-				zoneId, client.RegionId, strings.Join(expectedZones, ", ")))
+			err = WrapError(Error("Availability zone %s status is not available in the region %s. Expected availability zones: %s. RequestId: %s.",
+				zoneId, client.RegionId, strings.Join(expectedZones, ", "), requestId))
 			return
 		}
 		if soldout {
-			err = WrapError(Error("Availability zone %s status is sold out in the region %s. Expected availability zones: %s.",
-				zoneId, client.RegionId, strings.Join(expectedZones, ", ")))
+			err = WrapError(Error("Availability zone %s status is sold out in the region %s. Expected availability zones: %s. RequestId: %s.",
+				zoneId, client.RegionId, strings.Join(expectedZones, ", "), requestId))
 			return
 		}
 	}
 
 	if len(validZones) <= 0 {
-		err = WrapError(Error("There is no availability resources in the region %s. Please choose another region.", client.RegionId))
+		err = WrapError(Error("There is no availability resources in the region %s. Please choose another region. RequestId: %s.", client.RegionId, response.RequestId))
 		return
 	}
 
@@ -1330,4 +1334,75 @@ func (s *EcsService) DescribeImageShareByImageId(id string) (imageShare *ecs.Des
 		return imageShare, WrapErrorf(Error(GetNotFoundMessage("ModifyImageSharePermission", id)), NotFoundMsg, ProviderERROR)
 	}
 	return resp, nil
+}
+
+func (s *EcsService) WaitForAutoProvisioningGroup(id string, status Status, timeout int) error {
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+
+	for {
+		object, err := s.DescribeAutoProvisioningGroup(id)
+		if err != nil {
+			if NotFoundError(err) {
+				if status == Deleted {
+					return nil
+				}
+			} else {
+				return WrapError(err)
+			}
+		}
+		if object.Status == string(status) {
+			return nil
+		}
+		time.Sleep(DefaultIntervalShort * time.Second)
+		if time.Now().After(deadline) {
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object.Status, string(status), ProviderERROR)
+		}
+	}
+}
+
+func (s *EcsService) DescribeAutoProvisioningGroup(id string) (group ecs.AutoProvisioningGroup, err error) {
+	request := ecs.CreateDescribeAutoProvisioningGroupsRequest()
+	ids := []string{id}
+	request.AutoProvisioningGroupId = &ids
+	request.RegionId = s.client.RegionId
+	raw, e := s.client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+		return ecsClient.DescribeAutoProvisioningGroups(request)
+	})
+	if e != nil {
+		err = WrapErrorf(e, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return
+	}
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	response, _ := raw.(*ecs.DescribeAutoProvisioningGroupsResponse)
+	for _, v := range response.AutoProvisioningGroups.AutoProvisioningGroup {
+		if v.AutoProvisioningGroupId == id {
+			return v, nil
+		}
+	}
+	err = WrapErrorf(Error(GetNotFoundMessage("AutoProvisioningGroup", id)), NotFoundMsg, ProviderERROR)
+	return
+}
+
+func (s *EcsService) tagsToMap(tags []ecs.Tag) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		if !s.ecsTagIgnored(t) {
+			result[t.TagKey] = t.TagValue
+		}
+	}
+
+	return result
+}
+
+func (s *EcsService) ecsTagIgnored(t ecs.Tag) bool {
+	filter := []string{"^aliyun", "^acs:", "^http://", "^https://"}
+	for _, v := range filter {
+		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, t.TagKey)
+		ok, _ := regexp.MatchString(v, t.TagKey)
+		if ok {
+			log.Printf("[DEBUG] Found Alibaba Cloud specific tag %s (val: %s), ignoring.\n", t.TagKey, t.TagValue)
+			return true
+		}
+	}
+	return false
 }

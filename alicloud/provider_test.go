@@ -74,6 +74,13 @@ func testAccPreCheckWithAccountSiteType(t *testing.T, account AccountSite) {
 	}
 }
 
+func testAccPreCheckPrePaidResources(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("ENABLE_CHECKING_PRE_PAID")); v != "true" {
+		t.Skip("Skipping testing PrePaid resources, otherwise setting environment parameter 'ENABLE_CHECKING_PRE_PAID'.")
+		t.Skipped()
+	}
+}
+
 // Skip automatically the testcases which does not support some known regions.
 // If supported is true, the regions should a list of supporting the service regions.
 // If supported is false, the regions should a list of unsupporting the service regions.
@@ -153,6 +160,13 @@ func testAccPreCheckOSSForImageImport(t *testing.T) {
 	}
 }
 
+func testAccPreCheckKMSForKeyIdImport(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("ALICLOUD_KMS_KEY_ID")); v == "" {
+		t.Skipf("Skipping tests without KEY_ID set.")
+		t.Skipped()
+	}
+}
+
 func testAccPreCheckWithCmsContactGroupSetting(t *testing.T) {
 	if v := strings.TrimSpace(os.Getenv("ALICLOUD_CMS_CONTACT_GROUP")); v == "" {
 		t.Skipf("Skipping the test case with no cms contact group setting")
@@ -167,6 +181,24 @@ func testAccPreCheckWithSmartAccessGatewaySetting(t *testing.T) {
 	}
 }
 
+func testAccPreCheckWithResourceManagerFloderIdSetting(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("ALICLOUD_RESOURCE_MANAGER_FOLDER_ID1")); v == "" {
+		t.Skip("Skipping the test case with no sag folder id setting")
+		t.Skipped()
+	}
+	if v := strings.TrimSpace(os.Getenv("ALICLOUD_RESOURCE_MANAGER_FOLDER_ID2")); v == "" {
+		t.Skip("Skipping the test case with no sag folder id setting")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithWafInstanceSetting(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("ALICLOUD_WAF_INSTANCE_ID")); v == "" {
+		t.Skipf("Skipping the test case with no WAF instance id setting")
+		t.Skipped()
+	}
+}
+
 func testAccPreCheckWithSmartAccessGatewayAppSetting(t *testing.T) {
 	if v := strings.TrimSpace(os.Getenv("SAG_APP_INSTANCE_ID")); v == "" {
 		t.Skipf("Skipping the test case with no sag app instance id setting")
@@ -174,9 +206,16 @@ func testAccPreCheckWithSmartAccessGatewayAppSetting(t *testing.T) {
 	}
 }
 
-func testAccPreCheckWithTime(t *testing.T) {
-	if time.Now().Day() != 1 {
-		t.Skipf("Skipping the test case with not the 1st of every month")
+func testAccPreCheckWithTime(t *testing.T, days []int) {
+	skipped := true
+	for _, d := range days {
+		if time.Now().Day() == d {
+			skipped = false
+			break
+		}
+	}
+	if skipped {
+		t.Skipf("Skipping the test case when not in specified days %#v of every month", days)
 		t.Skipped()
 	}
 }
@@ -244,6 +283,31 @@ func testAccPreCheckWithNoDefaultVswitch(t *testing.T) {
 
 	if len(response.VSwitches.VSwitch) < 1 {
 		t.Skipf("Skipping the test case with there is no default vswitche")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithResourceManagerAccountsSetting(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("ALICLOUD_RESOURCE_MANAGER_ACCOUNT_ID")); v == "" {
+		t.Skip("Skipping the test case with no sag account id setting")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithResourceManagerHandshakesSetting(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("INVITED_ALICLOUD_ACCOUNT_ID")); v == "" {
+		t.Skipf("Skipping the test case with there is no \"INVITED_ALICLOUD_ACCOUNT_ID\" setting")
+		t.Skipped()
+	}
+}
+
+func testAccPreCheckWithCenVbrHealthCheckSetting(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("VBR_INSTANCE_ID")); v == "" {
+		t.Skipf("Skipping the test case with no vbr instance id setting")
+		t.Skipped()
+	}
+	if v := strings.TrimSpace(os.Getenv("VBR_INSTANCE_REGION_ID")); v == "" {
+		t.Skipf("Skipping the test case with no vbr instance region id setting")
 		t.Skipped()
 	}
 }

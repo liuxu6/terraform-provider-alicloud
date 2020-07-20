@@ -231,6 +231,7 @@ const (
 	AlibabaCloudSdkGoERROR = ErrorSource("[SDK alibaba-cloud-sdk-go ERROR]")
 	AliyunLogGoSdkERROR    = ErrorSource("[SDK aliyun-log-go-sdk ERROR]")
 	AliyunDatahubSdkGo     = ErrorSource("[SDK aliyun-datahub-sdk-go ERROR]")
+	AliyunMaxComputeSdkGo  = ErrorSource("[SDK aliyun-maxcompute-sdk-go ERROR]")
 	AliyunOssGoSdk         = ErrorSource("[SDK aliyun-oss-go-sdk ERROR]")
 	FcGoSdk                = ErrorSource("[SDK fc-go-sdk ERROR]")
 	DenverdinoAliyungo     = ErrorSource("[SDK denverdino/aliyungo ERROR]")
@@ -296,6 +297,10 @@ func WrapErrorf(cause error, msg string, args ...interface{}) error {
 	if len(parts) > 3 {
 		filepath = strings.Join(parts[len(parts)-3:], "/")
 	}
+	// The second parameter of args is requestId, if the error message is NotFoundMsg the requestId need to be returned.
+	if msg == NotFoundMsg && len(args) == 2 {
+		msg += RequestIdMsg
+	}
 	return WrapComplexError(cause, fmt.Errorf(msg, args...), filepath, line)
 }
 
@@ -310,6 +315,7 @@ func WrapComplexError(cause, err error, filepath string, fileline int) error {
 
 // A default message of ComplexError's Err. It is format to Resource <resource-id> <operation> Failed!!! <error source>
 const DefaultErrorMsg = "Resource %s %s Failed!!! %s"
+const RequestIdMsg = "RequestId: %s"
 const NotFoundMsg = ResourceNotfound + "!!! %s"
 const DefaultTimeoutMsg = "Resource %s %s Timeout!!! %s"
 const DeleteTimeoutMsg = "Resource %s Still Exists. %s Timeout!!! %s"

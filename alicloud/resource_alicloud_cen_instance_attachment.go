@@ -20,7 +20,10 @@ func resourceAlicloudCenInstanceAttachment() *schema.Resource {
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
-
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(10 * time.Minute),
+			Delete: schema.DefaultTimeout(10 * time.Minute),
+		},
 		Schema: map[string]*schema.Schema{
 			"instance_id": {
 				Type:     schema.TypeString,
@@ -73,7 +76,7 @@ func resourceAlicloudCenInstanceAttachmentCreate(d *schema.ResourceData, meta in
 			return cbnClient.AttachCenChildInstance(request)
 		})
 		if err != nil {
-			if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus", "InvalidOperation.ChildInstanceStatus"}) {
+			if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus", "InvalidOperation.ChildInstanceStatus", "Operation.Blocking", "OperationFailed.InvalidVpcStatus"}) {
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -87,9 +90,11 @@ func resourceAlicloudCenInstanceAttachmentCreate(d *schema.ResourceData, meta in
 
 	d.SetId(cenId + COLON_SEPARATED + instanceId)
 
-	if err := cenService.WaitForCenInstanceAttachment(d.Id(), Status("Attached"), DefaultCenTimeoutLong); err != nil {
-		return WrapError(err)
+	stateConf := BuildStateConf([]string{}, []string{"Attached"}, d.Timeout(schema.TimeoutCreate), 5*time.Second, cenService.CenInstanceAttachmentStateRefreshFunc(d.Id(), []string{}))
+	if _, err := stateConf.WaitForState(); err != nil {
+		return WrapErrorf(err, IdMsg, d.Id())
 	}
+
 	return resourceAlicloudCenInstanceAttachmentRead(d, meta)
 }
 
@@ -135,15 +140,13 @@ func resourceAlicloudCenInstanceAttachmentDelete(d *schema.ResourceData, meta in
 	request.ChildInstanceRegionId = instanceRegionId
 	var raw interface{}
 	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
-
 		raw, err = client.WithCenClient(func(cbnClient *cbn.Client) (interface{}, error) {
 			return cbnClient.DetachCenChildInstance(request)
 		})
 		if err != nil {
-			if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus"}) {
+			if IsExpectedErrors(err, []string{"InvalidOperation.CenInstanceStatus", "Operation.Blocking"}) {
 				return resource.RetryableError(err)
 			}
-
 			return resource.NonRetryableError(err)
 		}
 		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
@@ -156,6 +159,9 @@ func resourceAlicloudCenInstanceAttachmentDelete(d *schema.ResourceData, meta in
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-
-	return WrapError(cenService.WaitForCenInstanceAttachment(d.Id(), Deleted, DefaultCenTimeoutLong))
+	stateConf := BuildStateConf([]string{}, []string{}, d.Timeout(schema.TimeoutDelete), 5*time.Second, cenService.CenInstanceAttachmentStateRefreshFunc(d.Id(), []string{}))
+	if _, err := stateConf.WaitForState(); err != nil {
+		return WrapErrorf(err, IdMsg, d.Id())
+	}
+	return nil
 }

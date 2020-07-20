@@ -79,10 +79,12 @@ type CreateDBClusterRequest struct {
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	DBClusterDescription string           `position:"Query" name:"DBClusterDescription"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
+	CreationCategory     string           `position:"Query" name:"CreationCategory"`
 	ClusterNetworkType   string           `position:"Query" name:"ClusterNetworkType"`
 	ResourceGroupId      string           `position:"Query" name:"ResourceGroupId"`
 	DBNodeClass          string           `position:"Query" name:"DBNodeClass"`
 	Engine               string           `position:"Query" name:"Engine"`
+	GDNId                string           `position:"Query" name:"GDNId"`
 	CreationOption       string           `position:"Query" name:"CreationOption"`
 	SourceResourceId     string           `position:"Query" name:"SourceResourceId"`
 	Period               string           `position:"Query" name:"Period"`
@@ -98,6 +100,7 @@ type CreateDBClusterRequest struct {
 	ZoneId               string           `position:"Query" name:"ZoneId"`
 	DBVersion            string           `position:"Query" name:"DBVersion"`
 	CloneDataPoint       string           `position:"Query" name:"CloneDataPoint"`
+	TDEStatus            requests.Boolean `position:"Query" name:"TDEStatus"`
 	PayType              string           `position:"Query" name:"PayType"`
 }
 

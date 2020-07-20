@@ -3,13 +3,14 @@ package alicloud
 import (
 	"log"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
-	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r_kvstore"
+	r_kvstore "github.com/aliyun/alibaba-cloud-sdk-go/services/r-kvstore"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -174,7 +175,7 @@ func (s *KvstoreService) setInstanceTags(d *schema.ResourceData) error {
 			}
 			request := r_kvstore.CreateUntagResourcesRequest()
 			request.ResourceId = &[]string{d.Id()}
-			request.ResourceType = string(TagResourceInstance)
+			request.ResourceType = strings.ToUpper(string(TagResourceInstance))
 			request.TagKey = &tagKey
 			request.RegionId = s.client.RegionId
 			raw, err := s.client.WithRkvClient(func(client *r_kvstore.Client) (interface{}, error) {
@@ -190,7 +191,7 @@ func (s *KvstoreService) setInstanceTags(d *schema.ResourceData) error {
 			request := r_kvstore.CreateTagResourcesRequest()
 			request.ResourceId = &[]string{d.Id()}
 			request.Tag = &create
-			request.ResourceType = string(TagResourceInstance)
+			request.ResourceType = strings.ToUpper(string(TagResourceInstance))
 			request.RegionId = s.client.RegionId
 			raw, err := s.client.WithRkvClient(func(client *r_kvstore.Client) (interface{}, error) {
 				return client.TagResources(request)
@@ -265,7 +266,7 @@ func (s *KvstoreService) diffTags(oldTags, newTags []r_kvstore.TagResourcesTag) 
 func (s *KvstoreService) DescribeTags(resourceId string, resourceType TagResourceType) (tags []r_kvstore.TagResource, err error) {
 	request := r_kvstore.CreateListTagResourcesRequest()
 	request.RegionId = s.client.RegionId
-	request.ResourceType = string(resourceType)
+	request.ResourceType = strings.ToUpper(string(resourceType))
 	request.ResourceId = &[]string{resourceId}
 	raw, err := s.client.WithRkvClient(func(rkvClient *r_kvstore.Client) (interface{}, error) {
 		return rkvClient.ListTagResources(request)
@@ -339,4 +340,24 @@ func (s *KvstoreService) DescribeKVstoreAccount(id string) (*r_kvstore.Account, 
 		return ds, WrapErrorf(Error(GetNotFoundMessage("KVstoreAccount", id)), NotFoundMsg, ProviderERROR)
 	}
 	return &response.Accounts.Account[0], nil
+}
+
+func (s *KvstoreService) DescribeKVstoreSecurityGroupId(id string) (*r_kvstore.DescribeSecurityGroupConfigurationResponse, error) {
+	response := &r_kvstore.DescribeSecurityGroupConfigurationResponse{}
+	request := r_kvstore.CreateDescribeSecurityGroupConfigurationRequest()
+	request.RegionId = s.client.RegionId
+	request.InstanceId = id
+	if err := s.WaitForKVstoreInstance(id, Normal, DefaultLongTimeout); err != nil {
+		return response, WrapError(err)
+	}
+	raw, err := s.client.WithRkvClient(func(rkvClient *r_kvstore.Client) (interface{}, error) {
+		return rkvClient.DescribeSecurityGroupConfiguration(request)
+	})
+	if err != nil {
+		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	response, _ = raw.(*r_kvstore.DescribeSecurityGroupConfigurationResponse)
+
+	return response, nil
 }

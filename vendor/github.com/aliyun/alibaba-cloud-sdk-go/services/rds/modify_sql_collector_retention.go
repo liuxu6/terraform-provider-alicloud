@@ -77,6 +77,7 @@ func (client *Client) ModifySQLCollectorRetentionWithCallback(request *ModifySQL
 type ModifySQLCollectorRetentionRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	ResourceGroupId      string           `position:"Query" name:"ResourceGroupId"`
 	SecurityToken        string           `position:"Query" name:"SecurityToken"`
 	DBInstanceId         string           `position:"Query" name:"DBInstanceId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
@@ -88,10 +89,7 @@ type ModifySQLCollectorRetentionRequest struct {
 // ModifySQLCollectorRetentionResponse is the response struct for api ModifySQLCollectorRetention
 type ModifySQLCollectorRetentionResponse struct {
 	*responses.BaseResponse
-	RequestId      string `json:"RequestId" xml:"RequestId"`
-	DBInstanceID   int    `json:"DBInstanceID" xml:"DBInstanceID"`
-	DBInstanceName string `json:"DBInstanceName" xml:"DBInstanceName"`
-	TaskId         int    `json:"TaskId" xml:"TaskId"`
+	RequestId string `json:"RequestId" xml:"RequestId"`
 }
 
 // CreateModifySQLCollectorRetentionRequest creates a request to invoke ModifySQLCollectorRetention API
@@ -100,6 +98,7 @@ func CreateModifySQLCollectorRetentionRequest() (request *ModifySQLCollectorRete
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Rds", "2014-08-15", "ModifySQLCollectorRetention", "rds", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

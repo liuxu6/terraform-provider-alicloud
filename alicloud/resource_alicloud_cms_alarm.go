@@ -57,7 +57,7 @@ func resourceAlicloudCmsAlarm() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Default:      Average,
-				ValidateFunc: validation.StringInSlice([]string{Average, Minimum, Maximum}, false),
+				ValidateFunc: validation.StringInSlice([]string{Average, Minimum, Maximum, ErrorCodeMaximum}, false),
 			},
 			"operator": {
 				Type:     schema.TypeString,
@@ -82,23 +82,23 @@ func resourceAlicloudCmsAlarm() *schema.Resource {
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 			"start_time": {
-				Type:         schema.TypeInt,
-				Optional:     true,
-				Default:      0,
-				ValidateFunc: validation.IntBetween(0, 24),
-				Deprecated:   "Field 'start_time' has been deprecated from provider version 1.50.0. New field 'effective_interval' instead.",
+				Type:     schema.TypeInt,
+				Optional: true,
+				//Default:      0,
+				//ValidateFunc: validation.IntBetween(0, 24),
+				Deprecated: "Field 'start_time' has been deprecated from provider version 1.50.0. New field 'effective_interval' instead.",
 			},
 			"end_time": {
-				Type:         schema.TypeInt,
-				Optional:     true,
-				Default:      24,
-				ValidateFunc: validation.IntBetween(0, 24),
-				Deprecated:   "Field 'end_time' has been deprecated from provider version 1.50.0. New field 'effective_interval' instead.",
+				Type:     schema.TypeInt,
+				Optional: true,
+				//Default:      24,
+				//ValidateFunc: validation.IntBetween(0, 24),
+				Deprecated: "Field 'end_time' has been deprecated from provider version 1.50.0. New field 'effective_interval' instead.",
 			},
 			"effective_interval": {
 				Type:     schema.TypeString,
 				Optional: true,
-				Computed: true,
+				Default:  "00:00-23:59",
 			},
 			"silence_time": {
 				Type:         schema.TypeInt,
@@ -166,10 +166,12 @@ func resourceAlicloudCmsAlarmRead(d *schema.ResourceData, meta interface{}) erro
 	}
 	d.Set("operator", oper)
 	d.Set("threshold", alarm.Escalations.Critical.Threshold)
-	if count, err := strconv.Atoi(alarm.Escalations.Critical.Times); err != nil {
-		return WrapError(err)
-	} else {
-		d.Set("triggered_count", count)
+	if alarm.Escalations.Critical.Times != "" {
+		if count, err := strconv.Atoi(alarm.Escalations.Critical.Times); err != nil {
+			return WrapError(err)
+		} else {
+			d.Set("triggered_count", count)
+		}
 	}
 	d.Set("effective_interval", alarm.EffectiveInterval)
 	//d.Set("start_time", parts[0])
@@ -214,7 +216,12 @@ func resourceAlicloudCmsAlarmUpdate(d *schema.ResourceData, meta interface{}) er
 	if v, ok := d.GetOk("effective_interval"); ok && v.(string) != "" {
 		request.EffectiveInterval = v.(string)
 	} else {
-		request.EffectiveInterval = fmt.Sprintf("%d:00-%d:00", d.Get("start_time").(int), d.Get("end_time").(int))
+		start, startOk := d.GetOk("start_time")
+		end, endOk := d.GetOk("end_time")
+		if startOk && endOk && end.(int) > 0 {
+			// The EffectiveInterval valid value between 00:00 and 23:59
+			request.EffectiveInterval = fmt.Sprintf("%d:00-%d:59", start.(int), end.(int)-1)
+		}
 	}
 	request.SilenceTime = requests.NewInteger(d.Get("silence_time").(int))
 
@@ -300,12 +307,17 @@ func resourceAlicloudCmsAlarmDelete(d *schema.ResourceData, meta interface{}) er
 
 	request.Id = &[]string{d.Id()}
 
-	return resource.Retry(3*time.Minute, func() *resource.RetryError {
+	wait := incrementalWait(1*time.Second, 2*time.Second)
+	return resource.Retry(10*time.Minute, func() *resource.RetryError {
 		_, err := client.WithCmsClient(func(cmsClient *cms.Client) (interface{}, error) {
 			return cmsClient.DeleteMetricRules(request)
 		})
 
 		if err != nil {
+			if IsExpectedErrors(err, []string{ThrottlingUser}) {
+				wait()
+				return resource.RetryableError(err)
+			}
 			return resource.NonRetryableError(fmt.Errorf("Deleting alarm rule got an error: %#v", err))
 		}
 

@@ -43,7 +43,7 @@ func testSweepDdoscooInstances(region string) error {
 	req.PageSize = strconv.Itoa(PageSizeLarge)
 
 	var page = 1
-	req.PageNo = strconv.Itoa(page)
+	req.PageNumber = strconv.Itoa(page)
 	for {
 		raw, err := client.WithDdoscooClient(func(ddoscooClient *ddoscoo.Client) (interface{}, error) {
 			return ddoscooClient.DescribeInstances(req)
@@ -62,7 +62,7 @@ func testSweepDdoscooInstances(region string) error {
 		}
 
 		page++
-		req.PageNo = strconv.Itoa(page)
+		req.PageNumber = strconv.Itoa(page)
 	}
 
 	for _, v := range insts {
@@ -114,6 +114,7 @@ func TestAccAlicloudDdoscooInstance_basic(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
+			testAccPreCheckWithTime(t, []int{1, 15})
 			testAccPreCheck(t)
 			testAccPreCheckWithRegions(t, true, connectivity.DdoscooSupportedRegions)
 		},
@@ -246,6 +247,7 @@ func TestAccAlicloudDdoscooInstance_multi(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
+			testAccPreCheckWithTime(t, []int{1})
 			testAccPreCheck(t)
 			testAccPreCheckWithRegions(t, true, connectivity.DdoscooSupportedRegions)
 		},

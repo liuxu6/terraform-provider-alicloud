@@ -76,6 +76,7 @@ func (client *Client) RestoreTableWithCallback(request *RestoreTableRequest, cal
 // RestoreTableRequest is the request struct for api RestoreTable
 type RestoreTableRequest struct {
 	*requests.RpcRequest
+	RestoreTableMode     string           `position:"Query" name:"RestoreTableMode"`
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
 	TableMeta            string           `position:"Query" name:"TableMeta"`
@@ -99,6 +100,7 @@ func CreateRestoreTableRequest() (request *RestoreTableRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Rds", "2014-08-15", "RestoreTable", "rds", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

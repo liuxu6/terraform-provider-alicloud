@@ -95,15 +95,16 @@ The following arguments are supported:
 
 * `min_size` - (Required) Minimum number of ECS instances in the scaling group. Value range: [0, 1000].
 * `max_size` - (Required) Maximum number of ECS instances in the scaling group. Value range: [0, 1000].
+* `desired_capacity` - (Optional,Available in 1.76.0+) Expected number of ECS instances in the scaling group. Value range: [min_size, max_size].
 * `scaling_group_name` - (Optional) Name shown for the scaling group, which must contain 2-64 characters (English or Chinese), starting with numbers, English letters or Chinese characters, and can contain numbers, underscores `_`, hyphens `-`, and decimal points `.`. If this parameter is not specified, the default value is ScalingGroupId.
 * `default_cooldown` - (Optional) Default cool-down time (in seconds) of the scaling group. Value range: [0, 86400]. The default value is 300s.
 * `vswitch_id` - (Deprecated) It has been deprecated from version 1.7.1 and new field 'vswitch_ids' replaces it.
 * `vswitch_ids` - (Optional) List of virtual switch IDs in which the ecs instances to be launched.
 * `removal_policies` - (Optional) RemovalPolicy is used to select the ECS instances you want to remove from the scaling group when multiple candidates for removal exist. Optional values:
-    - OldestInstance: removes the first ECS instance attached to the scaling group.
-    - NewestInstance: removes the first ECS instance attached to the scaling group.
-    - OldestScalingConfiguration: removes the ECS instance with the oldest scaling configuration.
-    - Default values: OldestScalingConfiguration and OldestInstance. You can enter up to two removal policies.
+    - OldestInstance: removes the ECS instance that is added to the scaling group at the earliest point in time.
+    - NewestInstance: removes the ECS instance that is added to the scaling group at the latest point in time.
+    - OldestScalingConfiguration: removes the ECS instance that is created based on the earliest scaling configuration.
+    - Default values: Default value of RemovalPolicy.1: OldestScalingConfiguration. Default value of RemovalPolicy.2: OldestInstance.
 * `db_instance_ids` - (Optional) If an RDS instance is specified in the scaling group, the scaling group automatically attaches the Intranet IP addresses of its ECS instances to the RDS access whitelist.
     - The specified RDS instance must be in running status.
     - The specified RDS instance’s whitelist must have room for more IP addresses.
